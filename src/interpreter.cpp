@@ -11,6 +11,8 @@
 *  $Revision$                                                       *
 ************************************************************************ */
 
+#define TEST_BUILD // prool
+
 #define __INTERPRETER_C__
 
 #include "interpreter.h"
