@@ -1347,7 +1347,7 @@ void game_loop(int epoll, socket_t mother_desc)
 void game_loop(socket_t mother_desc)
 #endif
 {
-	printf("Game started.\n");
+	printf("Zerkalo started.\n");
 
 #ifdef HAS_EPOLL
 	struct epoll_event *events;
