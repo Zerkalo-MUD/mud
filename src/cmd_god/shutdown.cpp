@@ -34,7 +34,8 @@ void Shutdown::reboot() const {
 	log("(GC) Reboot by %s.", GET_NAME(m_character));
 	imm_log("Reboot by %s.", GET_NAME(m_character));
 	touch(FASTBOOT_FILE);
-	m_shutdown_parameters.reboot(timeout);
+	//m_shutdown_parameters.reboot(timeout);
+	m_shutdown_parameters.reboot(m_timeout); // modif. by prool
 }
 
 void Shutdown::die() const {

@@ -2497,8 +2497,10 @@ void boot_db(void) {
 	// резет должен идти после лоада всех шмоток вне зон (хранилища и т.п.)
 	boot_profiler.next_step("Resetting zones");
 	for (ZoneRnum i = 0; i < static_cast<ZoneRnum>(zone_table.size()); i++) {
+#if 0 // prool
 		log("Resetting %s (rooms %d-%d).", zone_table[i].name,
 			(i ? (zone_table[i - 1].top + 1) : 0), zone_table[i].top);
+#endif
 		reset_zone(i);
 	}
 	reset_q.head = reset_q.tail = nullptr;
@@ -3695,8 +3697,10 @@ void zone_update(void) {
 			|| can_be_reset(update_u->zone_to_reset)) {
 			zone_repop_list.push_back(update_u->zone_to_reset);
 			std::stringstream out;
+#if 0 // prool
 			out << "Auto zone reset: " << zone_table[update_u->zone_to_reset].name << " ("
 					<<  zone_table[update_u->zone_to_reset].vnum << ")";
+#endif
 			if (zone_table[update_u->zone_to_reset].reset_mode == 3) {
 				for (auto i = 0; i < zone_table[update_u->zone_to_reset].typeA_count; i++) {
 					//Ищем ZoneRnum по vnum
@@ -3704,8 +3708,10 @@ void zone_update(void) {
 						if (zone_table[j].vnum ==
 							zone_table[update_u->zone_to_reset].typeA_list[i]) {
 							zone_repop_list.push_back(j);
+#if 0 // prool
 							out << " ]\r\n[ Also resetting: " << zone_table[j].name << " ("
 									<<  zone_table[j].vnum << ")";
+#endif
 							break;
 						}
 					}
@@ -3713,14 +3719,16 @@ void zone_update(void) {
 			}
 			std::stringstream ss;
 			RepopDecay(zone_repop_list);
-			ss << "В списке репопа: ";
+			//ss << "В списке репопа: "; // prool
 			for (auto it = zone_repop_list.begin(); it != zone_repop_list.end(); ++it) {
 				ss << zone_table[*it].vnum << " ";
 				reset_zone(*it);
 			}
+#if 0 // prool
 			mudlog(ss.str(), LGH, kLvlGod, SYSLOG, false);
 			out << " ]\r\n[ Time reset: " << timer_count.delta().count();
 			mudlog(out.str(), LGH, kLvlGod, SYSLOG, false);
+#endif
 			if (update_u == reset_q.head)
 				reset_q.head = reset_q.head->next;
 			else {
@@ -4285,7 +4293,7 @@ void ZoneReset::reset_zone_essential() {
 	const auto zone = m_zone_rnum;    // for ZCMD macro
 	int last_state, curr_state;    // статус завершения последней и текущей команды
 
-	log("[Reset] Start zone %s", zone_table[m_zone_rnum].name);
+	//log("[Reset] Start zone %s", zone_table[m_zone_rnum].name); // prool
 	//----------------------------------------------------------------------------
 	last_state = 1;        // для первой команды считаем, что все ок
 
@@ -4715,7 +4723,7 @@ void ZoneReset::reset_zone_essential() {
 	//Если это ведущая зона, то при ее сбросе обнуляем typeB_flag
 	for (rnum_start = zone_table[m_zone_rnum].typeB_count; rnum_start > 0; rnum_start--)
 		zone_table[m_zone_rnum].typeB_flag[rnum_start - 1] = false;
-	log("[Reset] Stop zone %s", zone_table[m_zone_rnum].name);
+	//log("[Reset] Stop zone %s", zone_table[m_zone_rnum].name); // prool
 	after_reset_zone(m_zone_rnum);
 }
 
@@ -5108,7 +5116,7 @@ void do_remort(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 		SendMsgToChar("ЧАВО???\r\n", ch);
 		return;
 	}
-	if (Remort::need_torc(ch) && !PRF_FLAGGED(ch, EPrf::kCanRemort)) {
+	if (0/*Remort::need_torc(ch) && !PRF_FLAGGED(ch, EPrf::kCanRemort)*/) { // prool
 		SendMsgToChar(ch,
 					  "Вы должны подтвердить свои заслуги, пожертвовав Богам достаточное количество гривен.\r\n"
 					  "%s\r\n", Remort::WHERE_TO_REMORT_STR.c_str());

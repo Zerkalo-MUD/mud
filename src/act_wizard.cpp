@@ -2087,10 +2087,12 @@ void do_advance(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		return;
 	}
 
+#if 0 // prool: сделал возможность снижения уровня. так надо.
 	if (GetRealLevel(ch) <= GetRealLevel(victim) && !PRF_FLAGGED(ch, EPrf::kCoderinfo)) {
 		SendMsgToChar("Нелогично.\r\n", ch);
 		return;
 	}
+#endif
 	if (!*level || (newlevel = atoi(level)) <= 0) {
 		SendMsgToChar("Это не похоже на уровень.\r\n", ch);
 		return;

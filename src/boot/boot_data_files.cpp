@@ -1418,7 +1418,7 @@ void MobileFile::interpret_espec(const char *keyword, const char *value, int i, 
 		}
 		auto skill_id = static_cast<ESkill>(t[0]);
 		if (MUD::Skills().IsInvalid(skill_id)) {
-			log("SYSERROR : Unknown skill No %d for MOB #%d", t[0], nr);
+			//log("SYSERROR : Unknown skill No %d for MOB #%d", t[0], nr); // prool
 			return;
 		}
 		t[1] = std::clamp(t[1], 0, MUD::Skill(skill_id).cap);
@@ -1458,9 +1458,11 @@ void MobileFile::interpret_espec(const char *keyword, const char *value, int i, 
 		}
 	}
 
+#if 0 // prool
 	if (!matched) {
 		log("SYSERR: Warning: unrecognized espec keyword %s in mob #%d", keyword, nr);
 	}
+#endif
 #undef CASE
 }
 
@@ -1590,7 +1592,7 @@ bool ZoneFile::load_regular_zone() {
 	}
 	zone.name = str_dup(buf);
 
-	log("Читаем zon файл: %s", full_file_name().c_str());
+	//log("Читаем zon файл: %s", full_file_name().c_str()); // prool
 	while (*buf != 'S' && !feof(file())) {
 		line_num += get_line(file(), buf);
 

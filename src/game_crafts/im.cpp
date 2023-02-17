@@ -769,10 +769,10 @@ void init_im(void) {
 		}
 
 		imrecipes[rcpt].level = k[1];
-		log("Set recipe (%d '%s') remort %d", k[0], imrecipes[rcpt].name, k[1]);
+		//log("Set recipe (%d '%s') remort %d", k[0], imrecipes[rcpt].name, k[1]); // prool
 
 		imrecipes[rcpt].remort = k[2];
-		log("Set recipe (%d '%s') remort %d", k[0], imrecipes[rcpt].name, k[2]);
+		//log("Set recipe (%d '%s') remort %d", k[0], imrecipes[rcpt].name, k[2]); // prool
 
 // line1 - ограничения для рас еще не реализованы
 
@@ -781,7 +781,7 @@ void init_im(void) {
 				imrecipes[rcpt].classknow[j] = 0;
 			} else {
 				imrecipes[rcpt].classknow[j] = kKnownRecipe;
-				log("Set recipe (%d '%s') classes %d is Know", k[0], imrecipes[rcpt].name, j);
+				//log("Set recipe (%d '%s') classes %d is Know", k[0], imrecipes[rcpt].name, j); // prool
 			}
 		}
 	}

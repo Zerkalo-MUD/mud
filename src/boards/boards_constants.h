@@ -13,7 +13,7 @@ constexpr int GODBUILD_BOARD_OBJ = 259;
 // максимальный размер сообщения
 constexpr int MAX_MESSAGE_LENGTH = 4096;
 // мин.левел для поста на общих досках
-constexpr int MIN_WRITE_LEVEL = 6;
+constexpr int MIN_WRITE_LEVEL = 1; // prool: bylo 6
 // максимальное кол-во сообщений на одной доске
 constexpr unsigned int MAX_BOARD_MESSAGES = 200;
 // максимальное кол-во сообщений на спец.досках
