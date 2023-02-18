@@ -982,6 +982,7 @@ void init_warcry(CharData *ch) // проставление кличей в об�
 }
 
 void do_start(CharData *ch, int newbie) {
+	//printf("prool debug: do_start() new char\n"); // prool
 	ch->set_level(1);
 	ch->set_exp(1);
 	ch->points.max_hit = 10;
@@ -999,6 +1000,7 @@ void do_start(CharData *ch, int newbie) {
 		std::vector<int> outfit_list(Noob::get_start_outfit(ch));
 		for (int & i : outfit_list) {
 			const ObjData::shared_ptr obj = world_objects.create_from_prototype_by_vnum(i);
+			//printf("prool debug: vnum %i\n", i); // prool
 			if (obj) {
 				obj->set_extra_flag(EObjFlag::kNosell);
 				obj->set_extra_flag(EObjFlag::kDecay);
@@ -1007,6 +1009,7 @@ void do_start(CharData *ch, int newbie) {
 				obj->set_rent_on(0);
 				PlaceObjToInventory(obj.get(), ch);
 				Noob::equip_start_outfit(ch, obj.get());
+				//printf("prool debug: put initial item to noob\n"); // prool
 			}
 		}
 	}

@@ -746,10 +746,12 @@ bool CLogInfo::open() {
 		setvbuf(handle, m_buffer, buffered(), BUFFER_SIZE);
 
 		m_handle = handle;
+#if 0 // prool
 		printf("Using log file '%s' with %s buffering. Opening in %s mode.\n",
 			   filename().c_str(),
 			   NAME_BY_ITEM(buffered()).c_str(),
 			   NAME_BY_ITEM(this->mode()).c_str());
+#endif
 		return true;
 	}
 

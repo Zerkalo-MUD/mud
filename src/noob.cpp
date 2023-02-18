@@ -28,7 +28,7 @@ void init() {
 	pugi::xml_document doc;
 	pugi::xml_parse_result result = doc.load_file(CONFIG_FILE);
 	if (!result) {
-		snprintf(buf, kMaxStringLength, "...%s", result.description());
+		snprintf(buf, kMaxStringLength, "prool debug = %s", result.description());
 		mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
 		return;
 	}
@@ -64,7 +64,7 @@ void init() {
 		try {
 			id = parse::ReadAsConstant<ECharClass>(id_str.c_str());
 		} catch (std::exception &) {
-			snprintf(buf, kMaxStringLength, "...<class id='%s'> convert fail", id_str.c_str());
+			snprintf(buf, kMaxStringLength, "prool debug. <class id='%s'> convert fail", id_str.c_str());
 			mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
 			return;
 		}
@@ -72,6 +72,7 @@ void init() {
 		for (pugi::xml_node obj_node = cur_node.child("obj");
 			 obj_node; obj_node = obj_node.next_sibling("obj")) {
 			int vnum = parse::ReadAttrAsInt(obj_node, "vnum");
+			//printf("prool debug: parse vnum %i\n", vnum); // prool
 			if (parse::IsValidObjVnum(vnum)) {
 				tmp_class_list[to_underlying(id)].push_back(vnum);
 			}
@@ -120,12 +121,14 @@ std::vector<int> get_start_outfit(CharData *ch) {
 	std::vector<int> out_list;
 	const int ch_class = to_underlying(ch->GetClass());
 	if (ch_class < kNumPlayerClasses) {
+		//printf("prool debug: add class items\n"); // prool
 		out_list.insert(out_list.end(),
 						class_list.at(ch_class).begin(), class_list.at(ch_class).end());
 	}
 	// стаф из birthplaces.xml (карты родовых)
 	int birth_id = Birthplaces::GetIdByRoom(GET_ROOM_VNUM(ch->in_room));
 	if (birth_id >= 0) {
+		//printf("prool debug: add village map?\n"); // prool
 		std::vector<int> tmp = Birthplaces::GetItemList(birth_id);
 		out_list.insert(out_list.end(), tmp.begin(), tmp.end());
 	}
