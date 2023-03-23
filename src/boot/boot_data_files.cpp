@@ -353,7 +353,7 @@ void TriggersFile::parse_trigger(int vnum) {
 		char tmp[kMaxInputLength];
 		snprintf(tmp, sizeof(tmp), "Positive indent-level on trigger #%d end.", vnum);
 		log("%s", tmp);
-		Boards::dg_script_text += tmp + std::string("\r\n");
+		//Boards::dg_script_text += tmp + std::string("\r\n"); // prool
 	}
 
 	add_trig_index_entry(vnum, trig);

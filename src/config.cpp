@@ -164,7 +164,7 @@ struct PCCleanCriteria pclean_criteria[] =
 // ROOM NUMBERS
 
 // virtual number of room that mortals should enter at
-RoomVnum mortal_start_room = 4056;    // tavern in village
+RoomVnum mortal_start_room = 9900;
 
 // virtual number of room that immorts should enter at by default
 RoomVnum immort_start_room = 100;    // place  in castle
@@ -488,7 +488,7 @@ void RuntimeConfiguration::setup_logs() {
 
 	setup_converters();
 
-	printf("Zerkalo server will use %schronous output into syslog file.\n",
+	printf("VMUD server will use %schronous output into syslog file.\n",
 		   output_thread() ? "asyn" : "syn");
 }
 

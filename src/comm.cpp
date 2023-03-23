@@ -1349,7 +1349,7 @@ void game_loop(int epoll, socket_t mother_desc)
 void game_loop(socket_t mother_desc)
 #endif
 {
-	printf("Zerkalo started.\n");
+	printf("VMUD started.\n");
 
 #ifdef HAS_EPOLL
 	struct epoll_event *events;
