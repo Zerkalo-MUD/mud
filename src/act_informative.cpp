@@ -96,6 +96,8 @@ extern void show_code_date(CharData *ch);
 extern int nameserver_is_slow; //config.cpp
 extern std::vector<City> cities;
 
+extern int total_players; // prool
+
 // local functions
 const char *show_obj_to_char(ObjData *object, CharData *ch, int mode, int show_state, int how);
 void list_obj_to_char(ObjData *list, CharData *ch, int mode, int show);
@@ -4161,6 +4163,7 @@ void make_who2html() {
 			}
 		}
 	}
+	total_players=imms_num+morts_num; // prool
 
 	if (morts_num + imms_num == 0) {
 		sprintf(buf, "Все ушли на фронт! <BR>");

@@ -168,6 +168,18 @@
 #define ESC "\x1B"  /* esc character */
 
 #define MXPMODE(arg) ESC "[" #arg "z"
+
+#if 1 // prool:MSSP
+#define MSSP			70
+#define MSSP_VAR		1
+#define MSSP_VAL		2
+void mssp_start(DescriptorData * t);
+const char mssp_will[] = {(char) IAC, (char) WILL, (char) MSSP, '\0'};
+int total_players;
+#endif
+
+void make_who2html();
+
 extern void log_zone_count_reset();
 extern int perform_move(CharData *ch, int dir, int following, int checkmob, CharData *leader);
 // flags for show_list_to_char
@@ -646,6 +658,9 @@ void gettimeofday(struct timeval *t, void *dummy)
 #include <iostream>
 
 int main_function(int argc, char **argv) {
+
+total_players=0; //prool
+
 #ifdef TEST_BUILD
 	// для нормального вывода русского текста под cygwin 1.7 и выше
 	setlocale(LC_CTYPE, "ru_RU.KOI8-R");
@@ -1382,7 +1397,7 @@ void game_loop(socket_t mother_desc)
 	{
 		if (descriptor_list == nullptr) {
 			log("No connections.  Going to sleep.");
-			//make_who2html();
+			make_who2html();
 #ifdef HAS_EPOLL
 			if (epoll_wait(epoll, events, MAXEVENTS, -1) == -1)
 #else
@@ -2140,6 +2155,7 @@ int new_descriptor(socket_t s)
 
 	// trying to turn on MSDP
 	write_to_descriptor(newd->descriptor, will_msdp, sizeof(will_msdp));
+	write_to_descriptor(newd->descriptor, mssp_will, strlen(mssp_will)); // prool: MSSP. Место, где стоит это код важно. Если этот вызов переместить после compress_will, то он перестанет работать
 
 #if defined(HAVE_ZLIB)
 	write_to_descriptor(newd->descriptor, compress_will, sizeof(compress_will));
@@ -2630,6 +2646,14 @@ int process_input(DescriptorData *t) {
 
 						t->msdp_support(true);
 						break;
+                             		case MSSP: // prool: MSSP
+                                        char buf0[500];
+					//printf("prooldebug: MSSP start\n");
+                                        mssp_start(t);
+                                        sprintf(buf0,"MSSP start %s", t->host);
+                                        log(buf0);
+					break;
+
 
 					default: continue;
 				}
@@ -2673,6 +2697,7 @@ int process_input(DescriptorData *t) {
 							sb_length = msdp::handle_conversation(t, ptr, bytes_read - (ptr - read_point));
 						}
 						break;
+
 
 					default: break;
 				}
@@ -3949,6 +3974,116 @@ int toggle_compression(DescriptorData *t) {
 	}
 #endif
 	return 0;
+}
+
+// begin prool code:
+
+void mssp_start(DescriptorData * t) // by prool
+{char buf[1024];
+const auto boot_time = shutdown_parameters.get_boot_time();
+
+#if 0
+const char mssp_str[] = {(char)IAC,(char)SB,(char)MSSP,
+	(char)MSSP_VAR,'P','L','A','Y','E','R','S',(char)MSSP_VAL,'0',
+	(char)MSSP_VAR,'N','A','M','E',(char)MSSP_VAL,'V','i','r','t','u','s','t','a','n',' ','M','U','D',
+	(char)IAC,(char)SE,'\0'};
+write_to_descriptor(t->descriptor, mssp_str, strlen(mssp_str));
+#endif
+
+#if 1
+sprintf(buf,
+"%c%c%c%cPLAYERS%c%i%cNAME%cVirtustan MUD%cUPTIME%c%li%cCRAWL DELAY%c-1\
+%cHOSTNAME%cmud.kharkov.org\
+%cPORT%c3000\
+%cCODEBASE%cCircleMUD/Byliny\
+%cCONTACT%cproolix@gmail.com\
+%cCREATED%c2007\
+%cIP%c195.123.245.173\
+%cLANGUAGE%cRussian\
+%cLOCATION%cUkraine\
+%cMINIMUM AGE%c0\
+%cWEBSITE%chttp://mud.kharkov.org\
+%cFAMILY%cDikuMUD\
+%cAREAS%c%i\
+%cMOBILES%c%i\
+%cOBJECTS%c%i\
+%cROOMS%c%i\
+%cCLASSES%c15\
+%cRACES%c6\
+%cANSI%c1\
+%cMCCP%c1\
+%cMCP%c0\
+%cMSP%c0\
+%cMXP%c0\
+%cPUEBLO%c0\
+%cGMCP%c0\
+%cMSDP%c1\
+%cHIRING BUILDERS%c1\
+%cHIRING CODERS%c1\
+%cPLAYER CLANS%c1\
+%cWORLD ORIGINALITY%c1\
+%cGENRE%cFantasy\
+%cGAMESYSTEM%cCustom\
+%cLEVELS%c30\
+%cVT100%c0\
+%cPAY TO PLAY%c0\
+%cPAY FOR PERKS%c0\
+%cINTERMUD%c0\
+%cXTERM 256 COLORS%c0\
+%cXTERM TRUE COLORS%c0\
+%cUTF-8%c1\
+%cCHARSET%cUTF-8%ckoi8-r%ccp1251\
+%cREFERRAL%clolamud.net:6969%ctbamud.com:9091\
+%c%c",
+IAC,SB,MSSP,MSSP_VAR,MSSP_VAL,total_players,MSSP_VAR,MSSP_VAL,MSSP_VAR,MSSP_VAL,(long int)boot_time,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,104/*top_of_zone_table + 1*/ /*statistic_zones*/,
+MSSP_VAR,MSSP_VAL,top_of_mobt + 1 /*statistic_mobs*/,
+MSSP_VAR,MSSP_VAL,927/*top_of_objt + 1*/ /*statistic_objs*/,
+MSSP_VAR,MSSP_VAL,top_of_world + 1 /*statistic_rooms*/,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR,MSSP_VAL,
+MSSP_VAR, MSSP_VAL, MSSP_VAL, MSSP_VAL,
+MSSP_VAR, MSSP_VAL, MSSP_VAL,
+IAC,SE);
+
+// printf("MSSP total_players %i\n",total_players);
+
+write_to_descriptor(t->descriptor, buf, strlen(buf));
+#endif
 }
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :
