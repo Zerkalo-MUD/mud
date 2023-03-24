@@ -191,6 +191,8 @@ extern struct set_struct set_fields[];
 extern struct show_struct show_fields[];
 extern char *name_rules;
 
+extern int total_players; // prool
+
 // external functions
 void do_start(CharData *ch, int newbie);
 int Valid_Name(char *newname);
@@ -207,6 +209,9 @@ void trigedit_parse(DescriptorData *d, char *arg);
 int find_social(char *name);
 extern int CheckProxy(DescriptorData *ch);
 extern void check_max_hp(CharData *ch);
+
+char *ptime(void); // prool
+
 // local functions
 int perform_dupe_check(DescriptorData *d);
 struct alias_data *find_alias(struct alias_data *alias_list, char *str);
@@ -2711,6 +2716,14 @@ void DoAfterEmailConfirm(DescriptorData *d) {
                                 "\"\xd0\xb0\xd0\xb1\xd0\xb2...\xd1\x8d\xd1\x8e\xd1\x8f\"."
 
 static void ShowEncodingPrompt(DescriptorData *d, bool withHints = false) {
+
+	// prool begin
+	char buf0[512];
+	sprintf(buf0,"Online is %i\r\nYour IP is %s\r\nServer time is %s\r\n\r\n",
+		total_players, d->host, ptime());
+	SEND_TO_Q(buf0, d);
+	// prool end
+
 	if (withHints) {
 		SEND_TO_Q(
 			"\r\n"

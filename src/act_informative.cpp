@@ -98,6 +98,8 @@ extern std::vector<City> cities;
 
 extern int total_players; // prool
 
+char *ptime(); // prool
+
 // local functions
 const char *show_obj_to_char(ObjData *object, CharData *ch, int mode, int show_state, int how);
 void list_obj_to_char(ObjData *list, CharData *ch, int mode, int show);
@@ -4139,13 +4141,13 @@ void make_who2html() {
 
 	if ((opf = fopen(WHOLIST_FILE, "w")) == nullptr)
 		return;        // or log it ? *shrug*
-	fprintf(opf, "<HTML><HEAD><TITLE>Кто сейчас в Былинах?</TITLE></HEAD>\n");
-	fprintf(opf, "<BODY><H1>Кто сейчас живет в Былинах?</H1><HR>\n");
+	fprintf(opf, "<HTML><HEAD><TITLE>Who in VMUD</TITLE></HEAD>\n");
+	fprintf(opf, "<BODY>Who in Virtustan MUD %s<BR>\n", ptime());
 
-	sprintf(buf, "БОГИ <BR> \r\n");
+	sprintf(buf, "Imms <BR> \r\n");
 	imms = str_add(imms, buf);
 
-	sprintf(buf, "<BR>Игроки<BR> \r\n  ");
+	sprintf(buf, "<BR>Players<BR> \r\n  ");
 	morts = str_add(morts, buf);
 
 	for (d = descriptor_list; d; d = d->next) {
@@ -4165,27 +4167,22 @@ void make_who2html() {
 	}
 	total_players=imms_num+morts_num; // prool
 
-	if (morts_num + imms_num == 0) {
-		sprintf(buf, "Все ушли на фронт! <BR>");
-		buffer = str_add(buffer, buf);
-	} else {
-		if (imms_num > 0)
+	{
 			buffer = str_add(buffer, imms);
-		if (morts_num > 0)
 			buffer = str_add(buffer, morts);
-		buffer = str_add(buffer, " <BR> \r\n Всего :");
-		if (imms_num) {
+		buffer = str_add(buffer, " <BR> \r\n Total:");
+		{
 			// sprintf(buf+strlen(buf)," бессмертных %d",imms_num);
-			sprintf(buf, " бессмертных %d", imms_num);
+			sprintf(buf, " imms %d", imms_num);
 			buffer = str_add(buffer, buf);
 		}
-		if (morts_num) {
+		{
 			// sprintf(buf+strlen(buf)," смертных %d",morts_num);
-			sprintf(buf, " смертных %d", morts_num);
+			sprintf(buf, " players %d", morts_num);
 			buffer = str_add(buffer, buf);
 		}
 
-		buffer = str_add(buffer, ".\n");
+		buffer = str_add(buffer, "\n");
 	}
 
 	fprintf(opf, "%s", buffer);
@@ -4194,7 +4191,7 @@ void make_who2html() {
 	free(imms);
 	free(morts);
 
-	fprintf(opf, "<HR></BODY></HTML>\n");
+	fprintf(opf, "</BODY></HTML>\n");
 	fclose(opf);
 }
 

@@ -2484,7 +2484,7 @@ int write_to_descriptor(socket_t desc, const char *txt, size_t total) {
 
 		if (bytes_written < 0) {
 			// Fatal error.  Disconnect the player_data.
-			perror("SYSERR: write_to_descriptor");
+			//perror("SYSERR: write_to_descriptor"); // prool
 			return (0);
 		} else if (bytes_written == 0) {
 			/*
@@ -4085,5 +4085,19 @@ IAC,SE);
 write_to_descriptor(t->descriptor, buf, strlen(buf));
 #endif
 }
+
+char *ptime(void) // Возвращаемое значение: ссылка на текстовую строку с текущим временем
+	{
+	char *tmstr;
+	time_t mytime;
+
+	mytime = time(0);
+
+	tmstr = (char *) asctime(localtime(&mytime));
+	*(tmstr + strlen(tmstr) - 1) = '\0';
+
+	return tmstr;
+
+	}
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :
