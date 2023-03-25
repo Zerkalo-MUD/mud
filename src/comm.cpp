@@ -1503,7 +1503,7 @@ void game_loop(socket_t mother_desc)
 			char tmpbuf[256];
 			sprintf(tmpbuf,"WARNING: Missed %d seconds worth of pulses (%d) on the pulse %d.",
 				static_cast<int>(missed_seconds), missed_pulses, current_pulse);
-			mudlog(tmpbuf, LGH, kLvlImmortal, SYSLOG, true);
+			//mudlog(tmpbuf, LGH, kLvlImmortal, SYSLOG, true); // prool
 			missed_pulses = 1 * kPassesPerSec;
 		}
 

@@ -2719,8 +2719,8 @@ static void ShowEncodingPrompt(DescriptorData *d, bool withHints = false) {
 
 	// prool begin
 	char buf0[512];
-	sprintf(buf0,"Online is %i\r\nYour IP is %s\r\nServer time is %s\r\n\r\n",
-		total_players, d->host, ptime());
+	sprintf(buf0,"Your IP is %s\r\nServer time is %s\r\n\r\n",
+		d->host, ptime());
 	SEND_TO_Q(buf0, d);
 	// prool end
 
