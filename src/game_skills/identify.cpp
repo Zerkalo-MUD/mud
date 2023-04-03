@@ -10,17 +10,21 @@ void do_identify(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	struct TimedSkill timed;
 	int k, level = 0;
 
+#if 0 // prool
 	if (ch->IsNpc() || ch->GetSkill(ESkill::kIdentify) <= 0) {
 		SendMsgToChar("Вам стоит сначала этому научиться.\r\n", ch);
 		return;
 	}
+#endif
 
 	one_argument(argument, arg);
 
+#if 0 // prool
 	if (IsTimedBySkill(ch, ESkill::kIdentify)) {
 		SendMsgToChar("Вы же недавно опознавали - подождите чуток.\r\n", ch);
 		return;
 	}
+#endif
 
 	k = generic_find(arg, EFind::kCharInRoom | EFind::kObjInventory | EFind::kObjRoom | EFind::kObjEquip, caster, &cvict, &ovict);
 	if (!k) {
