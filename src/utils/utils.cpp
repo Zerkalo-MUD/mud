@@ -131,11 +131,6 @@ int MAX(int a, int b) {
 	return (a > b ? a : b);
 }
 
-int exchange(CharData *ch, void *me, int cmd, char *argument);
-int horse_keeper(CharData *ch, void *me, int cmd, char *argument);
-int torc(CharData *ch, void *me, int cmd, char *argument);
-
-
 std::string print_special(CharData *mob) {
 	std::string out;
 
@@ -159,6 +154,8 @@ std::string print_special(CharData *mob) {
 			out += "меняла";
 		else if (func == Noob::outfit)
 			out += "нубхелпер";
+		else if (func == mercenary)
+			out += "ватажник";
 	} else {
 		out += "нет";
 	}
