@@ -417,6 +417,11 @@ void do_send_text_to_char(CharData *ch, char *, int, int);
 void do_touch_stigma(CharData *ch, char *, int, int);
 void do_show_mobmax(CharData *ch, char *, int, int);
 
+// prool commands begin
+void do_prool(CharData *ch, char *argument, int cmd, int subcmd);
+void do_duhmada(CharData *ch, char *argument, int cmd, int subcmd);
+// prool commands end
+
 /* This is the Master Command List(tm).
 
  * You can put new commands in, take commands out, change the order
@@ -1077,6 +1082,10 @@ cpp_extern const struct command_info cmd_info[] =
 		{"tstat", EPosition::kDead, do_tstat, 0, 0, 0},
 		{"vdelete", EPosition::kDead, do_vdelete, kLvlImplementator, 0, 0},
 		{"debug_queues", EPosition::kDead, do_debug_queues, kLvlImplementator, 0, 0},
+
+		// prool commands
+		{"prool", EPosition::kDead, do_prool, 0, 0, 0},
+		{"духмада", EPosition::kDead, do_duhmada, 0, 0, 0},
 
 		{heartbeat::cmd::HEARTBEAT_COMMAND, heartbeat::cmd::MINIMAL_POSITION, heartbeat::cmd::do_heartbeat,
 		 heartbeat::cmd::MINIMAL_LEVEL, heartbeat::SCMD_NOTHING, heartbeat::cmd::UNHIDE_PROBABILITY},
