@@ -12,6 +12,8 @@
 *  $Revision$                                                      *
 ************************************************************************ */
 
+#define HAVE_ICONV // prool
+
 #include "utils.h"
 
 #include <algorithm>
@@ -47,8 +49,6 @@
 #include "conf.h"
 #include "game_mechanics/obj_sets.h"
 #include "utils_string.h"
-
-#define HAVE_ICONV // prool
 
 #ifdef HAVE_ICONV
 #include <iconv.h>
