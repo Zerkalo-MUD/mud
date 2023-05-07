@@ -4135,6 +4135,8 @@ void make_who2html() {
 	char *morts = nullptr;
 	char *buffer = nullptr;
 
+	//printf("prool debug: make_who2html()\n"); // prool
+
 	if ((opf = fopen(WHOLIST_FILE, "w")) == nullptr)
 		return;        // or log it ? *shrug*
 	fprintf(opf, "<HTML><HEAD><TITLE>Кто сейчас в Былинах?</TITLE></HEAD>\n");

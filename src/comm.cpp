@@ -168,6 +168,9 @@
 #define ESC "\x1B"  /* esc character */
 
 #define MXPMODE(arg) ESC "[" #arg "z"
+
+void make_who2html(); //add by prool
+
 extern void log_zone_count_reset();
 extern int perform_move(CharData *ch, int dir, int following, int checkmob, CharData *leader);
 // flags for show_list_to_char
@@ -1382,7 +1385,7 @@ void game_loop(socket_t mother_desc)
 	{
 		if (descriptor_list == nullptr) {
 			log("No connections.  Going to sleep.");
-			//make_who2html();
+			make_who2html();
 #ifdef HAS_EPOLL
 			if (epoll_wait(epoll, events, MAXEVENTS, -1) == -1)
 #else
