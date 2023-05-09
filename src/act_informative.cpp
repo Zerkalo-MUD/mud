@@ -4139,8 +4139,8 @@ void make_who2html() {
 
 	if ((opf = fopen(WHOLIST_FILE, "w")) == nullptr)
 		return;        // or log it ? *shrug*
-	fprintf(opf, "<HTML><HEAD><TITLE>Кто сейчас в Былинах?</TITLE></HEAD>\n");
-	fprintf(opf, "<BODY><H1>Кто сейчас живет в Былинах?</H1><HR>\n");
+	fprintf(opf, "<HTML><HEAD><TITLE>Кто сейчас в MUD?</TITLE></HEAD>\n");
+	//fprintf(opf, "<BODY><H1>Кто сейчас живет в Былинах?</H1><HR>\n");
 
 	sprintf(buf, "БОГИ <BR> \r\n");
 	imms = str_add(imms, buf);
@@ -4165,7 +4165,7 @@ void make_who2html() {
 	}
 
 	if (morts_num + imms_num == 0) {
-		sprintf(buf, "Все ушли на фронт! <BR>");
+		sprintf(buf, "Никого<BR>");
 		buffer = str_add(buffer, buf);
 	} else {
 		if (imms_num > 0)
@@ -4193,7 +4193,7 @@ void make_who2html() {
 	free(imms);
 	free(morts);
 
-	fprintf(opf, "<HR></BODY></HTML>\n");
+	fprintf(opf, "</BODY></HTML>\n");
 	fclose(opf);
 }
 
