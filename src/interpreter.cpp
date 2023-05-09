@@ -3421,8 +3421,7 @@ void nanny(DescriptorData *d, char *arg) {
 				case kGencharContinue: genchar_disp_menu(d->character.get());
 					break;
 				default: SEND_TO_Q("\r\nВведите ваш E-mail"
-								   "\r\n(ВСЕ ВАШИ ПЕРСОНАЖИ ДОЛЖНЫ ИМЕТЬ ОДИНАКОВЫЙ E-mail)."
-								   "\r\nНа этот адрес вам будет отправлен код для подтверждения: ", d);
+								   "\r\n(ВСЕ ВАШИ ПЕРСОНАЖИ ДОЛЖНЫ ИМЕТЬ ОДИНАКОВЫЙ E-mail).", d);
 					STATE(d) = CON_GET_EMAIL;
 					break;
 			}
@@ -3786,7 +3785,7 @@ void nanny(DescriptorData *d, char *arg) {
 				) {
 				d->character->player_data.PNames[5] = std::string(CAP(tmp_name));
 				sprintf(buf,
-						"Введите пароль для %s (не вводите пароли типа '123' или 'qwe', иначе ваших персонажев могут украсть) : ",
+						"Введите пароль для %s : ",
 						GET_PAD(d->character, 1));
 				SEND_TO_Q(buf, d);
 				STATE(d) = CON_NEWPASSWD;
