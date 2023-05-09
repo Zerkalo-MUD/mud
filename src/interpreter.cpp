@@ -3060,7 +3060,7 @@ void nanny(DescriptorData *d, char *arg) {
 				switch (NewNames::auto_authorize(d)) {
 					case NewNames::AUTO_ALLOW:
 						sprintf(buf,
-								"Введите пароль для %s (не вводите пароли типа '123' или 'qwe', иначе ваших персонажев могут украсть) : ",
+								"Введите пароль для %s : ",
 								GET_PAD(d->character, 1));
 						SEND_TO_Q(buf, d);
 						STATE(d) = CON_NEWPASSWD;
@@ -3443,8 +3443,7 @@ void nanny(DescriptorData *d, char *arg) {
 				case kGencharContinue: genchar_disp_menu(d->character.get());
 					break;
 				default: SEND_TO_Q("\r\nВведите ваш E-mail"
-								   "\r\n(ВСЕ ВАШИ ПЕРСОНАЖИ ДОЛЖНЫ ИМЕТЬ ОДИНАКОВЫЙ E-mail)."
-								   "\r\nНа этот адрес вам будет отправлен код для подтверждения: ", d);
+								   "\r\n(ВСЕ ВАШИ ПЕРСОНАЖИ ДОЛЖНЫ ИМЕТЬ ОДИНАКОВЫЙ E-mail).", d);
 					STATE(d) = CON_GET_EMAIL;
 					break;
 			}
