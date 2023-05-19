@@ -4149,8 +4149,8 @@ void make_who2html() {
 	morts = str_add(morts, buf);
 
 	for (d = descriptor_list; d; d = d->next) {
-		if (STATE(d) == CON_PLAYING
-			&& GET_INVIS_LEV(d->character) < 31) {
+		if (1/*STATE(d) == CON_PLAYING
+			&& GET_INVIS_LEV(d->character) < 31*/) { //prool: статистика должна видеть всех
 			const auto ch = d->character;
 			sprintf(buf, "%s <BR> \r\n ", ch->race_or_title().c_str());
 
