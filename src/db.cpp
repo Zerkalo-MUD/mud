@@ -3984,11 +3984,11 @@ void log_zone_error(ZoneRnum zone, int cmd_no, const char *message) {
 	char buf[256];
 
 	sprintf(buf, "SYSERR: zone file %d.zon: %s", zone_table[zone].vnum, message);
-	mudlog(buf, NRM, kLvlGod, SYSLOG, true);
+	//mudlog(buf, NRM, kLvlGod, SYSLOG, true); // prool
 
 	sprintf(buf, "SYSERR: ...offending cmd: '%c' cmd in zone #%d, line %d",
 			ZCMD.command, zone_table[zone].vnum, ZCMD.line);
-	mudlog(buf, NRM, kLvlGod, SYSLOG, true);
+	//mudlog(buf, NRM, kLvlGod, SYSLOG, true); // prool
 }
 
 void process_load_celebrate(Celebrates::CelebrateDataPtr celebrate, int vnum) {
