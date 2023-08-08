@@ -607,10 +607,10 @@ void do_gen_comm(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 			{"Вам недозволено болтать.\r\n",    // gossip
 			 "болтать",
 			 "Вы вне видимости канала.\r\n",
-			 KYEL,
+			 KIYEL/*KYEL*/, // prool
 			 "заметили",
 			 "заметил$g",
-			 3,
+			 1/*3*/, // prool
 			 15,
 			 EPrf::kNoGossip},
 

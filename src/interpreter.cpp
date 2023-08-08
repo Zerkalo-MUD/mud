@@ -11,6 +11,8 @@
 *  $Revision$                                                       *
 ************************************************************************ */
 
+#define TEST_BUILD // prool
+
 #define __INTERPRETER_C__
 
 #include "interpreter.h"
@@ -1975,6 +1977,7 @@ int pre_help(CharData *ch, char *arg) {
 // лимит коннектов с ип - сядут все сместе, что выглядит имхо странно, может там комп новый воткнули
 // и просто еще до иммов не достучались лимит поднять... вобщем сидит тот, кто не успел Ж)
 int check_dupes_host(DescriptorData *d, bool autocheck = false) {
+	return 1; // prool: no check IP dupes
 	if (!d->character || IS_IMMORTAL(d->character) || d->character->desc->original)
 		return 1;
 
@@ -1997,6 +2000,7 @@ int check_dupes_host(DescriptorData *d, bool autocheck = false) {
 			&& !IS_IMMORTAL(i->character)
 			&& (STATE(i) == CON_PLAYING
 				|| STATE(i) == CON_MENU)) {
+			return 1; // prool: no check proxy
 			switch (CheckProxy(d)) {
 				case 0:
 					// если уже сидим в проксе, то смысла спамить никакого
@@ -2034,6 +2038,7 @@ int check_dupes_host(DescriptorData *d, bool autocheck = false) {
 }
 
 int check_dupes_email(DescriptorData *d) {
+return 1; // prool: no check email dupes
 	if (!d->character
 		|| IS_IMMORTAL(d->character)) {
 		return (1);

@@ -273,7 +273,8 @@ void load(bool reload) {
 			if (item_rnum < 0) {
 				snprintf(buf, kMaxStringLength, "...incorrect item_vnum=%d", item_vnum);
 				mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
-				return;
+				continue; // prool: если в файле магазина несуществующий предмет, просто продолжает обработку файла
+				//return;
 			}
 
 			// иним ее в магазе
@@ -297,7 +298,8 @@ void load(bool reload) {
 									 (int) (*it)->item_list[i].item_vnum,
 									 (*it)->_id.c_str());
 							mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
-							return;
+							continue; // prool: см. мой комент выше
+							//return;
 						}
 						// иним ее в магазе
 						const auto item_vnum = (*it)->item_list[i].item_vnum;

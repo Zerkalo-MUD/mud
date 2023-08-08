@@ -830,6 +830,7 @@ std::string print_obj_list(CharData *ch, ObjListType &cont) {
 		print_obj(i_out, s_out, prev_obj_it->get(), count, ch);
 	}
 
+	rent_per_day=0; // prool: хранение бесплатно!
 	const long money = ch->get_gold() + ch->get_bank();
 	const long expired = rent_per_day ? (money / rent_per_day) : 0;
 
@@ -1014,10 +1015,12 @@ bool put_depot(CharData *ch, const ObjData::shared_ptr &obj) {
 		return 0;
 	}
 
+#if 0 // prool
 	if (!ch->get_bank() && !ch->get_gold()) {
 		SendMsgToChar(ch, "У вас ведь совсем нет денег, чем вы собираетесь расплачиваться за хранение вещей?\r\n");
 		return 0;
 	}
+#endif
 
 	depot_log("put_depot %s %ld: %s %d %d",
 			  GET_NAME(ch), GET_UNIQUE(ch), obj->get_short_description().c_str(),

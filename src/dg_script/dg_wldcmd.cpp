@@ -181,9 +181,9 @@ void do_wdoor(RoomData *room, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	value = one_argument(argument, field);
 	skip_spaces(&value);
 	if (!*target || !*direction || !*field) {
-		wld_log(room, "wdoor called with too few args");
+		//wld_log(room, "wdoor called with too few args"); // prool
 		sprintf(buf, "wdoor argument: %s", error);
-		wld_log(room, buf);
+		//wld_log(room, buf);
 		return;
 	}
 	if ((rm = get_room(target)) == nullptr) {

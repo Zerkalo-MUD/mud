@@ -3712,9 +3712,9 @@ void zone_update(void) {
 				ss << zone_table[*it].vnum << " ";
 				reset_zone(*it);
 			}
-			mudlog(ss.str(), LGH, kLvlGod, SYSLOG, false);
+			//mudlog(ss.str(), LGH, kLvlGod, SYSLOG, false); // prool
 			out << " ]\r\n[ Time reset: " << timer_count.delta().count();
-			mudlog(out.str(), LGH, kLvlGod, SYSLOG, false);
+			//mudlog(out.str(), LGH, kLvlGod, SYSLOG, false); // prool
 			if (update_u == reset_q.head)
 				reset_q.head = reset_q.head->next;
 			else {

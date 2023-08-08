@@ -81,7 +81,7 @@ int CLAN_CHEST_RNUM = -1;
 const int INGR_CHEST_VNUM = 333;
 int INGR_CHEST_RNUM = -1;
 // налог на хранилище ингров (в день)
-const int INGR_CHEST_TAX = 1000;
+const int INGR_CHEST_TAX = 0/*1000*/; // prool
 // макс. длина сообщения дружины
 const int MAX_MOD_LENGTH = 3 * 80;
 // макс. длина названия ранга в дружине
@@ -484,7 +484,8 @@ void Clan::ClanLoadSingle(const std::string& index) {
 	tempClan->exp_history.load(tempClan->get_file_abbrev());
 	// иним на случай полной неактивности по итогам месяца, чтобы не было пропусков в списке
 	tempClan->exp_history.add_exp(0);
-	if (tempClan->exp_history.need_destroy() && !tempClan->test_clan) {
+	if (0/*tempClan->exp_history.need_destroy() && !tempClan->test_clan*/) { // prool: no delete clans
+	//if (tempClan->exp_history.need_destroy() && !tempClan->test_clan) {
 		// клан-банк на воеводу
 		if (tempClan->bank > 0) {
 			Player t_victim;
@@ -4635,6 +4636,7 @@ int Clan::ChestTax() {
 	}
 	this->chest_objcount = count;
 	this->chest_discount = MAX(50, 75 - 5 * (this->clan_level));
+	return 0; // prool
 	return cost * this->chest_discount / 100;
 }
 
@@ -5349,6 +5351,7 @@ int Clan::ingr_chest_tax() {
 	}
 
 	ingr_chest_objcount_ = count;
+	return 0; // prool
 	return cost;
 }
 
@@ -5377,6 +5380,7 @@ int Clan::calculate_clan_tax() const {
 		cost += INGR_CHEST_TAX;
 	}
 
+	return 0; // prool
 	return cost;
 }
 

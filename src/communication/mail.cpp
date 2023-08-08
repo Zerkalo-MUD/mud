@@ -83,9 +83,9 @@ void print_undelivered(CharData *ch) {
 using namespace mail;
 
 // мин.уровень для отправки почты
-const int MIN_MAIL_LEVEL = 2;
+const int MIN_MAIL_LEVEL = 1/*2*/; // peool
 // стоимость отправки письма
-const int STAMP_PRICE = 50;
+const int STAMP_PRICE = 0/*50*/; // prool
 // макс. размер сообщения
 const int MAX_MAIL_SIZE = 32768;
 

@@ -1502,7 +1502,7 @@ void obj_point_update() {
 							&& j->get_vnum_zone_from() == zone_table[world[j->get_in_room()]->zone_rn].vnum) {
 						snprintf(buf, kMaxStringLength, "ВНИМАНИЕ!!! Объект: %s VNUM: %d рассыпался по таймеру на земле в комнате: %d",
 								 GET_OBJ_PNAME(j.get(), 0).c_str(), GET_OBJ_VNUM(j.get()), world[j->get_in_room()]->room_vn);
-						mudlog(buf, CMP, kLvlGreatGod, ERRLOG, true);
+						//mudlog(buf, CMP, kLvlGreatGod, ERRLOG, true); // prool
 
 					}
 					if (!world[j->get_in_room()]->people.empty()) {
