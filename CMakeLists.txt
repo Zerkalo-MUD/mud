@@ -542,7 +542,6 @@ set(HEADERS
 		src/feats_constants.h
 		src/game_abilities/talents_actions.h)
 
-set(CONFIGURATION_FILES lib/misc/configuration.xml)
 # Build types
 set(CMAKE_CONFIGURATION_TYPES Release Debug Test FastTest)
 if (NOT MSVC)
@@ -889,12 +888,14 @@ if (CMAKE_HOST_UNIX)
 		if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 			add_definitions("-Wno-invalid-source-encoding")
 		endif ()
-		target_link_libraries(circle.library crypt)
+		if(NOT NOCRYPT)
+			target_link_libraries(circle.library crypt)
+		endif()
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 	endif()
 
 	# Suppose that UNIX hosts support epoll by default EPOLL>>>
-	if (NOT CYGWIN)
+	if (NOT CYGWIN AND NOT APPLE)
 		option(HAS_EPOLL "Does system support epoll call?" ON)
 	else ()
 		# EPOLL>>> ... if it is not Cygwin ... EPOLL>>>

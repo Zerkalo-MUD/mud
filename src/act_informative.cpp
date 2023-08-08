@@ -460,7 +460,7 @@ std::string char_get_custom_label(ObjData *obj, CharData *ch) {
 // mode 1 show_state 3 для хранилище (4 - хранилище ингров)
 const char *show_obj_to_char(ObjData *object, CharData *ch, int mode, int show_state, int how) {
 	*buf = '\0';
-	if ((mode < 5) && PRF_FLAGGED(ch, EPrf::kRoomFlags))
+	if ((mode < 5) && (PRF_FLAGGED(ch, EPrf::kRoomFlags) || InTestZone(ch)))
 		sprintf(buf, "[%5d] ", GET_OBJ_VNUM(object));
 
 	if (mode == 0
@@ -1046,7 +1046,7 @@ void ListOneChar(CharData *i, CharData *ch, ESkill mode) {
 		&& !AFF_FLAGGED(i, EAffect::kCharmed)
 		&& !IS_HORSE(i)) {
 		*buf = '\0';
-		if (PRF_FLAGGED(ch, EPrf::kRoomFlags)) {
+		if (PRF_FLAGGED(ch, EPrf::kRoomFlags) || InTestZone(ch)) {
 			sprintf(buf, "[%5d] ", GET_MOB_VNUM(i));
 		}
 
@@ -1808,7 +1808,7 @@ void look_at_room(CharData *ch, int ignore_brief, bool msdp_mode) {
 
 	SendMsgToChar(CCICYN(ch, C_NRM), ch);
 
-	if (!ch->IsNpc() && PRF_FLAGGED(ch, EPrf::kRoomFlags)) {
+	if (!ch->IsNpc() && (PRF_FLAGGED(ch, EPrf::kRoomFlags) || InTestZone(ch))) {
 		// иммам рандомная * во флагах ломает мапер грят
 		const bool has_flag = ROOM_FLAGGED(ch->in_room, ERoomFlag::kBfsMark) ? true : false;
 		world[ch->in_room]->unset_flag(ERoomFlag::kBfsMark);
@@ -3196,8 +3196,10 @@ void do_who(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			else if ((IS_IMMORTAL(ch) || PRF_FLAGGED(ch, EPrf::kCoderinfo)) && NAME_BAD(tch)) {
 				sprintf(buf + strlen(buf), " &Wзапрет %s!&n", get_name_by_id(NAME_ID_GOD(tch)));
 			}
-			if (IS_GOD(ch) && (GET_GOD_FLAG(tch, EGf::kAllowTesterMode) || PRF_FLAGGED(tch, EPrf::kTester)))
+			if (IS_GOD(ch) && (GET_GOD_FLAG(tch, EGf::kAllowTesterMode)))
 				sprintf(buf + strlen(buf), " &G(ТЕСТЕР!)&n");
+			if (IS_GOD(ch) && (GET_GOD_FLAG(tch, EGf::kSkillTester)))
+				sprintf(buf + strlen(buf), " &G(СКИЛЛТЕСТЕР!)&n");
 			if (IS_GOD(ch) && (PLR_FLAGGED(tch, EPlrFlag::kAutobot)))
 				sprintf(buf + strlen(buf), " &G(БОТ!)&n");
 			if (IS_IMMORTAL(tch))

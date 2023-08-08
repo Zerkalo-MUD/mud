@@ -173,6 +173,9 @@ void make_who2html(); //add by prool
 
 extern void log_zone_count_reset();
 extern int perform_move(CharData *ch, int dir, int following, int checkmob, CharData *leader);
+extern const char* build_datetime;
+extern const char* revision;
+
 // flags for show_list_to_char
 
 enum {
@@ -669,6 +672,7 @@ int main_function(int argc, char **argv) {
 	ush_int port;
 	int pos = 1;
 	const char *dir;
+	char cwd[256];
 
 	// Initialize these to check for overruns later.
 	plant_magic(buf);
@@ -679,11 +683,6 @@ int main_function(int argc, char **argv) {
 	port = DFLT_PORT;
 	dir = "lib";
 
-	runtime_config.load();
-
-	if (runtime_config.msdp_debug()) {
-		msdp::debug(true);
-	}
 
 	while ((pos < argc) && (*(argv[pos]) == '-')) {
 		switch (*(argv[pos] + 1)) {
@@ -708,11 +707,21 @@ int main_function(int argc, char **argv) {
 			case 's': no_specials = 1;
 				puts("Suppressing assignment of special routines.");
 				break;
-
+			case 'd':
+				if (*(argv[pos] + 2))
+					dir = argv[pos] + 2;
+				else if (++pos < argc)
+					dir = argv[pos];
+				else {
+					puts("SYSERR: Directory arg expected after option -d.");
+					exit(1);
+				}
+			break;
 			case 'h':
 				// From: Anil Mahajan <amahajan@proxicom.com>
 				printf("Usage: %s [-c] [-q] [-r] [-s] [port #] [-D msdp]\n"
 					   "  -c             Enable syntax check mode.\n"
+					   "  -d <directory> Specify library directory (defaults to 'lib').\n"
 					   "  -h             Print this command line argument help.\n"
 					   "  -o <file>      Write log to <file> instead of stderr.\n"
 					   "  -r             Restrict MUD -- no new players allowed.\n"
@@ -720,43 +729,55 @@ int main_function(int argc, char **argv) {
 				exit(0);
 
 			default: printf("SYSERR: Unknown option -%c in argument string.\n", *(argv[pos] + 1));
-				break;
+				printf("Usage: %s [-c] [-q] [-r] [-s] [port #] [-D msdp]\n"
+					   "  -c             Enable syntax check mode.\n"
+					   "  -d <directory> Specify library directory (defaults to 'lib').\n"
+					   "  -h             Print this command line argument help.\n"
+					   "  -o <file>      Write log to <file> instead of stderr.\n"
+					   "  -r             Restrict MUD -- no new players allowed.\n"
+					   "  -s             Suppress special procedure assignments.\n", argv[0]);
+				exit(1);
+			break;
 		}
 		pos++;
 	}
 
 	if (pos < argc) {
 		if (!a_isdigit(*argv[pos])) {
-			printf("Usage: %s [-c] [-q] [-r] [-s] [port #] [-D msdp]\n", argv[0]);
+			printf("Usage: %s [-c] [-q] [-r] [-s] [port #] [-D msdp]\r\n", argv[0]);
 			exit(1);
 		} else if ((port = atoi(argv[pos])) <= 1024) {
-			printf("SYSERR: Illegal port number %d.\n", port);
+			printf("SYSERR: Illegal port number %d.\r\n", port);
 			exit(1);
 		}
 	}
-
-	// All arguments have been parsed, try to open log file.
-	runtime_config.setup_logs();
-	logfile = runtime_config.logs(SYSLOG).handle();
 
 	/*
 	 * Moved here to distinguish command line options and to show up
 	 * in the log if stderr is redirected to a file.
 	 */
-	log("%s", circlemud_version);
-	log("%s", DG_SCRIPT_VERSION);
+	printf("%s\r\n", circlemud_version);
+	printf("%s\r\n", DG_SCRIPT_VERSION);
+	printf("Current directory '%s' using '%s' as data directory.\r\n", cwd, dir);
+	runtime_config.load();
+	if (runtime_config.msdp_debug()) {
+		msdp::debug(true);
+	}
+	// All arguments have been parsed, try to open log file.
+	runtime_config.setup_logs();
+	logfile = runtime_config.logs(SYSLOG).handle();
 	log_code_date();
+	getcwd(cwd, sizeof(cwd));
 	if (chdir(dir) < 0) {
-		perror("SYSERR: Fatal error changing to data directory");
+		perror("\r\nSYSERR: Fatal error changing to data directory");
 		exit(1);
 	}
-	log("Using %s as data directory.", dir);
-
+	printf("Code version %s, revision: %s\r\n", build_datetime, revision);
 	if (scheck) {
 		world_loader.boot_world();
-		log("Done.");
+		printf("Done.");
 	} else {
-		log("Running game on port %d.", port);
+		printf("Running game on port %d.\r\n", port);
 
 		// стль и буст юзаются уже немало где, а про их экспешены никто не думает
 		// пока хотя бы стльные ловить и просто логировать факт того, что мы вышли
@@ -1019,84 +1040,7 @@ socket_t init_socket(ush_int port) {
 }
 
 int get_max_players(void) {
-#ifndef CIRCLE_UNIX
 	return (max_playing);
-#else
-
-	int max_descs = 0;
-	const char *method;
-
-	/*
-	 * First, we'll try using getrlimit/setrlimit.  This will probably work
-	 * on most systems.  HAS_RLIMIT is defined in sysdep.h.
-	 */
-#ifdef HAS_RLIMIT
-	{
-		struct rlimit limit;
-
-		// find the limit of file descs
-		method = "rlimit";
-		if (getrlimit(RLIMIT_NOFILE, &limit) < 0) {
-			perror("SYSERR: calling getrlimit");
-			exit(1);
-		}
-
-		// set the current to the maximum
-		limit.rlim_cur = limit.rlim_max;
-		if (setrlimit(RLIMIT_NOFILE, &limit) < 0) {
-			perror("SYSERR: calling setrlimit");
-			exit(1);
-		}
-#ifdef RLIM_INFINITY
-		if (limit.rlim_max == RLIM_INFINITY)
-			max_descs = max_playing + NUM_RESERVED_DESCS;
-		else
-			max_descs = MIN(max_playing + NUM_RESERVED_DESCS, limit.rlim_max);
-#else
-		max_descs = MIN(max_playing + NUM_RESERVED_DESCS, limit.rlim_max);
-#endif
-	}
-
-#elif defined (OPEN_MAX) || defined(FOPEN_MAX)
-#if !defined(OPEN_MAX)
-#define OPEN_MAX FOPEN_MAX
-#endif
-	method = "OPEN_MAX";
-	max_descs = OPEN_MAX;	// Uh oh.. rlimit didn't work, but we have OPEN_MAX
-#elif defined (_SC_OPEN_MAX)
-	/*
-	 * Okay, you don't have getrlimit() and you don't have OPEN_MAX.  Time to
-	 * try the POSIX sysconf() function.  (See Stevens' _Advanced Programming
-	 * in the UNIX Environment_).
-	 */
-	method = "POSIX sysconf";
-	errno = 0;
-	if ((max_descs = sysconf(_SC_OPEN_MAX)) < 0)
-	{
-		if (errno == 0)
-			max_descs = max_playing + NUM_RESERVED_DESCS;
-		else
-		{
-			perror("SYSERR: Error calling sysconf");
-			exit(1);
-		}
-	}
-#else
-	// if everything has failed, we'll just take a guess
-	method = "random guess";
-	max_descs = max_playing + NUM_RESERVED_DESCS;
-#endif
-
-	// now calculate max _players_ based on max descs
-	max_descs = MIN(max_playing, max_descs - NUM_RESERVED_DESCS);
-
-	if (max_descs <= 0) {
-		log("SYSERR: Non-positive max player limit!  (Set at %d using %s).", max_descs, method);
-		exit(1);
-	}
-	log("   Setting player limit to %d using %s.", max_descs, method);
-	return (max_descs);
-#endif                // CIRCLE_UNIX
 }
 
 int shutting_down(void) {

@@ -25,6 +25,7 @@
 #include <list>
 #include <map>
 
+
 // These data contain information about a players time data
 struct time_data {
 	time_t birth;        // This represents the characters age
@@ -82,7 +83,8 @@ struct char_played_ability_data {
 	int percent_exp_add;
 	int percent_physdam_add;
 	int percent_magdam_add;
-	int percent_spell_blink;
+	int percent_spell_blink_phys;
+	int percent_spell_blink_mag;
 	std::array<int, to_underlying(ESaving::kLast) + 1> apply_saving_throw;	// Saving throw (Bonuses)
 	std::array<int, EResist::kLastResist + 1> apply_resistance;					// Сопротивления повреждениям
 	int mresist;
@@ -366,7 +368,7 @@ class CharData : public ProtectedCharData {
 	bool HaveFeat(EFeat feat_id) const { return real_abils.Feats.test(to_underlying(feat_id)); };
 
 	void set_skill(const ESkill skill_id, int percent);
-	void set_skill(short remort);
+	void SetSkillAfterRemort(short remort);
 	void clear_skills();
 	int GetSkill(const ESkill skill_id) const;
 	int GetSkillWithoutEquip(const ESkill skill_id) const;
@@ -834,7 +836,7 @@ class CharData : public ProtectedCharData {
 	bool IsOnHorse() const;
 	bool has_horse(bool same_room) const;
 	CharData *get_horse();
-	bool drop_from_horse();
+	bool DropFromHorse();
 	bool IsHorsePrevents();
 	void dismount();
 };

@@ -2922,6 +2922,8 @@ struct set_struct        /*
 		{"telegram", kLvlImplementator, PC, MISC}, // 66
 		{"nogata", kLvlImplementator, PC, NUMBER}, // 67
 		{"position", kLvlImplementator, PC, NUMBER},
+		{"skilltester", kLvlImplementator, PC, BINARY}, //69
+		{"quest", kLvlImplementator, PC, NUMBER}, //70
 		{"\n", 0, BOTH, MISC}
 	};
 
@@ -3619,6 +3621,21 @@ int perform_set(CharData *ch, CharData *vict, int mode, char *val_arg) {
 			}
 			break;
 		}
+		case 69: // флаг скилл тестера
+			if (!str_cmp(val_arg, "off") || !str_cmp(val_arg, "выкл")) {
+				CLR_GOD_FLAG(vict, EGf::kSkillTester);
+				sprintf(buf, "%s убрал флаг &Rскилл тестера&n для игрока %s", GET_NAME(ch), GET_NAME(vict));
+				mudlog(buf, BRF, kLvlImmortal, SYSLOG, true);
+			} else {
+				SET_GOD_FLAG(vict, EGf::kSkillTester);
+				sprintf(buf, "%s установил флаг &Rскилл тестера&n для игрока %s", GET_NAME(ch), GET_NAME(vict));
+				mudlog(buf, BRF, kLvlImmortal, SYSLOG, true);
+			}
+			break;
+		case 70: //quest
+			vict->complete_quest(value);
+			SendMsgToChar(ch, "Добавил игроку %s выполнение квеста %d\r\n", GET_NAME(vict), value);
+			break;
 		default: SendMsgToChar("Не могу установить это!\r\n", ch);
 			return (0);
 	}

@@ -1612,6 +1612,7 @@ const char *weapon_affects[] = {"слепота",
 								"глухота",
 								"полководец",
 								"земной.поклон",
+								"затуманивание",
 								"\n",
 								"\n",
 								"\n"
@@ -1834,6 +1835,7 @@ const char *godslike_bits[] =
 		"DEMIGOD",
 		"PERSLOG",
 		"TESTER",
+		"SKILLTESTER",
 		"\n"
 	};
 
