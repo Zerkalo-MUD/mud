@@ -221,6 +221,9 @@ int find_action(char *cmd);
 int do_social(CharData *ch, char *argument);
 void init_warcry(CharData *ch);
 
+// prool commands
+void do_bootinfo(CharData *ch, char *argument, int cmd, int subcmd);
+
 void do_advance(CharData *ch, char *argument, int cmd, int subcmd);
 void do_alias(CharData *ch, char *argument, int cmd, int subcmd);
 void do_antigods(CharData *ch, char *argument, int cmd, int subcmd);
@@ -1072,6 +1075,9 @@ cpp_extern const struct command_info cmd_info[] =
 		{"tstat", EPosition::kDead, do_tstat, 0, 0, 0},
 		{"vdelete", EPosition::kDead, do_vdelete, kLvlImplementator, 0, 0},
 		{"debug_queues", EPosition::kDead, do_debug_queues, kLvlImplementator, 0, 0},
+
+		// prool commands
+		{"bootinfo", EPosition::kDead, do_bootinfo, 0, 0, 0},
 
 		{heartbeat::cmd::HEARTBEAT_COMMAND, heartbeat::cmd::MINIMAL_POSITION, heartbeat::cmd::do_heartbeat,
 		 heartbeat::cmd::MINIMAL_LEVEL, heartbeat::SCMD_NOTHING, heartbeat::cmd::UNHIDE_PROBABILITY},
@@ -4234,5 +4240,15 @@ bool who_spamcontrol(CharData *ch, unsigned short int mode = WHO_LISTALL) {
 	return false;
 }
 
+void do_bootinfo(CharData *ch, char * /*argument*/, int /*cmd*/, int /*subcmd*/)
+{
+	time_t mytime;
+	mytime=time(0);
+const auto boot_time = shutdown_parameters.get_boot_time();
+const auto tmp_time = boot_time + (time_t)(60 * shutdown_parameters.get_reboot_uptime());
+SendMsgToChar(ch, "Сервер был запущен %s\r\n", rustime(localtime(&boot_time)));
+SendMsgToChar(ch, "Сейчас %s\r\n", rustime(localtime(&mytime)));
+SendMsgToChar(ch, "Сервер будет автоматически перезагружен %s\r\n", rustime(localtime(&tmp_time)));
+}
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :
