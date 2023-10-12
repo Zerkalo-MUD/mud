@@ -1906,39 +1906,14 @@ void do_load(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	}
 }
 
-void do_prool(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) { // prool test command
-	MobVnum number;
-	MobRnum r_num;
-
-	number=2200; // хлеб
-
-		if ((r_num = real_object(number)) < 0) {
-			SendMsgToChar("Господи, да изучи ты номера объектов!!! :-)\r\n", ch);
-			return;
-		}
-
-		const auto obj = world_objects.create_from_prototype_by_rnum(r_num);
-		obj->set_crafter_uid(GET_UNIQUE(ch));
-		obj->set_vnum_zone_from(GetZoneVnumByCharPlace(ch));
-
-		if (number == GlobalDrop::MAGIC1_ENCHANT_VNUM
-			|| number == GlobalDrop::MAGIC2_ENCHANT_VNUM
-			|| number == GlobalDrop::MAGIC3_ENCHANT_VNUM) {
-			generate_magic_enchant(obj.get());
-		}
-
-		if (load_into_inventory) {
-			PlaceObjToInventory(obj.get(), ch);
-		} else {
-			PlaceObjToRoom(obj.get(), ch->in_room);
-		}
-
-		act("$n покопал$u в МУДе.", true, ch, nullptr, nullptr, kToRoom);
-		act("$n создал$g $o3!", false, ch, obj.get(), nullptr, kToRoom);
-		act("Вы создали $o3.", false, ch, obj.get(), nullptr, kToChar);
-		load_otrigger(obj.get());
-		CheckObjDecay(obj.get());
-		olc_log("do_prool: %s load obj %s #%d", GET_NAME(ch), obj->get_short_description().c_str(), number);
+void do_bootinfo(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) { // prool test command
+	time_t mytime;
+	mytime=time(0);
+const auto boot_time = shutdown_parameters.get_boot_time();
+const auto tmp_time = boot_time + (time_t)(60 * shutdown_parameters.get_reboot_uptime());
+SendMsgToChar(ch, "Сервер был запущен %s\r\n", rustime(localtime(&boot_time)));
+SendMsgToChar(ch, "Сейчас %s\r\n", rustime(localtime(&mytime)));
+SendMsgToChar(ch, "Сервер будет автоматически перезагружен %s\r\n", rustime(localtime(&tmp_time)));
 }
 
 void PUT_OBJ(CharData *ch, int number) { // prool: put obj number to ch

@@ -418,7 +418,7 @@ void do_touch_stigma(CharData *ch, char *, int, int);
 void do_show_mobmax(CharData *ch, char *, int, int);
 
 // prool commands begin
-void do_prool(CharData *ch, char *argument, int cmd, int subcmd);
+void do_bootinfo(CharData *ch, char *argument, int cmd, int subcmd);
 void do_duhmada(CharData *ch, char *argument, int cmd, int subcmd);
 // prool commands end
 
@@ -1084,7 +1084,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"debug_queues", EPosition::kDead, do_debug_queues, kLvlImplementator, 0, 0},
 
 		// prool commands
-		{"prool", EPosition::kDead, do_prool, 0, 0, 0},
+		{"bootinfo", EPosition::kDead, do_bootinfo, 0, 0, 0},
 		{"духмада", EPosition::kDead, do_duhmada, 0, 0, 0},
 
 		{heartbeat::cmd::HEARTBEAT_COMMAND, heartbeat::cmd::MINIMAL_POSITION, heartbeat::cmd::do_heartbeat,
