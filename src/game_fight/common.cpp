@@ -20,6 +20,8 @@ int IsHaveNoExtraAttack(CharData *ch) {
 				break;
 			case kExtraAttackCut: message = "Невозможно. Вы пытаетесь провести боевой прием против $N1.";
 				break;
+			case kExtraAttackSlay: message = "Невозможно. Вы пытаетесь сразить $N3.";
+				break;
 			default: return false;
 		}
 	} else {
@@ -30,8 +32,8 @@ int IsHaveNoExtraAttack(CharData *ch) {
 	return false;
 }
 
-void SetWait(CharData *ch, int waittime, int victim_in_room) {
-	if (!IS_IMMORTAL(ch) && (!victim_in_room || (ch->GetEnemy() && ch->isInSameRoom(ch->GetEnemy())))) {
+void SetWait(CharData *ch, int waittime, int wait_if_fight) {
+	if (!IS_IMMORTAL(ch) && (!wait_if_fight || (ch->GetEnemy() && ch->isInSameRoom(ch->GetEnemy())))) {
 		SetWaitState(ch, waittime * kBattleRound);
 	}
 }

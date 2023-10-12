@@ -32,10 +32,10 @@
 extern int buf_switches, buf_largecount, buf_overflows;
 extern unsigned long int number_of_bytes_read;
 extern unsigned long int number_of_bytes_written;
-extern const char *Dirs[];
 
 extern void show_apply(CharData *ch, CharData *vict);
 extern void print_rune_stats(CharData *ch);
+void do_shops_list(CharData *ch);
 
 void ShowClassInfo(CharData *ch, const std::string &class_name, const std::string &params) {
 	if (class_name.empty()) {
@@ -227,7 +227,7 @@ std::string print_zone_enters(ZoneRnum zone) {
 					&& world[world[n]->dir_option[dir]->to_room()]->room_vn > 0) {
 					snprintf(tmp, sizeof(tmp),
 							 "  Номер комнаты:%5d Направление:%6s Вход в комнату:%5d\r\n",
-							 world[n]->room_vn, Dirs[dir],
+							 world[n]->room_vn, dirs_rus[dir],
 							 world[world[n]->dir_option[dir]->to_room()]->room_vn);
 					out += tmp;
 					found = true;
@@ -257,7 +257,7 @@ std::string print_zone_exits(ZoneRnum zone) {
 					&& world[world[n]->dir_option[dir]->to_room()]->room_vn > 0) {
 					snprintf(tmp, sizeof(tmp),
 							 "  Номер комнаты:%5d Направление:%6s Выход в комнату:%5d\r\n",
-							 world[n]->room_vn, Dirs[dir],
+							 world[n]->room_vn, dirs_rus[dir],
 							 world[world[n]->dir_option[dir]->to_room()]->room_vn);
 					out += tmp;
 					found = true;
@@ -347,6 +347,7 @@ struct show_struct show_fields[] = {
 	{"featinfo", kLvlImmortal},
 	{"abilityinfo", kLvlImmortal},
 	{"account", kLvlGod}, //35
+	{"shops", kLvlGod},
 	{"\n", 0}
 };
 
@@ -872,6 +873,9 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			chdata->get_account()->show_history_logins(ch);
 			break;
 		}
+		case 36: // shops
+			do_shops_list(ch);
+			break;
 		default: SendMsgToChar("Извините, неверная команда.\r\n", ch);
 			break;
 	}

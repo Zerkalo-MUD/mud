@@ -157,15 +157,6 @@ void do_quest(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
  * This function screams bitvector... -gg 6/45/98
  */
 
-const char *Dirs[EDirection::kMaxDirNum + 1] = {"Север",
-												"Восток",
-												"Юг",
-												"Запад",
-												"Вверх",
-												"Вниз",
-												"\n"
-};
-
 const char *ObjState[8][2] = {{"рассыпается", "рассыпается"},
 							  {"плачевно", "в плачевном состоянии"},
 							  {"плохо", "в плохом состоянии"},
@@ -1164,14 +1155,14 @@ void ListOneChar(CharData *i, CharData *ch, ESkill mode) {
 		if (AFF_FLAGGED(ch, EAffect::kDetectMagic)) {
 			if (AFF_FLAGGED(i, EAffect::kHold))
 				strcat(aura_txt, "...парализован$a");
-			if (AFF_FLAGGED(i, EAffect::kSilence))
+			if (AFF_FLAGGED(i, EAffect::kSilence) && (!AFF_FLAGGED(i, EAffect::kStrangled)))
 				strcat(aura_txt, "...нем$a");
 		}
 		if (AFF_FLAGGED(i, EAffect::kBlind))
 			strcat(aura_txt, "...слеп$a");
 		if (AFF_FLAGGED(i, EAffect::kDeafness))
 			strcat(aura_txt, "...глух$a");
-		if (AFF_FLAGGED(i, EAffect::kStrangled))
+		if (AFF_FLAGGED(i, EAffect::kStrangled) && AFF_FLAGGED(i, EAffect::kSilence))
 			strcat(aura_txt, "...задыхается.");
 
 		if (*aura_txt)
@@ -1356,14 +1347,14 @@ void ListOneChar(CharData *i, CharData *ch, ESkill mode) {
 	if (AFF_FLAGGED(ch, EAffect::kDetectMagic)) {
 		if (AFF_FLAGGED(i, EAffect::kHold))
 			strcat(aura_txt, " ...парализован$a");
-		if (AFF_FLAGGED(i, EAffect::kSilence))
+		if (AFF_FLAGGED(i, EAffect::kSilence) && (!AFF_FLAGGED(i, EAffect::kStrangled)))
 			strcat(aura_txt, " ...нем$a");
 	}
 	if (AFF_FLAGGED(i, EAffect::kBlind))
 		strcat(aura_txt, " ...слеп$a");
 	if (AFF_FLAGGED(i, EAffect::kDeafness))
 		strcat(aura_txt, " ...глух$a");
-	if (AFF_FLAGGED(i, EAffect::kStrangled))
+	if (AFF_FLAGGED(i, EAffect::kStrangled) && AFF_FLAGGED(i, EAffect::kSilence))
 		strcat(aura_txt, " ...задыхается");
 	if (AFF_FLAGGED(i, EAffect::kCommander))
 		strcat(aura_txt, " ...реет стяг над головой");
@@ -1417,9 +1408,9 @@ void list_char_to_char_thing(const RoomData::people_t &list,
 
 void do_auto_exits(CharData *ch) {
 	int door, slen = 0;
+	char buf[kMaxInputLength];
 
 	*buf = '\0';
-
 	for (door = 0; door < EDirection::kMaxDirNum; door++) {
 		// Наконец-то добавлена отрисовка в автовыходах закрытых дверей
 		if (EXIT(ch, door) && EXIT(ch, door)->to_room() != kNowhere) {
@@ -1456,10 +1447,10 @@ void do_exits(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
 	for (door = 0; door < EDirection::kMaxDirNum; door++)
 		if (EXIT(ch, door) && EXIT(ch, door)->to_room() != kNowhere && !EXIT_FLAGGED(EXIT(ch, door), EExitFlag::kClosed)) {
 			if (IS_GOD(ch))
-				sprintf(buf2, "%-6s - [%5d] %s\r\n", Dirs[door],
+				sprintf(buf2, "%-6s - [%5d] %s\r\n", dirs_rus[door],
 						GET_ROOM_VNUM(EXIT(ch, door)->to_room()), world[EXIT(ch, door)->to_room()]->name);
 			else {
-				sprintf(buf2, "%-6s - ", Dirs[door]);
+				sprintf(buf2, "%-6s - ", dirs_rus[door]);
 				if (is_dark(EXIT(ch, door)->to_room()) && !CAN_SEE_IN_DARK(ch))
 					strcat(buf2, "слишком темно\r\n");
 				else {
@@ -1494,10 +1485,10 @@ void do_blind_exits(CharData *ch) {
 	for (door = 0; door < EDirection::kMaxDirNum; door++)
 		if (EXIT(ch, door) && EXIT(ch, door)->to_room() != kNowhere && !EXIT_FLAGGED(EXIT(ch, door), EExitFlag::kClosed)) {
 			if (IS_GOD(ch))
-				sprintf(buf2, "&W%s - [%d] %s ", Dirs[door],
+				sprintf(buf2, "&W%s - [%d] %s ", dirs_rus[door],
 						GET_ROOM_VNUM(EXIT(ch, door)->to_room()), world[EXIT(ch, door)->to_room()]->name);
 			else {
-				sprintf(buf2, "&W%s - ", Dirs[door]);
+				sprintf(buf2, "&W%s - ", dirs_rus[door]);
 				if (is_dark(EXIT(ch, door)->to_room()) && !CAN_SEE_IN_DARK(ch))
 					strcat(buf2, "слишком темно");
 				else {
@@ -1947,7 +1938,7 @@ void look_in_direction(CharData *ch, int dir, int info_is) {
 		|| (EXIT(ch, dir)
 			&& EXIT(ch, dir)->to_room() != kNowhere)) {
 		rdata = EXIT(ch, dir);
-		count += sprintf(buf, "%s%s:%s ", CCYEL(ch, C_NRM), Dirs[dir], CCNRM(ch, C_NRM));
+		count += sprintf(buf, "%s%s:%s ", CCYEL(ch, C_NRM), dirs_rus[dir], CCNRM(ch, C_NRM));
 		if (EXIT_FLAGGED(rdata, EExitFlag::kClosed)) {
 			if (rdata->keyword) {
 				count += sprintf(buf + count, " закрыто (%s).\r\n", rdata->keyword);
@@ -2028,7 +2019,7 @@ void hear_in_direction(CharData *ch, int dir, int info_is) {
 		|| (EXIT(ch, dir)
 			&& EXIT(ch, dir)->to_room() != kNowhere)) {
 		rdata = EXIT(ch, dir);
-		count += sprintf(buf, "%s%s:%s ", CCYEL(ch, C_NRM), Dirs[dir], CCNRM(ch, C_NRM));
+		count += sprintf(buf, "%s%s:%s ", CCYEL(ch, C_NRM), dirs_rus[dir], CCNRM(ch, C_NRM));
 		count += sprintf(buf + count, "\r\n%s", CCGRN(ch, C_NRM));
 		SendMsgToChar(buf, ch);
 		count = 0;
@@ -2478,10 +2469,9 @@ void skip_hide_on_look(CharData *ch) {
 			((number(1, 100) -
 				CalcCurrentSkill(ch, ESkill::kPry, nullptr) - 2 * (ch->get_wis() - 9)) > 0)))) {
 		RemoveAffectFromChar(ch, ESpell::kHide);
-		if (!AFF_FLAGGED(ch, EAffect::kHide)) {
-			SendMsgToChar("Вы прекратили прятаться.\r\n", ch);
-			act("$n прекратил$g прятаться.", false, ch, nullptr, nullptr, kToRoom);
-		}
+		AFF_FLAGS(ch).unset(EAffect::kHide);
+		SendMsgToChar("Вы прекратили прятаться.\r\n", ch);
+		act("$n прекратил$g прятаться.", false, ch, nullptr, nullptr, kToRoom);
 	}
 }
 
@@ -2539,7 +2529,7 @@ void do_look(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 			look_in_obj(ch, arg2);
 			// did the char type 'look <direction>?'
 		else if (((look_type = search_block(arg, dirs, false)) >= 0) ||
-			((look_type = search_block(arg, Dirs, false)) >= 0))
+			((look_type = search_block(arg, dirs_rus, false)) >= 0))
 			look_in_direction(ch, look_type, EXIT_SHOW_WALL);
 		else if (utils::IsAbbr(arg, "at") || utils::IsAbbr(arg, "на"))
 			look_at_target(ch, arg2, subcmd);

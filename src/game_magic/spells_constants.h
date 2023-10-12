@@ -262,12 +262,16 @@ enum class ESpell {
 	kAcidBreath = 246,
 	kLightingBreath = 247,
 	kExpedientFail = 248,
+	kLowerEffectiveness = 249,
+	kNoInjure = 250,
+	kConfuse = 251,
 	kIdentify = 351,
 	kFullIdentify = 352,
 	kQUest = 353,
 	kPortalTimer = 354,
+	kNoCharge = 355,
 	kFirst = kArmor,
-	kLast = 354	// Не забываем менять
+	kLast = 355	// Не забываем менять
 };
 
 const ESpell &operator++(ESpell &s);

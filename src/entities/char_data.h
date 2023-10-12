@@ -622,7 +622,7 @@ class CharData : public ProtectedCharData {
 	virtual void reset();
 
 	void set_abstinent();
-	void affect_remove(const char_affects_list_t::iterator &affect_i);
+	char_affects_list_t::iterator AffectRemove(const char_affects_list_t::iterator &affect_i);
 	bool has_any_affect(const affects_list_t &affects);
 	size_t remove_random_affects(const size_t count);
 
@@ -658,6 +658,7 @@ class CharData : public ProtectedCharData {
 	bool IsNpc() const { return char_specials.saved.act.get(EMobFlag::kNpc); }
 	bool IsPlayer() const { return !IsNpc(); }
 	bool have_mind() const;
+	bool HasWeapon();
  private:
 	const auto &get_player_specials() const { return player_specials; }
 	auto &get_player_specials() { return player_specials; }
@@ -942,6 +943,9 @@ inline bool MAY_ATTACK(const CharData::shared_ptr &sub) { return MAY_ATTACK(sub.
 
 bool AWAKE(const CharData *ch);
 inline bool AWAKE(const CharData::shared_ptr &ch) { return AWAKE(ch.get()); }
+
+bool CLEAR_MIND(const CharData *ch);
+inline bool CLEAR_MIND(const CharData::shared_ptr &ch) { return CLEAR_MIND(ch.get()); }
 
 // Polud условие для проверки перед запуском всех mob-триггеров КРОМЕ death, random и global
 //пока здесь только чарм, как и было раньше

@@ -104,7 +104,6 @@ extern time_t zones_stat_date;
 extern void RepopDecay(std::vector<ZoneRnum> zone_list);    // рассыпание обьектов ITEM_REPOP_DECAY
 
 void medit_save_to_disk(int zone_num);
-//extern const char *Dirs[];
 // for entities
 extern int check_dupes_host(DescriptorData *d, bool autocheck = false);
 void do_recall(CharData *ch, char *argument, int cmd, int subcmd);
@@ -2187,6 +2186,7 @@ void do_restore(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 			act("Вы были полностью восстановлены $N4!",
 				false, vict, nullptr, ch, kToChar);
 		}
+		affect_total(vict);
 	}
 }
 
@@ -2791,9 +2791,8 @@ void do_wizutil(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 
 			case SCMD_UNAFFECT:
 				if (!vict->affected.empty()) {
-					while (!vict->affected.empty()) {
-						vict->affect_remove(vict->affected.begin());
-					}
+					vict->affected.clear();
+					affect_total(vict);
 					SendMsgToChar("Яркая вспышка осветила вас!\r\n"
 								  "Вы почувствовали себя немного иначе.\r\n", vict);
 					SendMsgToChar("Все афекты сняты.\r\n", ch);

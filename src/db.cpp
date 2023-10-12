@@ -226,6 +226,7 @@ extern void LoadProxyList();
 extern void add_karma(CharData *ch, const char *punish, const char *reason);
 extern void RepopDecay(std::vector<ZoneRnum> zone_list);    // рассыпание обьектов ITEM_REPOP_DECAY
 extern void extract_trigger(Trigger *trig);
+extern ESkill FixNameAndFindSkillId(char *name);
 
 char *fread_action(FILE *fl, int nr) {
 	char buf[kMaxStringLength];
@@ -1177,13 +1178,13 @@ void do_reboot(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		} else {
 			SetsDrop::reload();
 		}
-	} else if (!str_cmp(arg, "remort.xml")) {
+	} else if (!str_cmp(arg, "remort")) {
 		Remort::init();
-	} else if (!str_cmp(arg, "noob_help.xml")) {
+	} else if (!str_cmp(arg, "noobhelp")) {
 		Noob::init();
-	} else if (!str_cmp(arg, "reset_stats.xml")) {
+	} else if (!str_cmp(arg, "resetstats")) {
 		stats_reset::init();
-	} else if (!str_cmp(arg, "obj_sets.xml")) {
+	} else if (!str_cmp(arg, "objsets")) {
 		obj_sets::load();
 	} else if (!str_cmp(arg, "daily")) {
 		DailyQuest::load_from_file(ch);
@@ -3401,7 +3402,7 @@ int vnum_flag(char *searchname, CharData *ch) {
 	f = false;
 	ESkill skill_id;
 	for (skill_id = ESkill::kFirst; skill_id <= ESkill::kLast; ++skill_id) {
-		if (utils::IsAbbr(searchname, MUD::Skill(skill_id).GetName())) {
+		if (FixNameAndFindSkillId(searchname) == skill_id) {
 			f = true;
 			break;
 		}
@@ -5156,15 +5157,10 @@ void do_remort(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 	ch->inc_wis(1);
 	ch->inc_int(1);
 	ch->inc_cha(1);
-
 	if (ch->GetEnemy())
 		stop_fighting(ch, true);
-
 	die_follower(ch);
-	while (!ch->affected.empty()) {
-		ch->affect_remove(ch->affected.begin());
-	}
-
+	ch->affected.clear();
 // Снимаем весь стафф
 	for (i = 0; i < EEquipPos::kNumEquipPos; i++) {
 		if (GET_EQ(ch, i)) {
@@ -5281,6 +5277,7 @@ void do_remort(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 
 	act("$n вступил$g в игру.", true, ch, 0, 0, kToRoom);
 	act("Вы перевоплотились! Желаем удачи!", false, ch, 0, 0, kToChar);
+	affect_total(ch);
 }
 
 // returns the real number of the room with given virtual number

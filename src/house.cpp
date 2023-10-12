@@ -1519,8 +1519,7 @@ void Clan::CharToChannel(CharData *ch, std::string text, int subcmd) {
 		return;
 	}
 
-	if (AFF_FLAGGED(ch, EAffect::kSilence)
-		|| AFF_FLAGGED(ch, EAffect::kStrangled)) {
+	if (AFF_FLAGGED(ch, EAffect::kSilence)) {
 		SendMsgToChar(SIELENCE, ch);
 		return;
 	}
@@ -1674,19 +1673,15 @@ void DoClanList(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		// сортировка кланов по экспе
 		std::multimap<long long, Clan::shared_ptr> sort_clan;
 		for (const auto &clan : Clan::ClanList) {
-			//if (clan->test_clan)
-			//sort_clan.insert(std::make_pair(0, clan));
-			sort_clan.insert(std::make_pair(clan->last_exp.get_exp(), clan));
-
+			sort_clan.insert(std::make_pair(clan->exp, clan));
 		}
-
 		std::ostringstream out;
 		// \todo Тут нужно использовать table_wrapper::Table а не формат.
-		std::string_view clanTopFormat{" {:5}  {:6}   {:>30} {:14}{:14} {:9}\r\n"};
+		std::string_view clanTopFormat{" {:5}  {:6}   {:<30} {:14}{:14} {:9}\r\n"};
 		out << "В игре зарегистрированы следующие дружины:\r\n"
-			<< "     #           Название                          Всего опыта    За 30 дней   Человек\r\n\r\n";
+			<< "     #           Название                       Всего опыта   За 30 дней         Человек\r\n\r\n";
 		int count = 1;
-		for (const auto& it : sort_clan) {
+		for (const auto &it : reverse(sort_clan)) {
 			if (it.second->m_members.size() == 0) {
 				continue;
 			}
@@ -4267,6 +4262,7 @@ void Clan::CheckPkList(CharData *ch) {
 
 // вобщем это копи-паст из биржи + флаги
 void DoStoreHouse(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
+	ObjData *chest;
 	if (ch->IsNpc() || !CLAN(ch)) {
 		SendMsgToChar("Чаво?\r\n", ch);
 		return;
@@ -4275,11 +4271,9 @@ void DoStoreHouse(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		SendMsgToChar("Ваш воевода зажал денег и отключил эту возможность! :(\r\n", ch);
 		return;
 	}
+	char *stufina = one_argument(argument, arg);
 
-	ObjData *chest;
-
-	skip_spaces(&argument);
-	if (!*argument) {
+	if (!str_cmp(arg, "все") || !str_cmp(arg, "all")) {
 		for (chest = world[real_room(CLAN(ch)->chest_room)]->contents; chest; chest = chest->get_next_content()) {
 			if (Clan::is_clan_chest(chest)) {
 				Clan::ChestShow(chest, ch);
@@ -4287,10 +4281,6 @@ void DoStoreHouse(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			}
 		}
 	}
-
-	char *stufina = one_argument(argument, arg);
-	skip_spaces(&stufina);
-
 	if (utils::IsAbbr(arg, "характеристики") || utils::IsAbbr(arg, "identify") || utils::IsAbbr(arg, "опознать")) {
 		if ((ch->get_bank() < kChestIdentPay) && (GetRealLevel(ch) < kLvlImplementator)) {
 			SendMsgToChar("У вас недостаточно денег в банке для такого исследования.\r\n", ch);
@@ -4315,89 +4305,18 @@ void DoStoreHouse(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				}
 			}
 		}
-
 		sprintf(buf1, "Ничего похожего на %s в хранилище ненайдено! Будьте внимательнее.\r\n", stufina);
 		SendMsgToChar(buf1, ch);
 		return;
 	}
 
+
 	ParseFilter filter(ParseFilter::CLAN);
 
-	char buf_tmp[kMaxInputLength];
-	while (*argument) {
-		switch (*argument) {
-			case 'И': argument = one_argument(++argument, buf_tmp);
-				if (strlen(buf_tmp) == 0) {
-					SendMsgToChar("Укажите имя предмета.\r\n", ch);
-					return;
-				}
-				filter.name = buf_tmp;
-				break;
-			case 'Т': argument = one_argument(++argument, buf_tmp);
-				if (!filter.init_type(buf_tmp)) {
-					SendMsgToChar("Неверный тип предмета.\r\n", ch);
-					return;
-				}
-				break;
-			case 'С': argument = one_argument(++argument, buf_tmp);
-				if (!filter.init_state(buf_tmp)) {
-					SendMsgToChar("Неверное состояние предмета.\r\n", ch);
-					return;
-				}
-				break;
-			case 'О': argument = one_argument(++argument, buf_tmp);
-				if (!filter.init_wear(buf_tmp)) {
-					SendMsgToChar("Неверное место одевания предмета.\r\n", ch);
-					return;
-				}
-				break;
-			case 'Ц': argument = one_argument(++argument, buf_tmp);
-				if (!filter.init_cost(buf_tmp)) {
-					SendMsgToChar("Неверный формат в фильтре: Ц<цена><+->.\r\n", ch);
-					return;
-				}
-				break;
-			case 'К': argument = one_argument(++argument, buf_tmp);
-				if (!filter.init_weap_class(buf_tmp)) {
-					SendMsgToChar("Неверный класс оружия.\r\n", ch);
-					return;
-				}
-				break;
-			case 'А': {
-				argument = one_argument(++argument, buf_tmp);
-				size_t len = strlen(buf_tmp);
-				if (len == 0) {
-					SendMsgToChar("Укажите аффект предмета.\r\n", ch);
-					return;
-				}
-				if (filter.affects_cnt() >= 3) {
-					break;
-				}
-				if (!filter.init_affect(buf_tmp, len)) {
-					SendMsgToChar(ch, "Неверный аффект предмета: '%s'.\r\n", buf_tmp);
-					return;
-				}
-				break;
-			} // case 'А'
-			case 'Р':// стоимость ренты
-				argument = one_argument(++argument, buf_tmp);
-				if (!filter.init_rent(buf_tmp)) {
-					SendMsgToChar("Неверный формат в фильтре: Р<стоимость><+->.\r\n", ch);
-					return;
-				}
-				break;
-            case 'М':// количество мортов
-                argument = one_argument(++argument, buf_tmp);
-                if (!filter.init_remorts(buf_tmp)) {
-					SendMsgToChar("Неверный формат в фильтре: М<количество мортов><+->.\r\n", ch);
-                    return;
-                }
-                break;
-			default: ++argument;
-		}
+	if (!filter.parse_filter(ch, filter, argument)) {
+			return;
 	}
-
-	SendMsgToChar(filter.print(), ch);
+	SendMsgToChar(ch, "Выборка: %s\r\n", filter.print().c_str());
 	SetWait(ch, 1, false);
 
 	std::string out;

@@ -1568,14 +1568,10 @@ void appear(CharData *ch) {
 		|| AFF_FLAGGED(ch, EAffect::kDisguise)
 		|| AFF_FLAGGED(ch, EAffect::kHide);
 
-	if (IsAffectedBySpell(ch, ESpell::kInvisible))
-		RemoveAffectFromChar(ch, ESpell::kInvisible);
-	if (IsAffectedBySpell(ch, ESpell::kHide))
-		RemoveAffectFromChar(ch, ESpell::kHide);
-	if (IsAffectedBySpell(ch, ESpell::kSneak))
-		RemoveAffectFromChar(ch, ESpell::kSneak);
-	if (IsAffectedBySpell(ch, ESpell::kCamouflage))
-		RemoveAffectFromChar(ch, ESpell::kCamouflage);
+	RemoveAffectFromChar(ch, ESpell::kInvisible);
+	RemoveAffectFromChar(ch, ESpell::kHide);
+	RemoveAffectFromChar(ch, ESpell::kSneak);
+	RemoveAffectFromChar(ch, ESpell::kCamouflage);
 
 	AFF_FLAGS(ch).unset(EAffect::kInvisible);
 	AFF_FLAGS(ch).unset(EAffect::kHide);
@@ -2084,7 +2080,7 @@ void update_pk_logs(CharData *ch, CharData *victim) {
 void Damage::Blink(CharData *ch, CharData *victim) {
 	if (flags[fight::kIgnoreBlink] || flags[fight::kCritLuck])
 		return;
-	ubyte blink;
+	ubyte blink = 0;
 	// даже в случае попадания можно уклониться мигалкой
 	if (dmg_type == fight::kMagicDmg) {
 		if (AFF_FLAGGED(victim, EAffect::kCloudly) || victim->add_abils.percent_spell_blink_mag > 0) {
@@ -2506,7 +2502,8 @@ int Damage::Process(CharData *ch, CharData *victim) {
 		if (shield_full_absorb || armor_full_absorb) {
 			return 0;
 		}
-		Blink(ch, victim);
+		if (dam > 0)
+			Blink(ch, victim);
 	}
 
 	// Внутри magic_shields_dam вызывается dmg::proccess, если чар там умрет, то будет креш

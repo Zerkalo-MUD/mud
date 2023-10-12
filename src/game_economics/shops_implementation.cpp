@@ -14,6 +14,7 @@
 #include "game_mechanics/named_stuff.h"
 #include "game_fight/pk.h"
 #include "entities/zone.h"
+#include "utils/objects_filter.h"
 
 #include <boost/algorithm/string.hpp>
 #include <third_party_libs/fmt/include/fmt/format.h>
@@ -512,155 +513,27 @@ void shop_node::print_shop_list(CharData *ch, const std::string &arg, int keeper
 	page_string(ch->desc, out.str());
 }
 
-bool init_type(const std::string &str, int &type) {
-	if (utils::IsAbbrev(str, "свет")
-		|| utils::IsAbbrev(str, "light")) {
-		type = EObjType::kLightSource;
-	} else if (utils::IsAbbrev(str, "свиток")
-		|| utils::IsAbbrev(str, "scroll")) {
-		type = EObjType::kScroll;
-	} else if (utils::IsAbbrev(str, "палочка")
-		|| utils::IsAbbrev(str, "wand")) {
-		type = EObjType::kWand;
-	} else if (utils::IsAbbrev(str, "посох")
-		|| utils::IsAbbrev(str, "staff")) {
-		type = EObjType::kStaff;
-	} else if (utils::IsAbbrev(str, "оружие")
-		|| utils::IsAbbrev(str, "weapon")) {
-		type = EObjType::kWeapon;
-	} else if (utils::IsAbbrev(str, "броня")
-		|| utils::IsAbbrev(str, "armor")) {
-		type = EObjType::kArmor;
-	} else if (utils::IsAbbrev(str, "материал")
-		|| utils::IsAbbrev(str, "material")) {
-		type = EObjType::kCraftMaterial;
-	} else if (utils::IsAbbrev(str, "напиток")
-		|| utils::IsAbbrev(str, "potion")) {
-		type = EObjType::kPotion;
-	} else if (utils::IsAbbrev(str, "прочее")
-		|| utils::IsAbbrev(str, "другое")
-		|| utils::IsAbbrev(str, "other")) {
-		type = EObjType::kOther;
-	} else if (utils::IsAbbrev(str, "контейнер")
-		|| utils::IsAbbrev(str, "container")) {
-		type = EObjType::kContainer;
-	} else if (utils::IsAbbrev(str, "емкость")
-		|| utils::IsAbbrev(str, "tank")) {
-		type = EObjType::kLiquidContainer;
-	} else if (utils::IsAbbrev(str, "книга")
-		|| utils::IsAbbrev(str, "book")) {
-		type = EObjType::kBook;
-	} else if (utils::IsAbbrev(str, "руна")
-		|| utils::IsAbbrev(str, "rune")) {
-		type = EObjType::kIngredient;
-	} else if (utils::IsAbbrev(str, "ингредиент")
-		|| utils::IsAbbrev(str, "ingradient")) {
-		type = EObjType::kMagicIngredient;
-	} else if (utils::IsAbbrev(str, "легкие")
-		|| utils::IsAbbrev(str, "легкая")) {
-		type = EObjType::kLightArmor;
-	} else if (utils::IsAbbrev(str, "средние")
-		|| utils::IsAbbrev(str, "средняя")) {
-		type = EObjType::kMediumArmor;
-	} else if (utils::IsAbbrev(str, "тяжелые")
-		|| utils::IsAbbrev(str, "тяжелая")) {
-		type = EObjType::kHeavyArmor;
-	} else if (utils::IsAbbrev(str, "колчан")) {
-		type = EObjType::kMagicContaner;
-	} else if (utils::IsAbbrev(str, "стрела")) {
-		type = EObjType::kMagicArrow;
-	} else {
-		return false;
-	}
-
-	return true;
-}
-
-bool init_wear(const std::string &str, EWearFlag &wear) {
-	if (utils::IsAbbrev(str, "палец")) {
-		wear = EWearFlag::kFinger;
-	} else if (utils::IsAbbrev(str, "шея") || utils::IsAbbrev(str, "грудь")) {
-		wear = EWearFlag::kNeck;
-	} else if (utils::IsAbbrev(str, "тело")) {
-		wear = EWearFlag::kBody;
-	} else if (utils::IsAbbrev(str, "голова")) {
-		wear = EWearFlag::kHead;
-	} else if (utils::IsAbbrev(str, "ноги")) {
-		wear = EWearFlag::kLegs;
-	} else if (utils::IsAbbrev(str, "ступни")) {
-		wear = EWearFlag::kFeet;
-	} else if (utils::IsAbbrev(str, "кисти")) {
-		wear = EWearFlag::kHands;
-	} else if (utils::IsAbbrev(str, "руки")) {
-		wear = EWearFlag::kArms;
-	} else if (utils::IsAbbrev(str, "щит")) {
-		wear = EWearFlag::kShield;
-	} else if (utils::IsAbbrev(str, "плечи")) {
-		wear = EWearFlag::kShoulders;
-	} else if (utils::IsAbbrev(str, "пояс")) {
-		wear = EWearFlag::kWaist;
-	} else if (utils::IsAbbrev(str, "колчан")) {
-		wear = EWearFlag::kQuiver;
-	} else if (utils::IsAbbrev(str, "запястья")) {
-		wear = EWearFlag::kWrist;
-	} else if (utils::IsAbbrev(str, "правая")) {
-		wear = EWearFlag::kWield;
-	} else if (utils::IsAbbrev(str, "левая")) {
-		wear = EWearFlag::kHold;
-	} else if (utils::IsAbbrev(str, "обе")) {
-		wear = EWearFlag::kBoth;
-	} else {
-		return false;
-	}
-
-	return true;
-}
-
-void shop_node::filter_shop_list(CharData *ch, const std::string &arg, int keeper_vnum) {
+void shop_node::filter_shop_list(CharData *ch, char *argument, int keeper_vnum) {
 	int num = 1;
-	EWearFlag wear = EWearFlag::kUndefined;
-	int type = -10;
+	std::string print_value;
+	std::string name_value;
 
-	std::string print_value = "";
-	std::string name_value = "";
+	one_argument(argument, arg);
+	ParseFilter filter(ParseFilter::CLAN);
 
-	std::string filtr_value;
-	const char *first_simvol = "";
-
-	if (!arg.empty()) {
-		first_simvol = arg.c_str();
-		filtr_value = arg.substr(1, arg.size() - 1);
+	if (!filter.parse_filter(ch, filter, argument)) {
+			return;
 	}
 
-	switch (first_simvol[0]) {
-		case 'Т':
-			if (!init_type(filtr_value, type)) {
-				SendMsgToChar("Неверный тип предмета.\r\n", ch);
-				return;
-			}
-			break;
-
-		case 'О':
-			if (!init_wear(filtr_value, wear)) {
-				SendMsgToChar("Неверное место одевания предмета.\r\n", ch);
-				return;
-			}
-			break;
-
-		default: SendMsgToChar("Неверный фильтр. \r\n", ch);
-			return;;
-			break;
-	};
-
+	SendMsgToChar(ch, "Выборка: %s\r\n", filter.print().c_str());
 	SendMsgToChar(ch,
-				  " ##    Доступно   Предмет(фильтр)                              Цена (%s)\r\n"
-				  "---------------------------------------------------------------------------\r\n",
-				  currency.c_str());
-
+				  " ##      Доступно  Предмет                                       Цена (%s)\r\n"
+				  "---------------------------------------------------------------------------\r\n", currency.c_str());
 	std::stringstream out;
-	for (auto k = 0u; k < m_items_list.size();) {
+
+	for (auto k = 0u; k < m_items_list.size(); k++) {
 		int count = can_sell_count(num - 1);
-		bool show_name = true;
+		std::string numToShow = count == -1 ? "Навалом" : fmt::format("{}", count);
 
 		print_value = "";
 		name_value = "";
@@ -675,40 +548,31 @@ void shop_node::filter_shop_list(CharData *ch, const std::string &arg, int keepe
 			if (GET_OBJ_TYPE(obj_proto[rnum]) == EObjType::kLiquidContainer) {
 				print_value += " с " + std::string(drinknames[GET_OBJ_VAL(obj_proto[rnum], 2)]);
 			}
-
-			if (!((wear != EWearFlag::kUndefined && obj_proto[rnum]->has_wear_flag(wear))
-				|| (type > 0 && type == GET_OBJ_TYPE(obj_proto[rnum])))) {
-				show_name = false;
+			auto tmp_obj = world_objects.create_from_prototype_by_rnum(rnum);
+			if (tmp_obj && filter.check(tmp_obj.get(), ch)) {
+				out << fmt::format("{:>4})  {:>10}  {:<47} {:>8}\r\n",
+						 num, numToShow, print_value, item->get_price());
+			} 
+			if (tmp_obj) {
+				world_objects.remove(tmp_obj);
 			}
 		} else {
 			ObjData *tmp_obj = get_from_shelve(k);
 			if (tmp_obj) {
-				if (!((wear != EWearFlag::kUndefined && CAN_WEAR(tmp_obj, wear))
-					|| (type > 0 && type == GET_OBJ_TYPE(tmp_obj)))) {
-					show_name = false;
+				if (filter.check(tmp_obj, ch)) {
+					print_value = tmp_obj->get_short_description();
+					name_value = tmp_obj->get_aliases();
+					item->set_price(GET_OBJ_COST(tmp_obj));
+					out << fmt::format("{:>4})  {:>10}  {:<47} {:>8}\r\n",
+							   num, numToShow, print_value, item->get_price());
 				}
-
-				print_value = tmp_obj->get_short_description();
-				name_value = tmp_obj->get_aliases();
-				item->set_price(GET_OBJ_COST(tmp_obj));
 			} else {
 				m_items_list.remove(k);    // remove from shop object that we cannot instantiate
-
 				continue;
 			}
 		}
-
-		std::string numToShow = count == -1 ? "Навалом" : fmt::format("{}", count);
-		if (show_name) {
-			out << fmt::format("{:>4})  {:>10}  {:<47} {:>8}\r\n",
-							   num++, numToShow, print_value, item->get_price());
-		} else {
-			num++;
-		}
-
-		++k;
+		num++;
 	}
-
 	page_string(ch->desc, out.str());
 }
 
@@ -950,6 +814,10 @@ void shop_node::clear_store() {
 
 void shop_node::remove_from_storage(ObjData *object) {
 	m_storage.remove(object);
+}
+
+ObjData *shop_node::GetObjFromShop(uid_t uid) const {
+	return m_storage.get_by_uid(uid);
 }
 
 ObjData *shop_node::get_from_shelve(const size_t index) const {

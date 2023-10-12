@@ -2,98 +2,153 @@
 #include "game_fight/pk.h"
 #include "game_fight/common.h"
 #include "game_fight/fight.h"
-#include "game_fight/fight_hit.h"
 #include "protect.h"
 #include "structs/global_objects.h"
 
 // ************************* BASH PROCEDURES
+void do_bash(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
+	if (!ch->GetSkill(ESkill::kBash)) {
+		SendMsgToChar("Вы не знаете как.\r\n", ch);
+		return;
+	}
+	if (ch->HasCooldown(ESkill::kBash)) {
+		SendMsgToChar("Вам нужно набраться сил.\r\n", ch);
+		return;
+	}
+	if (ch->IsOnHorse()) {
+		SendMsgToChar("Верхом это сделать затруднительно.\r\n", ch);
+		return;
+	}
+	CharData *vict = FindVictim(ch, argument);
+
+	if (!vict) {
+		SendMsgToChar("Кого же вы так сильно желаете сбить?\r\n", ch);
+		return;
+	}
+	if (vict == ch) {
+		SendMsgToChar("Ваш сокрушающий удар поверг вас наземь... Вы почувствовали себя глупо.\r\n", ch);
+		return;
+	}
+	if (!may_kill_here(ch, vict, argument))
+		return;
+	if (!check_pkill(ch, vict, arg))
+		return;
+	if (IS_IMPL(ch) || !ch->GetEnemy()) {
+		go_bash(ch, vict);
+	} else if (IsHaveNoExtraAttack(ch)) {
+		if (!ch->IsNpc())
+			act("Хорошо. Вы попытаетесь сбить $N3.", false, ch, nullptr, vict, kToChar);
+		ch->SetExtraAttack(kExtraAttackBash, vict);
+	}
+}
+
 void go_bash(CharData *ch, CharData *vict) {
 	if (IsUnableToAct(ch) || AFF_FLAGGED(ch, EAffect::kStopLeft)) {
 		SendMsgToChar("Вы временно не в состоянии сражаться.\r\n", ch);
 		return;
 	}
-
 	if (!(ch->IsNpc() || GET_EQ(ch, kShield) || IS_IMMORTAL(ch) || AFF_FLAGGED(vict, EAffect::kHold)
 		|| GET_GOD_FLAG(vict, EGf::kGodscurse))) {
 		SendMsgToChar("Вы не можете сделать этого без щита.\r\n", ch);
 		return;
 	}
-
 	if (PRF_FLAGS(ch).get(EPrf::kIronWind)) {
 		SendMsgToChar("Вы не можете применять этот прием в таком состоянии!\r\n", ch);
 		return;
 	}
-
-	if (ch->IsHorsePrevents())
+	if (ch->IsHorsePrevents()) {
+		SendMsgToChar("Верхом это сделать затруднительно.\r\n", ch);
 		return;
-
+	}
 	if (ch == vict) {
 		SendMsgToChar("Ваш сокрушающий удар поверг вас наземь... Вы почувствовали себя глупо.\r\n", ch);
 		return;
 	}
-
 	if (GET_POS(ch) < EPosition::kFight) {
 		SendMsgToChar("Вам стоит встать на ноги.\r\n", ch);
 		return;
 	}
 
-	vict = TryToFindProtector(vict, ch);
-
-	int percent = number(1, MUD::Skill(ESkill::kBash).difficulty);
-	int prob = CalcCurrentSkill(ch, ESkill::kBash, vict);
 	int lag;
+	int damage = number(GET_SKILL(ch, ESkill::kBash) / 1.25, GET_SKILL(ch, ESkill::kBash) * 1.25);
+	bool can_shield_bash;
+	if (ch->GetSkill(ESkill::kShieldBash) && GET_EQ(ch, kShield) && (!PRF_FLAGGED(ch,kAwake))) {
+		can_shield_bash = true;
+		}
+	bool shield_bash_success;
+
+	if (can_shield_bash) {
+		SkillRollResult result_shield_bash = MakeSkillTest(ch, ESkill::kShieldBash, vict);
+		shield_bash_success = result_shield_bash.success;
+
+		TrainSkill(ch, ESkill::kShieldBash, shield_bash_success, vict);
+		if (shield_bash_success) {
+			//Описание аффекта "ошарашен" для умения "удар щитом":
+			Affect<EApply> af;
+			af.type = ESpell::kConfuse;
+			af.duration = 2;
+			af.battleflag = kAfSameTime;
+			af.bitvector = to_underlying(EAffect::kConfused);
+			if (!vict->IsNpc()) {
+				af.duration *= 30;
+			}
+			affect_to_char(vict, af);
+			act("Вы ошарашили $N3 ударом щита!",
+				false, ch, nullptr, vict, kToChar);
+			act("$N0 ошарашил$G Вас ударом щита!",
+				false, vict, nullptr, ch, kToChar);
+			act("$N0 ошарашил$G $n3 ударом щита!",
+				false, vict, nullptr, ch, kToNotVict | kToArenaListen);
+			damage = number(ceil(((((GET_REAL_SIZE(ch) * ((GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield))) * 1.5)) / 5) + (GET_SKILL(ch,ESkill::kShieldBash) * 3)) + (GET_SKILL(ch, ESkill::kBash) * 2)) / 1.25),
+						 ceil(((((GET_REAL_SIZE(ch) * ((GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield))) * 1.5)) / 5) + (GET_SKILL(ch,ESkill::kShieldBash) * 3)) + (GET_SKILL(ch, ESkill::kBash) * 2)) * 1.25)) *
+				  GetRealLevel(ch) / 30;
+
+			if (GetRealStr(ch) < 55) {
+				damage /= 2;
+			}
+		}
+	}
+
+	SkillRollResult result = MakeSkillTest(ch, ESkill::kBash, vict);
+	bool success = result.success;
+	TrainSkill(ch, ESkill::kBash, success, vict);
 
 	if (AFF_FLAGGED(vict, EAffect::kHold) || GET_GOD_FLAG(vict, EGf::kGodscurse)) {
-		prob = percent;
+		success = true;
 	}
 	if (MOB_FLAGGED(vict, EMobFlag::kNoBash) || GET_GOD_FLAG(ch, EGf::kGodscurse)) {
-		prob = 0;
-	}
-	bool success = percent <= prob;
-	TrainSkill(ch, ESkill::kBash, success, vict);
-	//Удар щитом тренируется только, если держим щит.
-	if (GET_EQ(ch, kShield)) {
-		TrainSkill(ch, ESkill::kShieldBash, success, vict);
+		success = false;
 	}
 
-	SendSkillBalanceMsg(ch, MUD::Skill(ESkill::kBash).name, percent, prob, success);
+	vict = TryToFindProtector(vict, ch);
+
+// Если баш - фейл. Немного нахуевертил. Смысл в том чтобы оставаться на ногах даже при фейле баша и удара щитом, если удар щитом прокачан 200+.
 	if (!success) {
 		Damage dmg(SkillDmg(ESkill::kBash), fight::kZeroDmg, fight::kPhysDmg, nullptr);
 		dmg.Process(ch, vict);
-
-		//рассчёт удара щитом - шанс остаться на ногах при фейле баша, но успеха удара щитом.
-		percent = number(1, MUD::Skill(ESkill::kShieldBash).difficulty);
-		prob = CalcCurrentSkill(ch, ESkill::kShieldBash, vict);
-		if (prob >= percent && GET_EQ(ch, kShield)) {
-            lag = 2;
-			act("Вам удалось удержаться на ногах.",
-				false, ch, nullptr, vict, kToChar);
-			act("$N0 смог$Q удержаться на ногах.",
-				false, vict, nullptr, ch, kToChar);
-			act("$N0 смог$Q удержаться на ногах.",
-				false, vict, nullptr, ch, kToNotVict | kToArenaListen);
-		} else {
+		bool still_stands;
+		if (number(1, 100) > (GET_SKILL(ch, ESkill::kShieldBash) / 2)) {
+			still_stands = false;
+		}
+		if (!can_shield_bash || (!shield_bash_success && !still_stands)) {
 			GET_POS(ch) = EPosition::kSit;
-            lag = 3;
-		}
-	} else {
-		//не дадим башить мобов в лаге которые спят, оглушены и прочее
-		if (GET_POS(vict) <= EPosition::kStun && vict->get_wait() > 0) {
-			SendMsgToChar("Ваша жертва и так слишком слаба, надо быть милосерднее.\r\n", ch);
-			ch->setSkillCooldown(ESkill::kGlobalCooldown, kBattleRound);
-			return;
-		}
-		//Дамаг от баша+удара щитом
-		//Удар щитом не будет работать, если персонаж в осторожке, если нет щита, или если нет умения.
-		int dam;
-		if ((!ch->GetSkill(ESkill::kShieldBash)) || (!GET_EQ(ch, kShield)) || (PRF_FLAGGED(ch,kAwake))) {
-			dam = str_bonus(GetRealStr(ch), STR_TO_DAM) + GetRealDamroll(ch) +
-					std::max(0, ch->GetSkill(ESkill::kBash) / 10 - 5) + GetRealLevel(ch) / 5;
-		} else {
-			dam = number(ceil(((GET_REAL_SIZE(ch) * ((GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield))) * 1.5)) + (GET_SKILL(ch,ESkill::kShieldBash) * 10)) / 1.25),
-						 ceil(((GET_REAL_SIZE(ch) * ((GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield))) * 1.5)) + (GET_SKILL(ch,ESkill::kShieldBash) * 10)) * 1.25));
-		}
+			SetWait(ch, 2, true);
+			act("Попытавшись завалить $N3, Вы сами упали на землю! Поднимайтесь!",
+				false, ch, nullptr,vict, kToChar);
+			act("$N хотел$G повалить Вас на землю, но сам$G неуклюже распластал$U.",
+				false,vict, nullptr, ch, kToChar);
+			act("Попытавшись завалить $n3, $N0 сам$G упал$G на землю!",
+				false,vict, nullptr, ch, kToNotVict | kToArenaListen);
 
+		} else if ((can_shield_bash && shield_bash_success) || (can_shield_bash && !shield_bash_success && still_stands)) {
+//Ввожу второй тип дамага - первый был для вывода правильного сообщения в игре о фейле баша. Второй - для нанесения нужного урона.
+			Damage dmg2(SkillDmg(ESkill::kShieldBash), damage, fight::kPhysDmg, nullptr);
+			dmg2.flags.set(fight::kIgnoreBlink);
+			dmg2.Process(ch, vict);
+			SetSkillCooldownInFight(ch, ESkill::kBash, 1);
+		}
+		return;
+	} else {
 //делаем блокирование баша
 		if ((GET_AF_BATTLE(vict, kEafBlock)
 			|| (CanUseFeat(vict, EFeat::kDefender)
@@ -139,60 +194,46 @@ void go_bash(CharData *ch, CharData *vict) {
 				}
 			}
 		}
-
-        lag = 0; // если башем убил - лага не будет
-		Damage dmg(SkillDmg(ESkill::kBash), dam, fight::kPhysDmg, nullptr);
+		Damage dmg(SkillDmg(ESkill::kBash), damage, fight::kPhysDmg, nullptr);
 		dmg.flags.set(fight::kNoFleeDmg);
-		dam = dmg.Process(ch, vict);
+		dmg.flags.set(fight::kIgnoreBlink);
+		damage = dmg.Process(ch, vict);
 		vict->DropFromHorse();
-		if (dam > 0 || (dam == 0 && AFF_FLAGGED(vict, EAffect::kGodsShield))) {
-            lag = 2;
+		// Сам баш:
+		if (!IS_IMPL(vict)) {
 			GET_POS(vict) = EPosition::kSit;
-			SetWait(vict, 3, false);
+			SetWait(vict, 3, true);
+		}
+		lag = 1;
+
+		// Если убил - то лага не будет:
+		if (damage < 0) {
+			lag = 0;
+		}
+		//Лаг на тот случай, если не используется/нет умения "удар щитом" или на жертве висит "Защита Богов":
+		if (AFF_FLAGGED(vict, EAffect::kGodsShield)
+		|| (!can_shield_bash)
+		|| (!shield_bash_success)) {
+			lag = 2;
 		}
 	}
-	SetWait(ch, lag, true);
+
+	//разные типы лагов в зависимости от того, есть ли "удар щитом", а так же при фейле/успехе и т.д.
+	switch (lag) {
+		case 0:
+			SetWait(ch, 0, true);
+			break;
+		case 1:
+			SetSkillCooldownInFight(ch, ESkill::kBash, 1);
+			break;
+		case 2:
+			SetSkillCooldownInFight(ch, ESkill::kGlobalCooldown, 1);
+			break;
+	}
+
 }
 
-void do_bash(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
-	if (!ch->GetSkill(ESkill::kBash)) {
-		SendMsgToChar("Вы не знаете как.\r\n", ch);
-		return;
-	}
-	if (ch->HasCooldown(ESkill::kBash)) {
-		SendMsgToChar("Вам нужно набраться сил.\r\n", ch);
-		return;
-	}
 
-	if (ch->IsOnHorse()) {
-		SendMsgToChar("Верхом это сделать затруднительно.\r\n", ch);
-		return;
-	}
-
-	CharData *vict = FindVictim(ch, argument);
-	if (!vict) {
-		SendMsgToChar("Кого же вы так сильно желаете сбить?\r\n", ch);
-		return;
-	}
-
-	if (vict == ch) {
-		SendMsgToChar("Ваш сокрушающий удар поверг вас наземь... Вы почувствовали себя глупо.\r\n", ch);
-		return;
-	}
-
-	if (!may_kill_here(ch, vict, argument))
-		return;
-	if (!check_pkill(ch, vict, arg))
-		return;
-
-	if (IS_IMPL(ch) || !ch->GetEnemy()) {
-		go_bash(ch, vict);
-	} else if (IsHaveNoExtraAttack(ch)) {
-		if (!ch->IsNpc())
-			act("Хорошо. Вы попытаетесь сбить $N3.", false, ch, nullptr, vict, kToChar);
-		ch->SetExtraAttack(kExtraAttackBash, vict);
-	}
-}
 
 
 

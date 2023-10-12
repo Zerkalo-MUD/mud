@@ -268,7 +268,7 @@ set(SOURCES
 		src/cmd_god/mark.cpp
 		src/game_crafts/fry.cpp
 		src/cmd/refill.cpp
-        src/game_mechanics/guilds.cpp
+		src/game_mechanics/guilds.cpp
 		src/cmd/do_features.cpp
 		src/cmd/do_spells.cpp
 		src/cmd/do_skills.cpp
@@ -280,7 +280,8 @@ set(SOURCES
 		src/game_abilities/talents_effects.cpp
 		src/feats_constants.cpp
 		src/game_abilities/abilities_items_set.cpp
-		src/game_abilities/talents_actions.cpp)
+		src/game_abilities/talents_actions.cpp
+		src/game_skills/slay.cpp src/game_skills/charge.cpp)
 
 set(HEADERS
 		src/cmd/flee.h
@@ -540,7 +541,8 @@ set(HEADERS
 		src/game_skills/fit.h
 		src/game_abilities/talents_effects.h
 		src/feats_constants.h
-		src/game_abilities/talents_actions.h)
+		src/game_abilities/talents_actions.h
+		src/game_skills/slay.h src/game_skills/charge.h)
 
 # Build types
 set(CMAKE_CONFIGURATION_TYPES Release Debug Test FastTest)
@@ -906,9 +908,9 @@ endif ()
 
 if (CMAKE_HOST_UNIX)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-		set(CMAKE_CXX_FLAGS_RELEASE  "-ggdb3 -O0    -Wall -Wextra -Wno-format-truncation")
+		set(CMAKE_CXX_FLAGS_RELEASE  "-ggdb3 -Og    -Wall -Wextra -Wno-format-truncation")
 		set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0    -Wall -Wextra -Wno-format-truncation -D_GLIBCXX_DEBUG -D_GLIBXX_DEBUG_PEDANTIC ${ASAN_FLAGS} ${DEBUG_CRYPT}")
-		set(CMAKE_CXX_FLAGS_TEST     "       -Og    -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS} -DLOG_AUTOFLUSH")
+		set(CMAKE_CXX_FLAGS_TEST     "       -O3    -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS} -DLOG_AUTOFLUSH")
 		set(CMAKE_CXX_FLAGS_FASTTEST "       -Ofast -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS}")
 
 		if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

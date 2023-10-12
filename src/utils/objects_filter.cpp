@@ -12,6 +12,8 @@
 #include "obj_prototypes.h"
 #include "structs/global_objects.h"
 
+extern ESkill FixNameAndFindSkillId(char *name);
+
 bool ParseFilter::init_type(const char *str) {
 	if (utils::IsAbbr(str, "свет")
 		|| utils::IsAbbr(str, "light")) {
@@ -160,6 +162,7 @@ bool ParseFilter::init_cost(const char *str) {
 	return true;
 }
 
+
 bool ParseFilter::init_rent(const char *str) {
 	if (sscanf(str, "%d%[-+]", &rent, &rent_sign) != 2) {
 		return false;
@@ -172,20 +175,21 @@ bool ParseFilter::init_rent(const char *str) {
 }
 
 bool ParseFilter::init_remorts(const char *str) {
-	filter_remorts_count++;
-	if (filter_remorts_count>1) {
-		filter_remorts_count = 1;
-	}
-	if (sscanf(str, "%d%[-+]", &remorts[filter_remorts_count], &remorts_sign[filter_remorts_count]) != 2) {
+	if (sscanf(str, "%d%[-+=]", &remorts, &remorts_sign) != 2) {
 		return false;
 	}
-	if (remorts_sign[filter_remorts_count] == '-') {
-		remorts[filter_remorts_count] = -remorts[filter_remorts_count];
-	}
-
 	return true;
 }
 
+bool ParseFilter::init_skill(char *str) {
+	for (skill_id = ESkill::kFirst; skill_id <= ESkill::kLast; ++skill_id) {
+		if (FixNameAndFindSkillId(str) == skill_id) {
+			return true;
+		}
+	}
+	skill_id = ESkill::kUndefined;
+	return false;
+}
 
 bool ParseFilter::init_weap_class(const char *str) {
 	if (utils::IsAbbr(str, "луки")) {
@@ -454,6 +458,18 @@ bool ParseFilter::check_state(ObjData *obj) const {
 	return result;
 }
 
+bool ParseFilter::check_skill(ObjData *obj) const {
+	if (skill_id == ESkill::kUndefined)
+		return true;
+	if (obj->has_skills()) {
+		auto it = obj->get_skills().find(skill_id);
+		if (it != obj->get_skills().end()) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool ParseFilter::check_wear(ObjData *obj) const {
 	if (wear == EWearFlag::kUndefined
 		|| CAN_WEAR(obj, wear)) {
@@ -496,23 +512,36 @@ bool ParseFilter::check_rent(int obj_price) const {
 }
 
 bool ParseFilter::check_remorts(ObjData *obj) const {
-	int result;
-	int obj_remorts = obj->get_auto_mort_req();
+	int obj_remorts = 0;
 
-	for (int i=0;i<=filter_remorts_count;i++) {
-		result = 0;
-		if (remorts_sign[i] == '\0') {
-			result = 1;
-		} else if (remorts[i] >= 0 && obj_remorts >= remorts[i]) {
-			result = 1;
-		} else if (remorts[i] <= 0 && obj_remorts <= -remorts[i]) {
-			result = 1;
-		}
-		if (result==0) {
-			return false;
-		}
+	if (obj->get_minimum_remorts() != 0) {
+		obj_remorts = obj->get_minimum_remorts();
+	} else if (obj->get_auto_mort_req() > 0) {
+		obj_remorts = obj->get_auto_mort_req();
 	}
-	return true;
+	if (obj_remorts == -1) {
+		obj_remorts = 0;
+	}
+	if (remorts_sign == '\0')
+			return true;
+	if (remorts_sign == '=') {
+		if (abs(obj_remorts) == remorts)
+			return true;
+		else
+			return false;
+	}
+	if (obj_remorts >= 0) {
+		if (remorts_sign == '+') {
+			if (remorts <= obj_remorts)
+				return true;
+			}
+			else if (remorts >= obj_remorts)
+				return true;
+	} else {
+			if (remorts <= abs(obj_remorts))
+				return true;
+	}
+	return false;
 }
 
 bool ParseFilter::check_affect_weap(ObjData *obj) const {
@@ -613,6 +642,7 @@ bool ParseFilter::check(ObjData *obj, CharData *ch) {
 		&& check_affect_apply(obj)
 		&& check_affect_weap(obj)
 		&& check_affect_extra(obj)
+		&& check_skill(obj)
 		&& check_remorts(obj)) {
 		return true;
 	}
@@ -623,26 +653,154 @@ bool ParseFilter::check(ExchangeItem *exch_obj) {
 	ObjData *obj = GET_EXCHANGE_ITEM(exch_obj);
 	if (check_name(obj)
 		&& check_owner(exch_obj)
-			//&& (owner_id == -1 || owner_id == GET_EXCHANGE_ITEM_SELLERID(exch_obj))
 		&& check_type(obj)
 		&& check_state(obj)
 		&& check_wear(obj)
-		&& check_remorts(obj)
 		&& check_weap_class(obj)
 		&& check_cost(GET_EXCHANGE_ITEM_COST(exch_obj))
 		&& check_affect_apply(obj)
 		&& check_affect_weap(obj)
 		&& check_affect_extra(obj)
-		&& check_realtime(exch_obj)) {
+		&& check_realtime(exch_obj)
+		&& check_skill(obj)
+		&& check_remorts(obj)) {
 		return true;
 	}
 	return false;
 }
 
+bool ParseFilter::parse_filter(CharData *ch, ParseFilter &filter, char *argument) {
+	char buf_tmp[kMaxInputLength];
+
+	if (!*argument && ch) {
+		std::stringstream ss;
+		ss << "Возможные фильтры:\r\n" <<
+			  "   И - Имя (название) предмета\r\n" <<
+			  "   Т - Тип предмета (свет,свиток,палочка,посох,оружие,броня,напиток,прочее,\r\n" <<
+			  "       контейнер,книга,руна,ингредиент)\r\n" <<
+			  "   C - Состояние предмета (ужасно,скоро исп,плоховато,средне,идеально)\r\n" <<
+			  "   О - Куда можно одеть предмет (палец,шея,тело,голова,ноги,ступни,кисти,руки,\r\n" <<
+			  "       щит,плечи,пояс,запястья,левая,правая,обе)\r\n" <<
+			  "   К - Класс оружия (луки,короткие,длинные,секиры,палицы,иное,двуручники,\r\n" <<
+			  "       проникающее,копья)\r\n" <<
+			  "   А - название аффекта (длинное.имя.аффекта), до трех Аххх за один запрос,\r\n" <<
+			  "       для слотов под камни доступны короткие алиасы А1, А2, А3 - 1..3 слота.\r\n" <<
+			  "       допускается несколько слов через . и строгий поиск (! на конце слова)\r\n" <<
+			  "   Ц - цена предмета, знак '+' в конце указанной цены выведeт предметы,\r\n" <<
+			  "       которые равны или дороже указанной цены. Знак '-' выведет предметы,\r\n" <<
+			  "       которые равны или дешевле указанной цены.\r\n" <<
+			  "   Р - стоимость ренты предмета, знак '+' в конце указанной стоимости выведeт\r\n" <<
+			  "       предметы, содержание которых равно или дороже указанной цифры. Знак\r\n" <<
+			  "       '-' выведет  предметы, содержание которых равно или дешевле указанной\r\n" <<
+			  "       цифры.                                                                 \r\n" <<
+			  "   М - количество перевоплощений, знак '+' в конце указанного количества\r\n" <<
+			  "       выведет предметы, которые требует больше или равное количество        \r\n" <<
+			  "       перевоплощений. Знак '-' выведет предметы, которое требует меньше или\r\n" <<
+			  "       равное количество перевоплощений.  Знак '=' выведет предметы конкретного перевоплощения\r\n" <<
+			  "   У - Добавляемое умение\r\n" <<
+			  "   В - Продавец предмета на базаре.\r\n" <<
+			  " Можно указать несколько фильтров, разделив их пробелом.\r\n";
+		SendMsgToChar(ss.str(), ch);
+		return false;
+	}
+	while (*argument) {
+		switch (*argument) {
+			case 'И': argument = one_argument(++argument, buf_tmp);
+				if (strlen(buf_tmp) == 0) {
+					SendMsgToChar("Укажите имя предмета.\r\n", ch);
+					return false;
+				}
+				filter.name = buf_tmp;
+				break;
+			case 'Т': argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_type(buf_tmp)) {
+					SendMsgToChar("Неверный тип предмета.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'С': argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_state(buf_tmp)) {
+					SendMsgToChar("Неверное состояние предмета.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'О': argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_wear(buf_tmp)) {
+					SendMsgToChar("Неверное место одевания предмета.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'Ц': argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_cost(buf_tmp)) {
+					SendMsgToChar("Неверный формат в фильтре: Ц<цена><+->.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'К': argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_weap_class(buf_tmp)) {
+					SendMsgToChar("Неверный класс оружия.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'А': {
+				argument = one_argument(++argument, buf_tmp);
+				size_t len = strlen(buf_tmp);
+				if (len == 0) {
+					SendMsgToChar("Укажите аффект предмета.\r\n", ch);
+					return false;
+				}
+				if (filter.affects_cnt() >= 3) {
+					break;
+				}
+				if (!filter.init_affect(buf_tmp, len)) {
+					SendMsgToChar(ch, "Неверный аффект предмета: '%s'.\r\n", buf_tmp);
+					return false;
+				}
+				break;
+			} // case 'А'
+			case 'Р':// стоимость ренты
+				argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_rent(buf_tmp)) {
+					SendMsgToChar("Неверный формат в фильтре: Р<стоимость><+->.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'М':// количество мортов
+				argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_remorts(buf_tmp)) {
+					SendMsgToChar("Неверный формат в фильтре: М<количество мортов><+->.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'У':// умения
+				argument = one_argument(++argument, buf_tmp);
+				if (!filter.init_skill(buf_tmp)) {
+					SendMsgToChar("Неверное умение.\r\n", ch);
+					return false;
+				}
+				break;
+			case 'В':// имя выставившего на базаре
+				argument = one_argument(++argument, buf_tmp);
+				if (filter_type != EXCHANGE) {
+					SendMsgToChar("Только для базара.\r\n", ch);
+					return false;
+				}
+				owner = buf_tmp;
+				break;
+			default: 
+					SendMsgToChar("Ошибка в фильтре.\r\n", ch);
+					return false;
+				break;
+		}
+	}
+	return true;
+}
+
 std::string ParseFilter::print() const {
-	std::string buffer = "Выборка: ";
+	std::string buffer;
+
 	if (!name.empty()) {
-		buffer += name + " ";
+		buffer = "И" + name + ", ";
 	}
 	/*
 	if (owner_id >= 0)
@@ -656,56 +814,71 @@ std::string ParseFilter::print() const {
 	}
 	*/
 	if (!owner.empty()) {
-		buffer += owner + " ";
+		buffer += "В" + owner + ", ";
 	}
 	if (type >= 0) {
+		buffer += "Т";
 		buffer += item_types[type];
-		buffer += " ";
+		buffer += ", ";
 	}
 	if (state >= 0) {
+		buffer += "С";
 		buffer += print_obj_state(state);
-		buffer += " ";
+		buffer += ", ";
 	}
 	if (wear != EWearFlag::kUndefined) {
+		buffer += "О";
 		buffer += wear_bits[wear_message];
-		buffer += " ";
+		buffer += ", ";
 	}
 	if (MUD::Skills().IsValid(weap_class)) {
+		buffer += "К";
 		buffer += weapon_class[weap_message];
-		buffer += " ";
+		buffer += ", ";
 	}
 	if (cost >= 0) {
-		sprintf(buf, "%d%c ", cost, cost_sign);
+		sprintf(buf, "Ц%d%c", cost, cost_sign);
+		buffer += ", ";
 		buffer += buf;
 	}
 	if (rent >= 0) {
-		sprintf(buf, "%d%c ", rent, rent_sign);
+		sprintf(buf, "Р%d%c", rent, rent_sign);
 		buffer += buf;
+		buffer += ", ";
 	}
-	/*if (remorts >= 0) {
-		sprintf(buf, "%d%c ", remorts, remorts_sign);
+	if (skill_id != ESkill::kUndefined) {
+		sprintf(buf, "К%s", MUD::Skill(skill_id).GetName());
 		buffer += buf;
-	}*/
+		buffer += ", ";
+	}
+	if (remorts >= 0) {
+		sprintf(buf, "М%d%c", remorts, remorts_sign);
+		buffer += buf;
+		buffer += ", ";
+	}
 	if (!affect_weap.empty()) {
 		for (int it : affect_weap) {
+			buffer += "А";
 			buffer += weapon_affects[it];
-			buffer += " ";
+			buffer += ", ";
 		}
 	}
 	if (!affect_apply.empty()) {
 		for (int it : affect_apply) {
+			buffer += "А";
 			buffer += apply_types[it];
-			buffer += " ";
+			buffer += ", ";
 		}
 	}
 	if (!affect_extra.empty()) {
 		for (int it : affect_extra) {
+			buffer += "А";
 			buffer += extra_bits[it];
-			buffer += " ";
+			buffer += ", ";
 		}
 	}
-	buffer += "\r\n";
-
+	if (!buffer.empty() && buffer.back() == ' ')
+		buffer.erase(buffer.length() - 2);
 	return buffer;
 }
 

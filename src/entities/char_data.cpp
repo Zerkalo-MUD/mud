@@ -16,6 +16,8 @@
 #include "backtrace.h"
 #include "structs/global_objects.h"
 #include "liquid.h"
+#include "char_data.h"
+
 
 #include <third_party_libs/fmt/include/fmt/format.h>
 #include <random>
@@ -237,18 +239,12 @@ void CharData::set_abstinent() {
 	ImposeAffect(this, af, false, false, false, false);
 }
 
-void CharData::affect_remove(const char_affects_list_t::iterator &affect_i) {
-	int was_lgt = AFF_FLAGGED(this, EAffect::kSingleLight) ? kLightYes : kLightNo;
-	long was_hlgt = AFF_FLAGGED(this, EAffect::kHolyLight) ? kLightYes : kLightNo;
-	long was_hdrk = AFF_FLAGGED(this, EAffect::kHolyDark) ? kLightYes : kLightNo;
-
+CharData::char_affects_list_t::iterator CharData::AffectRemove(const char_affects_list_t::iterator &affect_i) {
 	if (affected.empty()) {
 		log("SYSERR: affect_remove(%s) when no affects...", GET_NAME(this));
-		return;
+		return affected.end();
 	}
-
 	const auto af = *affect_i;
-	affect_modify(this, af->location, af->modifier, static_cast<EAffect>(af->bitvector), false);
 	if (af->type == ESpell::kAbstinent) {
 		if (player_specials) {
 			GET_DRUNK_STATE(this) = GET_COND(this, DRUNK) = std::min(GET_COND(this, DRUNK), kDrunked - 1);
@@ -256,14 +252,7 @@ void CharData::affect_remove(const char_affects_list_t::iterator &affect_i) {
 			log("SYSERR: player_specials is not set.");
 		}
 	}
-	if (af->type == ESpell::kDrunked && af->duration == 0) {
-		set_abstinent();
-	}
-
-	affected.erase(affect_i);
-
-	affect_total(this);
-	CheckLight(this, kLightUndef, was_lgt, was_hlgt, was_hdrk, 1);
+	return affected.erase(affect_i);
 }
 
 bool CharData::has_any_affect(const affects_list_t &affects) {
@@ -292,7 +281,7 @@ size_t CharData::remove_random_affects(const size_t count) {
 	std::shuffle(removable_affects.begin(), removable_affects.end(), std::mt19937(std::random_device()()));
 	for (auto counter = 0u; counter < to_remove; ++counter) {
 		const auto affect_i = removable_affects[counter];
-		RemoveAffectFromChar(this, affect_i->get()->type);
+		RemoveAffectFromCharAndRecalculate(this, affect_i->get()->type);    //count тут не сработает, удаляются все аффекты а не первый
 	}
 
 	return to_remove;
@@ -444,11 +433,7 @@ void CharData::purge() {
 		if (this->mob_specials.Questor && this->mob_specials.Questor != mob_proto[i].mob_specials.Questor)
 			free(this->mob_specials.Questor);
 	}
-
-	while (!this->affected.empty()) {
-		affect_remove(affected.begin());
-	}
-
+	this->affected.clear();
 	while (this->timed) {
 		ExpireTimedSkill(this, this->timed);
 	}
@@ -839,6 +824,10 @@ bool MAY_ATTACK(const CharData *sub) {
 bool AWAKE(const CharData *ch) {
 	return GET_POS(ch) > EPosition::kSleep
 		&& !AFF_FLAGGED(ch, EAffect::kSleep);
+}
+
+bool CLEAR_MIND(const CharData *ch) {
+	return (!GET_AF_BATTLE(ch, kEafOverwhelm) && !GET_AF_BATTLE(ch, kEafHammer));
 }
 
 //Вы уверены,что функцияам расчете опыта самое место в классе персонажа?
@@ -2191,6 +2180,18 @@ CharData *CharData::get_horse() {
 
 obj_sets::activ_sum &CharData::obj_bonus() {
 	return obj_bonus_;
+}
+
+bool CharData::HasWeapon() {
+	if ((GET_EQ(this, EEquipPos::kWield)
+	  && GET_OBJ_TYPE(GET_EQ(this, EEquipPos::kWield)) != EObjType::kLightSource)
+	  || (GET_EQ(this, EEquipPos::kHold)
+	  && GET_OBJ_TYPE(GET_EQ(this, EEquipPos::kHold)) != EObjType::kLightSource)
+	  || (GET_EQ(this, EEquipPos::kBoths)
+	  && GET_OBJ_TYPE(GET_EQ(this, EEquipPos::kBoths)) != EObjType::kLightSource)) {
+		return true;
+	}
+	return false;
 }
 
 player_special_data::player_special_data() :

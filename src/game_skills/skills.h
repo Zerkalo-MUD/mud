@@ -35,6 +35,8 @@ enum EExtraAttack {
 	kExtraAttackChopoff,
 	kExtraAttackDisarm,
 	kExtraAttackCut,
+	kExtraAttackSlay,
+	kExtraAttackInjure,
 };
 
 /*
@@ -74,7 +76,7 @@ enum class ESkill : int {
 	kFirstAid = 31,
 	kCampfire = 32,
 	kCreateBow = 33,
-						/* Снова просвет */
+	kSlay = 34,
 	kCutting = 129,		// Скилл-заглушка для способности "порез", иначе некорректно выдаются сообщения
 	kThrow = 130,
 	kBackstab = 131,
@@ -98,7 +100,7 @@ enum class ESkill : int {
 	kSideAttack = 149,
 	kDisarm = 150,
 	kParry = 151,
-					/* Очередной просвет */
+	kCharge = 152,
 	kMorph = 153,
 	kBows = 154,
 	kAddshot = 155,

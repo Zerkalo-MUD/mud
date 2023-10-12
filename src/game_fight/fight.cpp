@@ -34,6 +34,7 @@
 #include "msdp/msdp_constants.h"
 #include "game_magic/magic_items.h"
 #include "structs/global_objects.h"
+#include "game_skills/slay.h"
 
 // Structures
 CharData *combat_list = nullptr;    // head of l-list of fighting entities
@@ -109,9 +110,10 @@ void update_pos(CharData *victim) {
 	else
 		GET_POS(victim) = EPosition::kStun;
 
-	if (AFF_FLAGGED(victim, EAffect::kSleep) && GET_POS(victim) != EPosition::kSleep)
+	if (AFF_FLAGGED(victim, EAffect::kSleep) && GET_POS(victim) != EPosition::kSleep) {
 		RemoveAffectFromChar(victim, ESpell::kSleep);
-
+		AFF_FLAGS(victim).unset(EAffect::kSleep);
+	}
 	// поплохело седоку или лошади - сбрасываем седока
 	if (victim->IsOnHorse() && GET_POS(victim) < EPosition::kFight)
 		victim->DropFromHorse();
@@ -192,6 +194,7 @@ void SetFighting(CharData *ch, CharData *vict) {
 	if (AFF_FLAGGED(ch, EAffect::kBandage)) {
 		SendMsgToChar("Перевязка была прервана!\r\n", ch);
 		RemoveAffectFromChar(ch, ESpell::kBandage);
+		AFF_FLAGS(ch).unset(EAffect::kBandage);
 	}
 	if (AFF_FLAGGED(ch, EAffect::kMemorizeSpells)) {
 		SendMsgToChar("Вы забыли о концентрации и ринулись в бой!\r\n", ch);
@@ -201,9 +204,10 @@ void SetFighting(CharData *ch, CharData *vict) {
 	ch->next_fighting = combat_list;
 	combat_list = ch;
 
-	if (AFF_FLAGGED(ch, EAffect::kSleep))
+	if (AFF_FLAGGED(ch, EAffect::kSleep)) {
 		RemoveAffectFromChar(ch, ESpell::kSleep);
-
+		AFF_FLAGS(ch).unset(EAffect::kSleep);
+	}
 	ch->SetEnemy(vict);
 
 	NUL_AF_BATTLE(ch);
@@ -324,7 +328,6 @@ int GET_MAXDAMAGE(CharData *ch) {
 
 int GET_MAXCASTER(CharData *ch) {
 	if (AFF_FLAGGED(ch, EAffect::kHold) || AFF_FLAGGED(ch, EAffect::kSilence)
-		|| AFF_FLAGGED(ch, EAffect::kStrangled)
 		|| ch->get_wait() > 0)
 		return 0;
 	else
@@ -760,7 +763,6 @@ CharData *find_opp_caster(CharData *caster) {
 			&& (GetRealInt(caster) < number(15, 25)
 				|| !in_same_battle(caster, vict, true)))
 			|| AFF_FLAGGED(vict, EAffect::kHold) || AFF_FLAGGED(vict, EAffect::kSilence)
-			|| AFF_FLAGGED(vict, EAffect::kStrangled)
 			|| (!CAN_SEE(caster, vict) && caster->GetEnemy() != vict))
 			continue;
 		if (vict_val < GET_MAXCASTER(vict)) {
@@ -990,7 +992,6 @@ void mob_casting(CharData *ch) {
 	if (AFF_FLAGGED(ch, EAffect::kCharmed)
 		|| AFF_FLAGGED(ch, EAffect::kHold)
 		|| AFF_FLAGGED(ch, EAffect::kSilence)
-		|| AFF_FLAGGED(ch, EAffect::kStrangled)
 		|| ch->get_wait() > 0)
 		return;
 
@@ -1217,7 +1218,6 @@ void check_mob_helpers() {
 			|| AFF_FLAGGED(ch, EAffect::kMagicStopFight)
 			|| AFF_FLAGGED(ch, EAffect::kStopFight)
 			|| AFF_FLAGGED(ch, EAffect::kSilence)
-			|| AFF_FLAGGED(ch, EAffect::kStrangled)
 			|| PRF_FLAGGED(ch->GetEnemy(), EPrf::kNohassle)) {
 			continue;
 		}
@@ -1593,7 +1593,6 @@ void using_mob_skills(CharData *ch) {
 						|| (IsCaster(vict)
 							&& (AFF_FLAGGED(vict, EAffect::kHold)
 								|| AFF_FLAGGED(vict, EAffect::kSilence)
-								|| AFF_FLAGGED(vict, EAffect::kStrangled)
 								|| vict->get_wait() > 0))) {
 						continue;
 					}
@@ -1703,9 +1702,10 @@ void update_round_affs() {
 		if (ch->get_touching())
 			ch->set_touching(0);
 
-		if (GET_AF_BATTLE(ch, kEafSleep))
+		if (GET_AF_BATTLE(ch, kEafSleep)) {
 			RemoveAffectFromChar(ch, ESpell::kSleep);
-
+			AFF_FLAGS(ch).unset(EAffect::kSleep);
+		}
 		if (GET_AF_BATTLE(ch, kEafBlock)) {
 			CLR_AF_BATTLE(ch, kEafBlock);
 			if (!IS_IMMORTAL(ch) && ch->get_wait() < kBattleRound)
@@ -1743,7 +1743,13 @@ bool using_extra_attack(CharData *ch) {
 		case kExtraAttackDisarm: go_disarm(ch, ch->GetExtraVictim());
 			used = true;
 			break;
+		case kExtraAttackInjure: go_injure(ch, ch->GetExtraVictim());
+			used = true;
+			break;
 		case kExtraAttackCut: GoExpedientCut(ch, ch->GetExtraVictim());
+			used = true;
+			break;
+		case kExtraAttackSlay: go_slay(ch, ch->GetExtraVictim());
 			used = true;
 			break;
 		default:used = false;
@@ -1863,7 +1869,7 @@ void process_player_attack(CharData *ch, int min_init) {
 	//* каст заклинания
 	round_profiler.next_step("Cast spell");
 	if (ch->GetCastSpell() != ESpell::kUndefined && ch->get_wait() <= 0 && !IS_SET(trigger_code, kNoCastMagic)) {
-		if (AFF_FLAGGED(ch, EAffect::kSilence) || AFF_FLAGGED(ch, EAffect::kStrangled)) {
+		if (AFF_FLAGGED(ch, EAffect::kSilence)) {
 			SendMsgToChar("Вы не смогли вымолвить и слова.\r\n", ch);
 			ch->SetCast(ESpell::kUndefined, ESpell::kUndefined, 0, 0, 0);
 		} else {

@@ -150,6 +150,8 @@
 #include "structs/global_objects.h"
 #include "administration/accounts.h"
 #include "game_fight/pk.h"
+#include "game_skills/slay.h"
+#include "game_skills/charge.h"
 
 #include <third_party_libs/fmt/include/fmt/format.h>
 
@@ -278,6 +280,7 @@ void do_gsay(CharData *ch, char *argument, int cmd, int subcmd);
 void do_hide(CharData *ch, char *argument, int cmd, int subcmd);
 void do_info(CharData *ch, char *argument, int cmd, int subcmd);
 void DoInspect(CharData *ch, char *argument, int, int);
+void DoStoreShop(CharData *ch, char *argument, int, int);
 //void do_insult(CharData *ch, char *argument, int cmd, int subcmd);
 void do_inventory(CharData *ch, char *argument, int cmd, int subcmd);
 void do_invis(CharData *ch, char *argument, int cmd, int subcmd);
@@ -400,7 +403,6 @@ void do_sanitize(CharData *ch, char *argument, int cmd, int subcmd);
 void do_morph(CharData *ch, char *argument, int cmd, int subcmd);
 void do_morphset(CharData *ch, char *argument, int cmd, int subcmd);
 void do_console(CharData *ch, char *argument, int cmd, int subcmd);
-void do_shops_list(CharData *ch, char *argument, int cmd, int subcmd);
 void do_unfreeze(CharData *ch, char *argument, int cmd, int subcmd);
 //void Bonus::do_bonus_by_character(CharData *, char *, int, int);
 void do_summon(CharData *ch, char *argument, int cmd, int subcmd);
@@ -603,7 +605,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"лучшие", EPosition::kDead, DoBest, 0, 0, 0},
 
 		{"маскировка", EPosition::kRest, do_camouflage, 0, 0, 500},
-		{"магазины", EPosition::kDead, do_shops_list, kLvlImmortal, 0, 0},
+		{"магазины", EPosition::kDead, DoStoreShop, kLvlImmortal, 0, 0},
 		{"метнуть", EPosition::kFight, do_throw, 0, SCMD_PHYSICAL_THROW, -1},
 		{"менять", EPosition::kStand, do_not_here, 0, 0, -1},
 		{"месть", EPosition::kRest, do_revenge, 0, 0, 0},
@@ -617,6 +619,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"наказания", EPosition::kDead, Boards::DoBoard, 1, Boards::GODPUNISH_BOARD, -1},
 		{"налить", EPosition::kStand, do_pour, 0, SCMD_FILL, 500},
 		{"наполнить", EPosition::kStand, do_pour, 0, SCMD_FILL, 500},
+		{"натиск", EPosition::kStand, do_charge, 0, 0, 0},
 		{"найти", EPosition::kStand, do_sense, 0, 0, 500},
 		{"нанять", EPosition::kStand, do_findhelpee, 0, 0, -1},
 		{"новичок", EPosition::kSleep, do_gen_ps, 0, SCMD_INFO, 0},
@@ -678,7 +681,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"пклист", EPosition::kSleep, DoClanPkList, 0, 0, 0},
 		{"пнуть", EPosition::kFight, do_kick, 1, 0, -1},
 		{"погода", EPosition::kRest, do_weather, 0, 0, 0},
-		{"подкрасться", EPosition::kStand, do_sneak, 1, 0, 500},
+		{"подкрасться", EPosition::kStand, do_sneak, 1, 0, 100},
 		{"подножка", EPosition::kFight, do_chopoff, 0, 0, 500},
 		{"подняться", EPosition::kRest, do_stand, 0, 0, -1},
 		{"поджарить", EPosition::kRest, do_fry, 0, 0, -1},
@@ -766,6 +769,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"спросить", EPosition::kRest, do_spec_comm, 0, SCMD_ASK, -1},
 		{"спрятаться", EPosition::kStand, do_hide, 1, 0, 500},
 		{"сравнить", EPosition::kRest, do_consider, 0, 0, 500},
+		{"сразить", EPosition::kFight, do_slay, 1, 0, -1},
 		{"ставка", EPosition::kStand, do_not_here, 0, 0, -1},
 		{"статус", EPosition::kDead, do_display, 0, 0, 0},
 		{"статистика", EPosition::kDead, do_statistic, 0, 0, 0},
@@ -827,6 +831,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"buy", EPosition::kStand, do_not_here, 0, 0, -1},
 		{"best", EPosition::kDead, DoBest, 0, 0, 0},
 		{"cast", EPosition::kSit, DoCast, 1, 0, -1},
+		{"charge", EPosition::kStand, do_charge, 0, 0, 0},
 		{"check", EPosition::kStand, do_not_here, 1, 0, -1},
 		{"chopoff", EPosition::kFight, do_chopoff, 0, 0, 500},
 		{"clear", EPosition::kDead, do_gen_ps, 0, SCMD_CLEAR, 0},
@@ -982,6 +987,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"sit", EPosition::kRest, do_sit, 0, 0, -1},
 		{"skills", EPosition::kRest, DoSkills, 0, 0, 0},
 		{"skillset", EPosition::kSleep, do_skillset, kLvlImplementator, 0, 0},
+		{"slay", EPosition::kFight, do_slay, 1, 0, -1},
 		{"morphset", EPosition::kSleep, do_morphset, kLvlImplementator, 0, 0},
 		{"setall", EPosition::kDead, do_setall, kLvlImplementator, 0, 0},
 		{"sleep", EPosition::kSleep, do_sleep, 0, 0, -1},
@@ -1112,24 +1118,21 @@ void check_hiding_cmd(CharData *ch, int percent) {
 		if (percent == -2) {
 			if (AFF_FLAGGED(ch, EAffect::kSneak)) {
 				remove_hide = number(1, MUD::Skill(ESkill::kSneak).difficulty) >
-					CalcCurrentSkill(ch, ESkill::kSneak, nullptr);
+					ch->GetSkill(ESkill::kHide);
 			} else {
 				percent = 500;
 			}
 		}
-
 		if (percent == -1) {
 			remove_hide = true;
 		} else if (percent > 0) {
-			remove_hide = number(1, percent) > CalcCurrentSkill(ch, ESkill::kHide, nullptr);
+			remove_hide = number(1, percent) > ch->GetSkill(ESkill::kHide);
 		}
-
 		if (remove_hide) {
 			RemoveAffectFromChar(ch, ESpell::kHide);
-			if (!AFF_FLAGGED(ch, EAffect::kHide)) {
-				SendMsgToChar("Вы прекратили прятаться.\r\n", ch);
-				act("$n прекратил$g прятаться.", false, ch, nullptr, nullptr, kToRoom);
-			}
+			AFF_FLAGS(ch).unset(EAffect::kHide);
+			SendMsgToChar("Вы прекратили прятаться.\r\n", ch);
+			act("$n прекратил$g прятаться.", false, ch, nullptr, nullptr, kToRoom);
 		}
 	}
 }
