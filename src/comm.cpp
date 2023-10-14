@@ -754,7 +754,7 @@ int main_function(int argc, char **argv) {
 	 * in the log if stderr is redirected to a file.
 	 */
 	printf("%s\r\n", circlemud_version);
-	printf("%s\r\n", DG_SCRIPT_VERSION);
+	//printf("%s\r\n", DG_SCRIPT_VERSION); // prool
 	if (getcwd(cwd, sizeof(cwd))) {};
 	printf("Current directory '%s' using '%s' as data directory.\r\n", cwd, dir);
 	runtime_config.load();
@@ -2493,7 +2493,7 @@ ssize_t perform_socket_read(socket_t desc, char *read_point, size_t space_left) 
 	 * We don't know what happened, cut them off. This qualifies for
 	 * a SYSERR because we have no idea what happened at this point.
 	 */
-	perror("SYSERR: perform_socket_read: about to lose connection");
+	//perror("SYSERR: perform_socket_read: about to lose connection"); // prool
 	return (-1);
 }
 
