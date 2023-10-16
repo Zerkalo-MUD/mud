@@ -162,6 +162,8 @@
 #include <arpa/inet.h>
 #endif
 
+#define BUFLEN 1024 // prool
+
 //extern RoomRnum r_mortal_start_room;
 //extern RoomRnum r_immort_start_room;
 extern RoomRnum r_frozen_start_room;
@@ -420,6 +422,7 @@ void do_show_mobmax(CharData *ch, char *, int, int);
 // prool commands begin
 void do_bootinfo(CharData *ch, char *argument, int cmd, int subcmd);
 void do_duhmada(CharData *ch, char *argument, int cmd, int subcmd);
+void do_kogda(CharData *ch, char *argument, int cmd, int subcmd);
 // prool commands end
 
 /* This is the Master Command List(tm).
@@ -1086,6 +1089,7 @@ cpp_extern const struct command_info cmd_info[] =
 		// prool commands
 		{"bootinfo", EPosition::kDead, do_bootinfo, 0, 0, 0},
 		{"духмада", EPosition::kDead, do_duhmada, 0, 0, 0},
+		{"когда", EPosition::kDead, do_kogda, 0, 0, 0},
 
 		{heartbeat::cmd::HEARTBEAT_COMMAND, heartbeat::cmd::MINIMAL_POSITION, heartbeat::cmd::do_heartbeat,
 		 heartbeat::cmd::MINIMAL_LEVEL, heartbeat::SCMD_NOTHING, heartbeat::cmd::UNHIDE_PROBABILITY},
@@ -4258,5 +4262,36 @@ bool who_spamcontrol(CharData *ch, unsigned short int mode = WHO_LISTALL) {
 	return false;
 }
 
+// prool code:
+
+void do_kogda(CharData *ch, char *arg, int, int)
+{int i;
+char buf[BUFLEN];
+FILE *fp;
+
+//printf("do_kogda: arg ='%s'\r\n", arg);
+
+if (arg[0]!=0) i=atoi(arg);
+
+if (i!=0)
+	snprintf(buf,BUFLEN,"./kogda.sh %i",i);
+else
+	snprintf(buf,BUFLEN,"./kogda.sh");
+
+i=system(buf);
+//snprintf(buf,BUFLEN,"Return code %i\r\n", i); SendMsgToChar(buf, ch);
+
+fp=fopen("system.txt", "r");
+
+if (fp==NULL) {SendMsgToChar("No result file\r\n",ch); return; }
+while (!feof(fp))
+	{
+	buf[0]=0;
+	fgets(buf,BUFLEN,fp);
+	if (buf[0]==0) break;
+	SendMsgToChar(buf,ch);
+	}
+fclose(fp);
+}
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :
