@@ -4541,4 +4541,73 @@ void do_print_armor(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	}
 }
 
+void PUT_OBJ(CharData *ch, int number) { // prool: put obj number to ch
+	MobRnum r_num;
+
+		if ((r_num = real_object(number)) < 0) {
+			SendMsgToChar("Господи, да изучи ты номера объектов!!! :-)\r\n", ch);
+			return;
+		}
+
+		const auto obj = world_objects.create_from_prototype_by_rnum(r_num);
+		obj->set_crafter_uid(GET_UNIQUE(ch));
+		obj->set_vnum_zone_from(GetZoneVnumByCharPlace(ch));
+
+		if (number == GlobalDrop::MAGIC1_ENCHANT_VNUM
+			|| number == GlobalDrop::MAGIC2_ENCHANT_VNUM
+			|| number == GlobalDrop::MAGIC3_ENCHANT_VNUM) {
+			generate_magic_enchant(obj.get());
+		}
+
+		if (load_into_inventory) {
+			PlaceObjToInventory(obj.get(), ch);
+		} else {
+			PlaceObjToRoom(obj.get(), ch->in_room);
+		}
+
+		act("$n покопал$u в МУДе.", true, ch, nullptr, nullptr, kToRoom);
+		act("$n создал$g $o3!", false, ch, obj.get(), nullptr, kToRoom);
+		act("Вы создали $o3.", false, ch, obj.get(), nullptr, kToChar);
+		load_otrigger(obj.get());
+		CheckObjDecay(obj.get());
+		olc_log("prool::PUT_OBJ: %s load obj %s #%d", GET_NAME(ch), obj->get_short_description().c_str(), number);
+}
+
+#define DUH_INSTR "Список вещей, которые вам может принести дух мада: хлеб, фляга, меч, нож, лук, палица, лампа, шарик, доспех, руны, сума, кинжал, мизерикорд, стилет, бочка с синим колдовским зельем\r\n\r\nПример вызова:\r\nдухмада хлеб\r\n"
+
+void do_duhmada(CharData *ch, char * argument, int/* cmd*/, int/* subcmd*/) { // prool
+
+//printf("prooldebug '%s'\n", argument);
+
+if (*argument==0)
+	{
+	SendMsgToChar(DUH_INSTR, ch);
+	}
+else
+	{
+	if (!strcmp(argument,"хлеб")) PUT_OBJ(ch,2200 /*125*/);
+//	else if (!strcmp(argument,"рекол")) PUT_OBJ(ch,2201/*115*/);
+	else if (!strcmp(argument,"меч")) PUT_OBJ(ch,2202/*112*/);
+	else if (!strcmp(argument,"палица")) PUT_OBJ(ch,2203/*121*/);
+	else if (!strcmp(argument,"нож")) PUT_OBJ(ch,2204/*122*/);
+	else if (!strcmp(argument,"шарик")) PUT_OBJ(ch,2205/*126*/);
+	else if (!strcmp(argument,"лампа")) PUT_OBJ(ch,2206/*127*/);
+	else if (!strcmp(argument,"доспех")) PUT_OBJ(ch,2207/*113*/);
+	else if (!strcmp(argument,"фляга")) PUT_OBJ(ch,2208/*114*/);
+	else if (!strcmp(argument,"лук")) PUT_OBJ(ch,2209/*109*/);
+	else if (!strcmp(argument,"сума")) PUT_OBJ(ch,/*2214*/2045);
+	else if (!strcmp(argument,"кинжал")) PUT_OBJ(ch,9908);
+	else if (!strcmp(argument,"мизерикорд")) PUT_OBJ(ch,9921);
+	else if (!strcmp(argument,"стилет")) PUT_OBJ(ch,2215);
+	else if (!strcmp(argument,"бочка с синим колдовским зельем")) PUT_OBJ(ch,500023);
+	else if (!strcmp(argument,"руны")) {PUT_OBJ(ch,222/*693*/); PUT_OBJ(ch,223/*692*/); PUT_OBJ(ch,224/*695*/); PUT_OBJ(ch,225/*694*/);}
+	else
+		{
+		SendMsgToChar("Этого нет в списке моих возможностей! Набирайте названия полностью.\r\n\r\n",ch);
+		SendMsgToChar(DUH_INSTR, ch);
+		}
+	}
+
+}
+
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :

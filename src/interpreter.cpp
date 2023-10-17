@@ -164,6 +164,8 @@
 #include <arpa/inet.h>
 #endif
 
+#define BUFLEN 1024 // prool
+
 //extern RoomRnum r_mortal_start_room;
 //extern RoomRnum r_immort_start_room;
 extern RoomRnum r_frozen_start_room;
@@ -225,6 +227,8 @@ void init_warcry(CharData *ch);
 
 // prool commands
 void do_bootinfo(CharData *ch, char *argument, int cmd, int subcmd);
+void do_duhmada(CharData *ch, char *argument, int cmd, int subcmd);
+void do_kogda(CharData *ch, char *argument, int cmd, int subcmd);
 
 void do_advance(CharData *ch, char *argument, int cmd, int subcmd);
 void do_alias(CharData *ch, char *argument, int cmd, int subcmd);
@@ -1084,6 +1088,8 @@ cpp_extern const struct command_info cmd_info[] =
 
 		// prool commands
 		{"bootinfo", EPosition::kDead, do_bootinfo, 0, 0, 0},
+		{"духмада", EPosition::kDead, do_duhmada, 0, 0, 0},
+		{"когда", EPosition::kDead, do_kogda, 0, 0, 0},
 
 		{heartbeat::cmd::HEARTBEAT_COMMAND, heartbeat::cmd::MINIMAL_POSITION, heartbeat::cmd::do_heartbeat,
 		 heartbeat::cmd::MINIMAL_LEVEL, heartbeat::SCMD_NOTHING, heartbeat::cmd::UNHIDE_PROBABILITY},
@@ -4252,6 +4258,38 @@ const auto tmp_time = boot_time + (time_t)(60 * shutdown_parameters.get_reboot_u
 SendMsgToChar(ch, "Сервер был запущен %s\r\n", rustime(localtime(&boot_time)));
 SendMsgToChar(ch, "Сейчас %s\r\n", rustime(localtime(&mytime)));
 SendMsgToChar(ch, "Сервер будет автоматически перезагружен %s\r\n", rustime(localtime(&tmp_time)));
+}
+
+// prool code:
+
+void do_kogda(CharData *ch, char *arg, int, int)
+{int i;
+char buf[BUFLEN];
+FILE *fp;
+
+//printf("do_kogda: arg ='%s'\r\n", arg);
+
+if (arg[0]!=0) i=atoi(arg);
+
+if (i!=0)
+	snprintf(buf,BUFLEN,"./kogda.sh %i",i);
+else
+	snprintf(buf,BUFLEN,"./kogda.sh");
+
+i=system(buf);
+//snprintf(buf,BUFLEN,"Return code %i\r\n", i); SendMsgToChar(buf, ch);
+
+fp=fopen("system.txt", "r");
+
+if (fp==NULL) {SendMsgToChar("No result file\r\n",ch); return; }
+while (!feof(fp))
+	{
+	buf[0]=0;
+	fgets(buf,BUFLEN,fp);
+	if (buf[0]==0) break;
+	SendMsgToChar(buf,ch);
+	}
+fclose(fp);
 }
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :
