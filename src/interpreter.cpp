@@ -423,6 +423,7 @@ void do_show_mobmax(CharData *ch, char *, int, int);
 void do_bootinfo(CharData *ch, char *argument, int cmd, int subcmd);
 void do_duhmada(CharData *ch, char *argument, int cmd, int subcmd);
 void do_kogda(CharData *ch, char *argument, int cmd, int subcmd);
+void do_fflush(CharData *ch, char *argument, int cmd, int subcmd);
 // prool commands end
 
 /* This is the Master Command List(tm).
@@ -1090,6 +1091,7 @@ cpp_extern const struct command_info cmd_info[] =
 		{"bootinfo", EPosition::kDead, do_bootinfo, 0, 0, 0},
 		{"духмада", EPosition::kDead, do_duhmada, 0, 0, 0},
 		{"когда", EPosition::kDead, do_kogda, 0, 0, 0},
+		{"fflush", EPosition::kDead, do_fflush, 0, 0, 0},
 
 		{heartbeat::cmd::HEARTBEAT_COMMAND, heartbeat::cmd::MINIMAL_POSITION, heartbeat::cmd::do_heartbeat,
 		 heartbeat::cmd::MINIMAL_LEVEL, heartbeat::SCMD_NOTHING, heartbeat::cmd::UNHIDE_PROBABILITY},
@@ -4263,6 +4265,15 @@ bool who_spamcontrol(CharData *ch, unsigned short int mode = WHO_LISTALL) {
 }
 
 // prool code:
+
+void do_fflush(CharData *ch, char *arg, int, int)
+{int i;
+i=fflush(0);
+if (i)
+	SendMsgToChar("fflush error!\r\n",ch);
+else
+	SendMsgToChar("fflush no error\r\n",ch);
+}
 
 void do_kogda(CharData *ch, char *arg, int, int)
 {int i;
