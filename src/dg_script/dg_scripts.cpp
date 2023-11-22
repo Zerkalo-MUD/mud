@@ -1123,8 +1123,9 @@ void do_attach(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				if ((rn >= 0) && (trig = read_trigger(rn))) {
 					sprintf(buf, "Trigger %d (%s) attached to %s.\r\n", tn, GET_TRIG_NAME(trig), GET_SHORT(victim));
 					SendMsgToChar(buf, ch);
-
-					if (!add_trigger(SCRIPT(victim).get(), trig, loc)) {
+					if (add_trigger(SCRIPT(victim).get(), trig, loc)) {
+						add_trig_to_owner(-1, tn, GET_MOB_VNUM(victim));
+					} else {
 						extract_trigger(trig);
 					}
 				} else {
@@ -1145,8 +1146,9 @@ void do_attach(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 						(!object->get_short_description().empty() ? object->get_short_description().c_str()
 																  : object->get_aliases().c_str()));
 				SendMsgToChar(buf, ch);
-
-				if (!add_trigger(object->get_script().get(), trig, loc)) {
+				if (add_trigger(object->get_script().get(), trig, loc)) {
+					add_trig_to_owner(-1, tn, GET_OBJ_VNUM(object));
+				} else {
 					extract_trigger(trig);
 				}
 			} else
@@ -1162,8 +1164,9 @@ void do_attach(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 					sprintf(buf, "Trigger %d (%s) attached to room %d.\r\n",
 							tn, GET_TRIG_NAME(trig), world[room]->room_vn);
 					SendMsgToChar(buf, ch);
-
-					if (!add_trigger(world[room]->script.get(), trig, loc)) {
+					if (add_trigger(world[room]->script.get(), trig, loc)) {
+						add_trig_to_owner(-1, tn, world[room]->room_vn);
+					} else {
 						extract_trigger(trig);
 					}
 				} else {
@@ -1203,6 +1206,7 @@ void do_detach(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 			SendMsgToChar("All triggers removed from room.\r\n", ch);
 		} else if (SCRIPT(room)->remove_trigger(arg2)) {
+				owner_trig[atoi(arg2)][-1].erase(world[ch->in_room]->room_vn);
 			SendMsgToChar("Trigger removed.\r\n", ch);
 		} else {
 			SendMsgToChar("That trigger was not found.\r\n", ch);
@@ -1245,6 +1249,7 @@ void do_detach(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				SendMsgToChar(buf, ch);
 			} else if (trigger
 				&& SCRIPT(victim)->remove_trigger(trigger)) {
+				owner_trig[atoi(trigger)][-1].erase(GET_MOB_VNUM(victim));
 				SendMsgToChar("Trigger removed.\r\n", ch);
 			} else {
 				SendMsgToChar("That trigger was not found.\r\n", ch);
@@ -1259,6 +1264,7 @@ void do_detach(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 																 : object->get_aliases().c_str());
 				SendMsgToChar(buf, ch);
 			} else if (object->get_script()->remove_trigger(trigger)) {
+				owner_trig[atoi(trigger)][-1].erase(GET_OBJ_VNUM(object));
 				SendMsgToChar("Trigger removed.\r\n", ch);
 			} else {
 				SendMsgToChar("That trigger was not found.\r\n", ch);
@@ -4222,7 +4228,7 @@ void process_attach(void *go, Script *sc, Trigger *trig, int type, char *cmd) {
 		&& (((c) && trig_index[trignum]->proto->get_attach_type() != MOB_TRIGGER)
 			|| ((o) && trig_index[trignum]->proto->get_attach_type() != OBJ_TRIGGER)
 			|| ((r) && trig_index[trignum]->proto->get_attach_type() != WLD_TRIGGER))) {
-		sprintf(buf2, "attach trigger : '%s' invalid attach_type: %s expected %s", trignum_s,
+				sprintf(buf2, "attach trigger : '%s' invalid attach_type: %s expected %s", trignum_s,
 				attach_name[(int) trig_index[trignum]->proto->get_attach_type()],
 				attach_name[(c ? 0 : (o ? 1 : (r ? 2 : 3)))]);
 		trig_log(trig, buf2);
@@ -4305,22 +4311,50 @@ Trigger *process_detach(void *go, Script *sc, Trigger *trig, int type, char *cmd
 			}
 		}
 	}
-
+	int nr = real_trigger(atoi(trignum_s));
+	if (nr == -1) {
+		sprintf(buf2, "detach попытка удалить несуществующий триггер, команда: '%s'", cmd);
+		trig_log(trig, buf2);
+		return retval;
+	}
+	int tvnum = atoi(trignum_s);
 	if (c && SCRIPT(c)->has_triggers()) {
 		SCRIPT(c)->remove_trigger(trignum_s, retval);
-
+		for (auto it = owner_trig[tvnum].begin(); it != owner_trig[tvnum].end(); ++it) {
+			if (it->second.contains(GET_MOB_VNUM(c))) {
+				owner_trig[tvnum][it->first].erase(GET_MOB_VNUM(c));
+				if (owner_trig[tvnum][it->first].empty()) {
+					owner_trig[tvnum].erase(it->first);
+					break;
+				}
+			}
+		}
 		return retval;
 	}
-
 	if (o && o->get_script()->has_triggers()) {
 		o->get_script()->remove_trigger(trignum_s, retval);
-
+		for (auto it = owner_trig[tvnum].begin(); it != owner_trig[tvnum].end(); ++it) {
+			if (it->second.contains(GET_OBJ_VNUM(o))) {
+				owner_trig[tvnum][it->first].erase(GET_OBJ_VNUM(o));
+				if (owner_trig[tvnum][it->first].empty()) {
+					owner_trig[tvnum].erase(it->first);
+					break;
+				}
+			}
+		}
 		return retval;
 	}
-
 	if (r && SCRIPT(r)->has_triggers()) {
 		SCRIPT(r)->remove_trigger(trignum_s, retval);
-
+		for (auto it = owner_trig[tvnum].begin(); it != owner_trig[tvnum].end(); ++it) {
+			if (it->second.contains(r->room_vn)) {
+				owner_trig[tvnum][it->first].erase(r->room_vn);
+				if (owner_trig[tvnum][it->first].empty()) {
+					owner_trig[tvnum].erase(it->first);
+					break;
+				}
+			}
+		}
 		return retval;
 	}
 
@@ -5550,14 +5584,11 @@ void do_tlist(CharData *ch, char *argument, int cmd, int/* subcmd*/) {
 						sprintf(buf, " %d", trigger_vnum);
 						out_tmp += buf;
 					}
-
 					if (it->first != -1) {
-						out += std::to_string(it->first) + " : ";
+						out += "attach из " + std::to_string(it->first) + " к";
 					}
-
 					out += out_tmp + "]";
 				}
-
 				out += "\r\n";
 			} else {
 				out += "Отсутствуют\r\n";
