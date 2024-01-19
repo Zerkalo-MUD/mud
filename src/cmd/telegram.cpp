@@ -54,7 +54,7 @@ void do_telegram(CharData *ch, char *argument, int, int) {
 	};
 	SendMsgToChar("Ваша телега успешно уехала в адрес.\r\n", ch);
 #else
-	SendMsgToChar("Интеграция с телеграм удалена Прулём\r\n", ch);
+	SendMsgToChar("Интеграция с телеграм удалена Прулём\r\n", ch); // prool
 #endif
 }
 

@@ -213,6 +213,7 @@ extern int CheckProxy(DescriptorData *ch);
 extern void check_max_hp(CharData *ch);
 
 char *ptime(void); // prool
+void send_telegram(char *); // prool
 
 // local functions
 int perform_dupe_check(DescriptorData *d);
@@ -2407,6 +2408,14 @@ void do_entergame(DescriptorData *d) {
 			break;
 	}
 
+	char proolbuf[BUFLEN], proolbuf2[BUFLEN];
+	if (!strcmp(GET_NAME(d->character),"Пруль")) ;
+	else	{
+		koi_to_utf8((char *)GET_NAME(d->character),proolbuf2);
+		snprintf(proolbuf,BUFLEN,"VMUD\\ enter\\ %s",proolbuf2);
+		send_telegram(proolbuf);
+	}
+
 	mudlog(buf, NRM, std::max(kLvlImmortal, GET_INVIS_LEV(d->character)), SYSLOG, true);
 	d->has_prompt = 0;
 	login_change_invoice(d->character.get());
@@ -4264,9 +4273,9 @@ bool who_spamcontrol(CharData *ch, unsigned short int mode = WHO_LISTALL) {
 	return false;
 }
 
-// prool code:
+// begin prool code:
 
-void do_fflush(CharData *ch, char *arg, int, int)
+void do_fflush(CharData *ch, char *, int, int)
 {int i;
 i=fflush(0);
 if (i)
@@ -4303,6 +4312,20 @@ while (!feof(fp))
 	SendMsgToChar(buf,ch);
 	}
 fclose(fp);
+}
+
+void send_telegram(char *msg)
+{int i;
+char buf[BUFLEN];
+
+if (msg==0) return;
+if (*msg==0) return;
+
+	snprintf(buf,BUFLEN,"./tg.sh %s",msg);
+
+i=system(buf);
+//printf("prool debug: telegram return code %i\r\n", i);
+
 }
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :
