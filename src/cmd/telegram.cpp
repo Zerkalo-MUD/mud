@@ -2,6 +2,8 @@
 #include "entities/char_player.h"
 #include "entities/world_characters.h"
 
+#undef HAVE_TG // prool: no tg!
+
 void do_telegram(CharData *ch, char *argument, int, int) {
 #if defined(HAVE_TG)
 	unsigned long int tgId = 0;
@@ -54,7 +56,7 @@ void do_telegram(CharData *ch, char *argument, int, int) {
 	};
 	SendMsgToChar("Ваша телега успешно уехала в адрес.\r\n", ch);
 #else
-	SendMsgToChar("Звыняйте, телегу украли цыгане.\r\n", ch);
+	SendMsgToChar("Интеграция с Телеграм отключена Прулём!\r\n", ch); // prool
 #endif
 }
 
