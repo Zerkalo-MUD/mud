@@ -191,7 +191,9 @@ void CharData::reset() {
 	in_room = kNowhere;
 	carrying = nullptr;
 	next_fighting = nullptr;
-	remove_protecting();
+	if (this->get_protecting()) {
+		remove_protecting();
+	}
 	set_touching(nullptr);
 	battle_affects = clear_flags;
 	poisoner = 0;
@@ -401,14 +403,13 @@ void CharData::purge() {
 	if (!get_name().empty()) {
 		log("[FREE CHAR] (%s)", GET_NAME(this));
 	}
-	if (this->who_protecting()) {
-//		std::stringstream ss;
-//		ss << "Чар " << GET_PAD(this ,0) <<  " выходит из игры его прикрывал " << GET_PAD(this->who_protecting(), 0) << std::endl; 
-		if (this == this->who_protecting()->get_protecting()) {
-//			ss << "Совпал прикрывающий и упавший в лд снимаю флаг прикрышки" << std::endl;
-			this->who_protecting()->remove_protecting();
+	if (this->get_protecting()) {
+		this->remove_protecting();
+	}
+	if (!this->who_protecting.empty()) {
+		for (auto it : this->who_protecting) {
+			it->remove_protecting();
 		}
-//		mudlog(ss.str(), CMP, kLvlImmortal, SYSLOG, true);
 	}
 	int i, id = -1;
 	struct alias_data *a;
@@ -523,7 +524,7 @@ int CharData::GetSkill(const ESkill skill_id) const {
 	}
 
 	if (AFF_FLAGGED(this, EAffect::kSkillReduce)) {
-		skill -= skill * GET_POISON(this) / 100;
+		skill -= skill * GET_SKILL_REDUCE(this) / 100;
 	}
 
 	if (ROOM_FLAGGED(this->in_room, ERoomFlag::kDominationArena)) {
@@ -713,20 +714,25 @@ CharData *CharData::get_touching() const {
 }
 
 void CharData::set_protecting(CharData *vict) {
+	if (protecting_) {
+		remove_protecting();
+	}
 	protecting_ = vict;
-	vict->who_protecting_ = this;
+	vict->who_protecting.push_back(this);
 }
 
 void CharData::remove_protecting() {
+
+	if (protecting_) {
+		auto predicate = [this](auto p) { return (this  ==  p); };
+		auto it = std::find_if(get_protecting()->who_protecting.begin(), get_protecting()->who_protecting.end(), predicate);
+		get_protecting()->who_protecting.erase(it);
+	}
 	protecting_ = nullptr;
 }
 
 CharData *CharData::get_protecting() const {
 	return protecting_;
-}
-
-CharData *CharData::who_protecting() const {
-	return who_protecting_;
 }
 
 void CharData::SetEnemy(CharData *enemy) {
@@ -883,12 +889,10 @@ void change_fighting(CharData *ch, int need_stop) {
 
 		if (k->get_protecting() == ch) {
 			k->remove_protecting();
-			CLR_AF_BATTLE(k, kEafProtect);
 		}
 //		log("change_fighting protecting %f", time.delta().count());
 		if (k->get_touching() == ch) {
 			k->set_touching(0);
-			CLR_AF_BATTLE(k, kEafProtect);
 		}
 //		log("change_fighting touching %f", time.delta().count());
 		if (k->GetExtraVictim() == ch) {
@@ -1952,7 +1956,9 @@ void CharData::restore_npc() {
 	//флаги
 	MOB_FLAGS(this) = MOB_FLAGS(proto);
 	this->set_touching(nullptr);
-	this->remove_protecting();
+	if (this->get_protecting()) {
+		this->remove_protecting();
+	}
 	// ресторим статы
 	proto->set_normal_morph();
 	this->set_str(GetRealStr(proto));

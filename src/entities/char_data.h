@@ -79,6 +79,7 @@ struct char_played_ability_data {
 	int cast_success;
 	int initiative_add;
 	int poison_add;
+	int skill_reduce_add;
 	int pray_add;
 	int percent_exp_add;
 	int percent_physdam_add;
@@ -389,7 +390,7 @@ class CharData : public ProtectedCharData {
 	void set_touching(CharData *vict);
 
 	CharData *get_protecting() const;
-	CharData *who_protecting() const;
+	std::vector<CharData *> who_protecting; // кто прикрыл
 	void set_protecting(CharData *vict);
 	void remove_protecting();
 
@@ -673,7 +674,6 @@ class CharData : public ProtectedCharData {
 	CharSkillsType skills;    // список изученных скиллов
 	////////////////////////////////////////////////////////////////////////////
 	CharData *protecting_{nullptr}; // цель для 'прикрыть'
-	CharData *who_protecting_{nullptr}; // кто прикрыл
 	CharData *touching_;   // цель для 'перехватить'
 	CharData *enemy_;
 

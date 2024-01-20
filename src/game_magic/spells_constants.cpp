@@ -199,10 +199,10 @@ std::string GetAffExpiredText(ESpell spell_id) {
 		{ESpell::kWarcryOfBless, "Действие клича доблести закончилось."},
 		{ESpell::kWarcryOfCourage, "Действие клича отваги закончилось."},
 		{ESpell::kRuneLabel, "Магические письмена на земле угасли."},
-		{ESpell::kAconitumPoison, "В вашей крови не осталось ни капельки яда."},
-		{ESpell::kScopolaPoison, "В вашей крови не осталось ни капельки яда."},
-		{ESpell::kBelenaPoison, "В вашей крови не осталось ни капельки яда."},
-		{ESpell::kDaturaPoison, "В вашей крови не осталось ни капельки яда."},
+		{ESpell::kAconitumPoison, "В вашей крови не осталось ни капельки яда аконита."},
+		{ESpell::kScopolaPoison, "В вашей крови не осталось ни капельки яда скополии."},
+		{ESpell::kBelenaPoison, "В вашей крови не осталось ни капельки яда белены."},
+		{ESpell::kDaturaPoison, "В вашей крови не осталось ни капельки яда дурмана."},
 		{ESpell::kTimerRestore, "SPELL_TIMER_REPAIR"},
 		{ESpell::kCombatLuck, "!SPELL_CombatLuck!"},
 		{ESpell::kBandage, "Вы аккуратно перевязали свои раны."},
@@ -259,6 +259,7 @@ std::string GetAffExpiredText(ESpell spell_id) {
 		{ESpell::kNoInjure, ""},
 		{ESpell::kNoCharge, ""},
 		{ESpell::kConfuse, ""},
+		{ESpell::kDazzle, ""},
 		{ESpell::kPortalTimer, "Пентаграмма медленно растаяла."}
 	};
 
@@ -828,6 +829,7 @@ void init_ESpell_ITEM_NAMES() {
 	ESpell_name_by_value[ESpell::kQUest] = "kQUest";
 	ESpell_name_by_value[ESpell::kPortalTimer] = "kPortalTimer";
 	ESpell_name_by_value[ESpell::kNoCharge] = "kNoCharge";
+	ESpell_name_by_value[ESpell::kDazzle] = "kDazzle";
 
 	for (const auto &i : ESpell_name_by_value) {
 		ESpell_value_by_name[i.second] = i.first;
