@@ -487,6 +487,7 @@ void init_ESkill_ITEM_NAMES() {
 	ESkill_name_by_value[ESkill::kLooking] = "kLooking";
 	ESkill_name_by_value[ESkill::kChopoff] = "kChopoff";
 	ESkill_name_by_value[ESkill::kRepair] = "kRepair";
+	ESkill_name_by_value[ESkill::kDazzle] = "kDazzle";
 	ESkill_name_by_value[ESkill::kSharpening] = "kSharpening";
 	ESkill_name_by_value[ESkill::kCourage] = "kCourage";
 	ESkill_name_by_value[ESkill::kJinx] = "kJinx";
@@ -554,7 +555,14 @@ int SendSkillMessages(int dam, CharData *ch, CharData *vict, int attacktype, con
 			for (j = 1, msg = fight_messages[i].msg_set; (j < nr) && msg; j++) {
 				msg = msg->next;
 			}
-
+			if (msg == nullptr) {
+				char small_buf[128];
+				if (attacktype != kTypeTriggerdeath) {
+					sprintf(small_buf, "MESSAGES ERROR: Отсутствует сообщение номер %d в умении %d", j, attacktype);
+					mudlog(small_buf, CMP, kLvlGod, SYSLOG, true);
+				}
+				return 1;
+			}
 			const auto weap = init_weap(ch, dam, attacktype);
 			brief_shields brief(ch, vict, weap, add);
 			if (attacktype == to_underlying(ESpell::kFireShield) || attacktype == to_underlying(ESpell::kMagicGlass)) {
@@ -672,6 +680,11 @@ int CalculateVictimRate(CharData *ch, const ESkill skill_id, CharData *vict) {
 			if (PRF_FLAGGED(vict, EPrf::kAwake)) {
 				rate -= CalculateSkillAwakeModifier(ch, vict);
 			}
+			break;
+		}
+
+		case ESkill::kPoisoning: {
+			rate -= GetBasicSave(vict, ESaving::kCritical, false);
 			break;
 		}
 
@@ -810,7 +823,16 @@ int CalculateVictimRate(CharData *ch, const ESkill skill_id, CharData *vict) {
 		}
 
 		case ESkill::kStrangle: {
-			if (CAN_SEE(ch, vict) && PRF_FLAGGED(vict, EPrf::kAwake)) {
+			rate -= GetBasicSave(vict, ESaving::kReflex, false);
+			if (CAN_SEE(ch, vict) && (PRF_FLAGGED(vict, EPrf::kAwake))) {
+				rate -= CalculateSkillAwakeModifier(ch, vict);
+			}
+			break;
+		}
+
+		case ESkill::kDazzle: {
+			rate -= GetBasicSave(vict, ESaving::kReflex, false);
+			if (CAN_SEE(ch, vict) && (PRF_FLAGGED(vict, EPrf::kAwake))) {
 				rate -= CalculateSkillAwakeModifier(ch, vict);
 			}
 			break;
@@ -1205,6 +1227,11 @@ int CalculateSkillRate(CharData *ch, const ESkill skill_id, CharData *vict) {
 				if (!CAN_SEE(ch, vict))
 					bonus += 20;
 			}
+			break;
+		}
+
+		case ESkill::kDazzle: {
+			bonus += dex_bonus(GetRealDex(ch));
 			break;
 		}
 

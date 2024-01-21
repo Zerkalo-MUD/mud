@@ -3138,6 +3138,92 @@ void find_replacement(void *go,
 			} else {
 				sprintf(str, "%d", GET_OBJ_VAL(o, 3));
 			}
+		} else if (!str_cmp(field, "SavedInfo")) {
+			if (*subfield) {
+				skip_spaces(&subfield);
+				o->set_dgscript_field(subfield);
+			} else {
+				sprintf(str, "%s", o->get_dgscript_field().c_str());
+			}
+		} else if (!str_cmp(field, "loadvar")) {
+			if (*subfield) {
+				std::vector<std::string> saved_info;
+				std::string value;
+				std::string name;
+
+				if (!o->get_dgscript_field().empty()) {
+					saved_info = utils::Split(o->get_dgscript_field(), '#');
+				} else {
+					sprintf(buf, "Нет сохраненных переменных");
+					trig_log(trig, buf);
+				}
+				for (auto &it : saved_info) {
+					name = utils::ExtractFirstArgument(it, value);
+					if (name.empty() || value.empty()) {
+						sprintf(buf, "Кривая переменная (нужно 'value text') сейчас '%s'", it.c_str());
+						trig_log(trig, buf);
+						continue;
+					}
+					if (!str_cmp(subfield, name)) {
+						add_var_cntx(&GET_TRIG_VARS(trig), name.c_str(), value.c_str(), 0);
+						break;
+					}
+				}
+			} else {
+				sprintf(buf, "Нет аргумента в команде LoadVar");
+				trig_log(trig, buf);
+			}
+		} else if (!str_cmp(field, "savevar")) {
+			if (*subfield) {
+				struct TriggerVar *vd_tmp = nullptr;
+				std::vector<std::string> saved_info;
+				std::stringstream out;
+				std::string name;
+				std::string value;
+
+				if (trig) {
+					vd_tmp = find_var_cntx(&GET_TRIG_VARS(trig), subfield, 0);
+					if (!vd_tmp)
+						vd_tmp = find_var_cntx(&(sc->global_vars), subfield, sc->context);
+					if (!vd_tmp)
+						vd = find_var_cntx(&worlds_vars, subfield, sc->context);
+				}
+				if (!vd_tmp) {
+					sprintf(buf, "Не найдена переменная %s", subfield);
+					trig_log(trig, buf);
+					return;
+				}
+				if (!o->get_dgscript_field().empty()) {
+					saved_info = utils::Split(o->get_dgscript_field(), '#');
+				}
+				bool found = false;
+				for (auto &it : saved_info) {
+					name = utils::ExtractFirstArgument(it, value);
+					if (name.empty() || value.empty()) {
+						sprintf(buf, "Кривая переменная (нужно 'value text') сейчас '%s'", it.c_str());
+						trig_log(trig, buf);
+						continue;
+					}
+					if (!str_cmp(vd_tmp->name, name)) {
+						it = std::string(vd_tmp->name) + " " + std::string(vd_tmp->value);
+						found = true;
+					}
+				}
+				if (!found) {
+					out << vd_tmp->name  << " " << vd_tmp->value << "#";
+				}
+				for (auto it : saved_info) {
+					out << it << "#";
+				}
+				if (out.str().size() > kMaxInputLength) {
+					sprintf(buf, "Список переменных переполнен, сократите на %ld символов", out.str().size() - kMaxInputLength);
+					trig_log(trig, buf);
+				} else
+					o->set_dgscript_field(out.str());
+			} else {
+				sprintf(buf, "Нет аргумента в команде SaveVar");
+				trig_log(trig, buf);
+			}
 		} else if (!str_cmp(field, "maker")) {
 			sprintf(str, "%d", GET_OBJ_MAKER(o));
 		} else if (!str_cmp(field, "effect")) {
@@ -5369,6 +5455,10 @@ int timed_script_driver(void *go, Trigger *trig, int type, int mode) {
 					if (GET_TRIG_LOOPS(trig) == 1000) {
 						trig_log(trig, "looping 1000 times.", DEF);
 					}
+					if (GET_TRIG_LOOPS(trig) == 10000) {
+						trig_log(trig, "looping 10000 times, cancelled", DEF);
+						cl = find_done(trig, cl);
+					}
 				}
 			}
 		} else if (!strn_cmp("break", p, 5)) {
@@ -5556,7 +5646,7 @@ void do_tlist(CharData *ch, char *argument, int cmd, int/* subcmd*/) {
 	for (nr = 0; nr < top_of_trigt && (trig_index[nr]->vnum <= last); nr++) {
 		if (trig_index[nr]->vnum >= first) {
 			std::string out = "";
-			sprintf(buf,"%2d) [%5d] [%-50s] ", ++found,
+			sprintf(buf,"%2d) [%5d] %-50s ", ++found,
 					trig_index[nr]->vnum, trig_index[nr]->proto->get_name().c_str());
 			out += buf;
 			if (trig_index[nr]->proto->get_attach_type() == MOB_TRIGGER) {
@@ -5578,20 +5668,20 @@ void do_tlist(CharData *ch, char *argument, int cmd, int/* subcmd*/) {
 			if (!owner_trig[trig_index[nr]->vnum].empty()) {
 				for (auto it = owner_trig[trig_index[nr]->vnum].begin(); it != owner_trig[trig_index[nr]->vnum].end();
 					 ++it) {
-					out += "[";
+//					out += "[";
 					std::string out_tmp = "";
 					for (const auto trigger_vnum : it->second) {
-						sprintf(buf, " %d", trigger_vnum);
+						sprintf(buf, "%d ", trigger_vnum);
 						out_tmp += buf;
 					}
 					if (it->first != -1) {
-						out += "attach из " + std::to_string(it->first) + " к";
+						out += "attach из " + std::to_string(it->first) + " к: ";
 					}
-					out += out_tmp + "]";
+					out += out_tmp;// + "]";
 				}
 				out += "\r\n";
 			} else {
-				out += "Отсутствуют\r\n";
+				out += "-\r\n";
 			}
 			strcat(pagebuf, out.c_str());
 		}
