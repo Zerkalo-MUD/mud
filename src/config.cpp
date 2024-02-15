@@ -488,7 +488,7 @@ void RuntimeConfiguration::setup_logs() {
 
 	setup_converters();
 
-	printf("VMUD server will use %schronous output into syslog file.\n",
+	printf("Virtustan MUD server will use %schronous output into syslog file.\n",
 		   output_thread() ? "asyn" : "syn");
 }
 

@@ -768,7 +768,13 @@ total_players=0; //prool
 		world_loader.boot_world();
 		log("Done.");
 	} else {
+		extern const char* revision;
+		extern const char* build_datetime;
+
 		log("Running game on port %d.", port);
+		printf("Virtustan MUD run on port %d\n", port);
+		printf("Version %s, revision %s\n", build_datetime, revision);
+		printf("Wait...\n");
 
 		// стль и буст юзаются уже немало где, а про их экспешены никто не думает
 		// пока хотя бы стльные ловить и просто логировать факт того, что мы вышли
@@ -1364,7 +1370,7 @@ void game_loop(int epoll, socket_t mother_desc)
 void game_loop(socket_t mother_desc)
 #endif
 {
-	printf("VMUD started.\n");
+	printf("Virtustan MUD started\n");
 
 #ifdef HAS_EPOLL
 	struct epoll_event *events;
