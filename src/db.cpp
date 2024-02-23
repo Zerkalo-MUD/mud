@@ -2893,14 +2893,14 @@ void renum_single_table(int zone) {
 	int cmd_no, a, b, c, olda, oldb, oldc;
 	char buf[256];
 
-	printf("prool debug: db.c renum_single_table() zone = %i\n", zone); // prool
+	//printf("prool debug: db.c renum_single_table() zone = %i\n", zone); // prool
 
 	for (cmd_no = 0; ZCMD.command != 'S'; cmd_no++) {
 		a = b = c = 0;
 		olda = ZCMD.arg1;
 		oldb = ZCMD.arg2;
 		oldc = ZCMD.arg3;
-		printf("prool debug ZCMD.command = %c arg1 = %i\n", ZCMD.command, olda); // prool
+		//printf("prool debug ZCMD.command = %c arg1 = %i\n", ZCMD.command, olda); // prool
 		switch (ZCMD.command) {
 			case 'M': a = ZCMD.arg1 = real_mobile(ZCMD.arg1);
 				if (ZCMD.arg2 <= 0) {
@@ -2909,10 +2909,12 @@ void renum_single_table(int zone) {
 					mudlog(buf, CMP, kLvlGreatGod, SYSLOG, true);
 					break;
 				}
-				printf("prool debug ZCMD.arg1 = %i\n", ZCMD.arg1); // prool
-				printf("prool debug ZCMD.arg2 = %i\n", ZCMD.arg2); // prool
-				printf("prool debug mob_index[ZCMD.arg1].stored = %i\n", mob_index[ZCMD.arg1].stored); // prool
-				if (ZCMD.arg1>=0) if (mob_index[ZCMD.arg1].stored < ZCMD.arg2) { // prool: fool!
+#if 0 // prool debug
+				printf("prool debug ZCMD.arg1 = %i\n", ZCMD.arg1);
+				printf("prool debug ZCMD.arg2 = %i\n", ZCMD.arg2);
+				printf("prool debug mob_index[ZCMD.arg1].stored = %i\n", mob_index[ZCMD.arg1].stored);
+#endif
+				if (mob_index[ZCMD.arg1].stored < ZCMD.arg2) {
 					mob_index[ZCMD.arg1].stored = ZCMD.arg2;
 				}
 				c = ZCMD.arg3 = real_room(ZCMD.arg3);
