@@ -101,7 +101,6 @@ int top_of_trigt = 0;        // top of trigger index table
 
 IndexData *mob_index;        // index table for mobile file
 MobRnum top_of_mobt = 0;    // top of mobile index table
-std::unordered_map<MobVnum, std::vector<long>> mob_id_by_vnum;
 std::unordered_map<long, CharData *> mob_by_uid;
 
 void Load_Criterion(pugi::xml_node XMLCriterion, int type);
@@ -467,7 +466,7 @@ bool check_unlimited_timer(const CObjectPrototype *obj) {
 		if (strstr(buf_temp1, it->first.c_str()) != nullptr) {
 			sum_aff += it->second;
 		}
-		//std::cout << it->first << " " << it->second << std::endl;
+		//std::cout << it->first << " " << it->second << "\r\n";
 	}
 
 	// если сумма больше или равна единице
@@ -504,7 +503,7 @@ float count_koef_obj(const CObjectPrototype *obj, int item_wear) {
 					}
 				}
 
-				//std::cout << it->first << " " << it->second << std::endl;
+				//std::cout << it->first << " " << it->second << "\r\n";
 			}
 		}
 	}
@@ -517,7 +516,7 @@ float count_koef_obj(const CObjectPrototype *obj, int item_wear) {
 		if (strstr(buf_temp1, it->first.c_str()) != nullptr) {
 			sum_aff += it->second;
 		}
-		//std::cout << it->first << " " << it->second << std::endl;
+		//std::cout << it->first << " " << it->second << "\r\n";
 	}
 	sum += sum_aff;
 	return sum;
@@ -2892,7 +2891,7 @@ void renum_mob_zone(void) {
 
 void renum_single_table(int zone) {
 	int cmd_no, a, b, c, olda, oldb, oldc;
-	char buf[128];
+	char buf[256];
 
 	for (cmd_no = 0; ZCMD.command != 'S'; cmd_no++) {
 		a = b = c = 0;
@@ -2901,6 +2900,15 @@ void renum_single_table(int zone) {
 		oldc = ZCMD.arg3;
 		switch (ZCMD.command) {
 			case 'M': a = ZCMD.arg1 = real_mobile(ZCMD.arg1);
+				if (ZCMD.arg2 <= 0) {
+					sprintf(buf, "SYSERROR: некорректное значение 'макс в мире': zone %d vnum %d, stored %d room %d",
+							zone_table[zone].vnum, mob_index[ZCMD.arg1].vnum, ZCMD.arg2, ZCMD.arg3);
+					mudlog(buf, CMP, kLvlGreatGod, SYSLOG, true);
+					break;
+				}
+				if (mob_index[ZCMD.arg1].stored < ZCMD.arg2) {
+					mob_index[ZCMD.arg1].stored = ZCMD.arg2;
+				}
 				c = ZCMD.arg3 = real_room(ZCMD.arg3);
 				break;
 			case 'F': a = ZCMD.arg1 = real_room(ZCMD.arg1);
@@ -3580,11 +3588,6 @@ CharData *read_mobile(MobVnum nr, int type) {                // and MobRnum
 	mob->id = max_id.allocate();
 
 	if (!is_corpse) {
-		std::vector<long> list_idnum;
-		if (mob_id_by_vnum.contains(GET_MOB_VNUM(mob)))
-			list_idnum = mob_id_by_vnum[GET_MOB_VNUM(mob)];
-		list_idnum.push_back(mob->id);
-		mob_id_by_vnum[GET_MOB_VNUM(mob)] = list_idnum;
 		mob_index[i].total_online++;
 		assign_triggers(mob, MOB_TRIGGER);
 	} else {
@@ -4240,7 +4243,7 @@ bool ZoneReset::handle_zone_Q_command(const MobRnum rnum) {
 
 	utils::CExecutionTimer get_mobs_timer;
 	Characters::list_t mobs;
-	character_list.get_mobs_by_rnum(rnum, mobs);
+	character_list.get_mobs_by_vnum(mob_index[rnum].vnum, mobs);
 	const auto get_mobs_time = get_mobs_timer.delta();
 
 	utils::CExecutionTimer extract_timer;
