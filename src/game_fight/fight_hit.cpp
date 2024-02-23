@@ -1221,11 +1221,14 @@ int backstab_mult(int level) {
 /**
 * Процент прохождения крит.стаба = скилл/11 + (декса-20)/(декса/30) для вовровского удара,
 * для остального в учет только ловку
+* при 74х мортах максимальный скилл заколоть будет около 500. декса 90 ессно - получается 75% критстабов.
+* попробуем скилл/15 + (декса - 20) / (декса/20) - получается около 50% критстабов.
+* TO DO.. еще удачу есть план добавить в расчет шанса критстаба
 */
 int calculate_crit_backstab_percent(CharData *ch) {
-	float percent = ((GetRealDex(ch) -20) / (GetRealDex(ch) / 30.0));
+	float percent = ((GetRealDex(ch) -20) / (GetRealDex(ch) / 20.0));
 	if (CanUseFeat(ch, EFeat::kThieveStrike))
-		percent += (ch->GetSkill(ESkill::kBackstab) / 11.0);
+		percent += (ch->GetSkill(ESkill::kBackstab) / 15.0);
 	return (int)percent;
 }
 
@@ -2557,7 +2560,7 @@ int Damage::Process(CharData *ch, CharData *victim) {
 	victim->send_to_TC(false, true, true, "&MПолучен урон = %d&n\r\n", dam);
 	ch->send_to_TC(false, true, true, "&MПрименен урон = %d&n\r\n", dam);
 	if (dmg_type == fight::kPhysDmg && GET_GOD_FLAG(ch, EGf::kSkillTester) && skill_id != ESkill::kUndefined) {
-		log("SKILLTEST:;%s;skill;%s;damage;%d", GET_NAME(ch), MUD::Skill(skill_id).GetName(), dam);
+		log("SKILLTEST:;%s;skill;%s;damage;%d;Luck;%s", GET_NAME(ch), MUD::Skill(skill_id).GetName(), dam, flags[fight::kCritLuck] ? "yes" : "no");
 	}
 	// если на чармисе вампир
 	if (AFF_FLAGGED(ch, EAffect::kVampirism)) {
