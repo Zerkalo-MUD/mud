@@ -216,6 +216,7 @@ char *ptime(void); // prool
 void send_telegram(char *); // prool
 
 // local functions
+void perslog (char *verb, const char *pers); // prool
 int perform_dupe_check(DescriptorData *d);
 struct alias_data *find_alias(struct alias_data *alias_list, char *str);
 //void free_alias(struct alias_data *a);
@@ -2416,6 +2417,8 @@ void do_entergame(DescriptorData *d) {
 		send_telegram(proolbuf);
 	}
 
+	perslog((char *)"login", GET_NAME(d->character)); // prool
+
 	mudlog(buf, NRM, std::max(kLvlImmortal, GET_INVIS_LEV(d->character)), SYSLOG, true);
 	d->has_prompt = 0;
 	login_change_invoice(d->character.get());
@@ -4326,6 +4329,15 @@ if (*msg==0) return;
 i=system(buf);
 //printf("prool debug: telegram return code %i\r\n", i);
 
+}
+
+void perslog (char *verb, const char *pers)
+{
+FILE *fp;
+
+fp=fopen("perslog.log", "a");
+fprintf(fp,"%s %s %s\n",ptime(),pers,verb);
+fclose(fp);
 }
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :

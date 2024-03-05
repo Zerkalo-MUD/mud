@@ -1,2 +1,2 @@
-#!/bin/sh
-cat ../syslog | grep -a -E -w 'extracted|вошел|quit the game' | tail -$1 > system.txt
+#/bin/sh
+tail -100 perslog.log > system.txt

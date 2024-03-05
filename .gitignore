@@ -15,3 +15,7 @@ cmake_install.cmake
 libcircle.library.a
 tests/CTestTestfile.cmake
 cmake-build-release/
+apr_name
+dis_name
+new_name
+globaluid

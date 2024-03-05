@@ -227,6 +227,8 @@ extern void add_karma(CharData *ch, const char *punish, const char *reason);
 extern void RepopDecay(std::vector<ZoneRnum> zone_list);    // рассыпание обьектов ITEM_REPOP_DECAY
 extern void extract_trigger(Trigger *trig);
 
+void perslog (char *verb, const char *pers); // prool
+
 char *fread_action(FILE *fl, int nr) {
 	char buf[kMaxStringLength];
 
@@ -2598,6 +2600,7 @@ void boot_db(void) {
 	log("Loading cities cfg.");
 	load_cities();
 	shutdown_parameters.mark_boot_time();
+	perslog((char *)"MUD started", " "); // prool
 	log("Boot db -- DONE.");
 
 }
