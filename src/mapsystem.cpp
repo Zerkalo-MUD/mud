@@ -2,8 +2,6 @@
 // Copyright (c) 2013 Krodo
 // Part of Bylins http://www.mud.ru
 
-#include "boost/multi_array.hpp"
-#include <boost/algorithm/string.hpp>
 #include <third_party_libs/fmt/include/fmt/format.h>
 
 #include "act_movement.h"
@@ -12,8 +10,7 @@
 #include "noob.h"
 #include "utils/utils_char_obj.inl"
 #include "game_mechanics/guilds.h"
-
-extern std::vector<City> cities;
+#include "game_mechanics/cities.h"
 
 namespace Noob {
 int outfit(CharData *ch, void *me, int cmd, char *argument);
@@ -44,12 +41,12 @@ const size_t MAX_LENGTH_BIG = MAX_DEPTH_ROOM_BIG * 8 + 1;
 
 // поле для отрисовки
 //int screen[MAX_LINES][MAX_LENGHT];
-boost::multi_array<int, 2> screen(boost::extents[MAX_LINES_BIG][MAX_LENGTH_BIG]);
+int screen[MAX_LINES_BIG][MAX_LENGTH_BIG];
 // копия поля для хранения глубины текущей отрисовки по нужным координатам
 // используется для случаев наезжания комнат друг на друга, в этом случае
 // ближняя затирает более дальнюю и все остальные после нее
-//int depths[MAX_LINES][MAX_LENGHT];
-boost::multi_array<int, 2> depths(boost::extents[MAX_LINES_BIG][MAX_LENGTH_BIG]);
+//int depths[MAX_LINES][MAX_LENGHT]
+int depths[MAX_LINES_BIG][MAX_LENGTH_BIG];
 
 enum {
 	// свободный проход
@@ -404,7 +401,7 @@ bool mode_allow(const CharData *ch, int cur_depth) {
 
 void draw_room(CharData *ch, const RoomData *room, int cur_depth, int y, int x) {
 	// чтобы не ходить по комнатам вторично, но с проверкой на глубину
-	auto i = check_dupe.find(room->room_vn);
+	auto i = check_dupe.find(room->vnum);
 	if (i != check_dupe.end()) {
 		if (i->second <= cur_depth) {
 			return;
@@ -412,7 +409,7 @@ void draw_room(CharData *ch, const RoomData *room, int cur_depth, int y, int x) 
 			i->second = cur_depth;
 		}
 	} else {
-		check_dupe.insert(std::make_pair(room->room_vn, cur_depth));
+		check_dupe.insert(std::make_pair(room->vnum, cur_depth));
 	}
 
 	if (world[ch->in_room] == room) {
@@ -574,15 +571,10 @@ void print_map(CharData *ch, CharData *imm) {
 	MAX_LINES = MAX_LINES_STANDART;
 	MAX_LENGTH = MAX_LENGTH_STANDART;
 	MAX_DEPTH_ROOMS = MAX_DEPTH_ROOM_STANDART;
-	if (ch->map_check_option(MAP_MODE_BIG)) {
-		for (unsigned int i = 0; i < cities.size(); i++) {
-			if (GetZoneVnumByCharPlace(ch) == cities[i].rent_vnum / 100) {
-				MAX_LINES = MAX_LINES_BIG;
-				MAX_LENGTH = MAX_LENGTH_BIG;
-				MAX_DEPTH_ROOMS = MAX_DEPTH_ROOM_BIG;
-				break;
-			}
-		}
+	if (ch->map_check_option(MAP_MODE_BIG) && cities::IsCharInCity(ch)) {
+		MAX_LINES = MAX_LINES_BIG;
+		MAX_LENGTH = MAX_LENGTH_BIG;
+		MAX_DEPTH_ROOMS = MAX_DEPTH_ROOM_BIG;
 	}
 	for (unsigned i = 0; i < MAX_LINES; ++i) {
 		for (unsigned k = 0; k < MAX_LENGTH; ++k) {
@@ -894,8 +886,7 @@ const char *message =
 	"   &Wкарта справка|помощь&n - вывод данной справки\r\n";
 
 bool parse_text_olc(CharData *ch, const std::string &str, std::bitset<TOTAL_MAP_OPTIONS> &bits, bool flag) {
-	std::vector<std::string> str_list;
-	boost::split(str_list, str, boost::is_any_of(","), boost::token_compress_on);
+	std::vector<std::string> str_list = utils::Split(str, ',');
 	bool error = false;
 
 	for (std::vector<std::string>::const_iterator k = str_list.begin(),
@@ -1007,7 +998,7 @@ void do_map(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (ch->IsNpc()) {
 		return;
 	}
-	if (PRF_FLAGGED(ch, EPrf::kBlindMode)) {
+	if (ch->IsFlagged(EPrf::kBlindMode)) {
 		SendMsgToChar("В режиме слепого игрока карта недоступна.\r\n", ch);
 		return;
 	} else if (AFF_FLAGGED(ch, EAffect::kBlind)) {

@@ -24,6 +24,8 @@
 #include <utility>
 #include <iomanip>
 
+#include <third_party_libs/fmt/include/fmt/format.h>
+
 #include "utils/utils_char_obj.inl"
 #include "entities/char_data.h"
 #include "entities/char_player.h"
@@ -98,11 +100,8 @@ void do_display(CharData *ch, char *argument, int cmd, int subcmd);
 void do_gen_tog(CharData *ch, char *argument, int cmd, int subcmd);
 void do_courage(CharData *ch, char *argument, int cmd, int subcmd);
 void do_toggle(CharData *ch, char *argument, int cmd, int subcmd);
-void do_color(CharData *ch, char *argument, int cmd, int subcmd);
 void do_recall(CharData *ch, char *argument, int cmd, int subcmd);
 void do_dig(CharData *ch, char *argument, int cmd, int subcmd);
-void do_summon(CharData *ch, char *argument, int cmd, int subcmd);
-//bool is_dark(RoomRnum room);
 
 void do_antigods(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
 	if (IS_IMMORTAL(ch)) {
@@ -128,9 +127,9 @@ void do_quit(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 
 	if (subcmd != SCMD_QUIT)
 		SendMsgToChar("Вам стоит набрать эту команду полностью во избежание недоразумений!\r\n", ch);
-	else if (GET_POS(ch) == EPosition::kFight)
+	else if (ch->GetPosition() == EPosition::kFight)
 		SendMsgToChar("Угу! Щаз-з-з! Вы, батенька, деретесь!\r\n", ch);
-	else if (GET_POS(ch) < EPosition::kStun) {
+	else if (ch->GetPosition() < EPosition::kStun) {
 		SendMsgToChar("Вас пригласила к себе владелица косы...\r\n", ch);
 		die(ch, nullptr);
 	}
@@ -185,7 +184,6 @@ void do_quit(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 }
 
 void do_summon(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
-	// для начала проверяем, есть ли вообще лошадь у чара
 	CharData *horse = nullptr;
 	horse = ch->get_horse();
 	if (!horse) {
@@ -193,8 +191,8 @@ void do_summon(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
 		return;
 	}
 
-	if (ch->in_room == IN_ROOM(horse)) {
-		SendMsgToChar("Но ваш какун рядом с вами!\r\n", ch);
+	if (ch->in_room == horse->in_room) {
+		SendMsgToChar("Но ваш cкакун рядом с вами!\r\n", ch);
 		return;
 	}
 
@@ -476,7 +474,7 @@ void go_steal(CharData *ch, CharData *vict, char *obj_name) {
 		return;
 	}
 
-	if (!IS_IMMORTAL(ch) && ROOM_FLAGGED(IN_ROOM(vict), ERoomFlag::kArena)) {
+	if (!IS_IMMORTAL(ch) && ROOM_FLAGGED(vict->in_room, ERoomFlag::kArena)) {
 		SendMsgToChar("Воровство при поединке недопустимо.\r\n", ch);
 		return;
 	}
@@ -484,7 +482,7 @@ void go_steal(CharData *ch, CharData *vict, char *obj_name) {
 	// 101% is a complete failure
 	percent = number(1, MUD::Skill(ESkill::kSteal).difficulty);
 
-	if (IS_IMMORTAL(ch) || (GET_POS(vict) <= EPosition::kSleep && !AFF_FLAGGED(vict, EAffect::kSleep)))
+	if (IS_IMMORTAL(ch) || (vict->GetPosition() <= EPosition::kSleep && !AFF_FLAGGED(vict, EAffect::kSleep)))
 		success = 1;    // ALWAYS SUCCESS, unless heavy object.
 
 	if (!AWAKE(vict))    // Easier to steal from sleeping people.
@@ -518,10 +516,10 @@ void go_steal(CharData *ch, CharData *vict, char *obj_name) {
 				if (!success) {
 					SendMsgToChar("Украсть? Из экипировки? Щаз-з-з!\r\n", ch);
 					return;
-				} else if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)) {
+				} else if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)) {
 					SendMsgToChar("Вы не сможете унести столько предметов.\r\n", ch);
 					return;
-				} else if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj) > CAN_CARRY_W(ch)) {
+				} else if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj) > CAN_CARRY_W(ch)) {
 					SendMsgToChar("Вы не сможете унести такой вес.\r\n", ch);
 					return;
 				} else if (obj->has_flag(EObjFlag::kBloody)) {
@@ -563,8 +561,8 @@ void go_steal(CharData *ch, CharData *vict, char *obj_name) {
 				act("$n пытал$u украсть нечто у $N1.", true, ch, nullptr, vict, kToNotVict | kToArenaListen);
 			} else    // Steal the item
 			{
-				if (IS_CARRYING_N(ch) + 1 < CAN_CARRY_N(ch)) {
-					if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj) < CAN_CARRY_W(ch)) {
+				if (ch->GetCarryingQuantity() + 1 < CAN_CARRY_N(ch)) {
+					if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj) < CAN_CARRY_W(ch)) {
 						RemoveObjFromChar(obj);
 						PlaceObjToInventory(obj, ch);
 						act("Вы украли $o3 у $N1!", false, ch, obj, vict, kToChar);
@@ -669,8 +667,8 @@ void do_steal(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		SendMsgToChar("Воровать у своих? Это мерзко...\r\n", ch);
 		return;
 	}
-	if (vict->IsNpc() && (MOB_FLAGGED(vict, EMobFlag::kNoFight) || AFF_FLAGGED(vict, EAffect::kGodsShield)
-		|| MOB_FLAGGED(vict, EMobFlag::kProtect))
+	if (vict->IsNpc() && (vict->IsFlagged(EMobFlag::kNoFight) || AFF_FLAGGED(vict, EAffect::kGodsShield)
+		|| vict->IsFlagged(EMobFlag::kProtect))
 		&& !(IS_IMMORTAL(ch) || GET_GOD_FLAG(ch, EGf::kGodsLike))) {
 		SendMsgToChar("А ежели поймают? Посодют ведь!\r\nПодумав так, вы отказались от сего намеренья.\r\n", ch);
 		return;
@@ -777,8 +775,8 @@ bool is_group_member(CharData *ch, CharData *vict) {
 int perform_group(CharData *ch, CharData *vict) {
 	if (AFF_FLAGGED(vict, EAffect::kGroup)
 		|| AFF_FLAGGED(vict, EAffect::kCharmed)
-		|| MOB_FLAGGED(vict, EMobFlag::kTutelar)
-		|| MOB_FLAGGED(vict, EMobFlag::kMentalShadow)
+		|| vict->IsFlagged(EMobFlag::kTutelar)
+		|| vict->IsFlagged(EMobFlag::kMentalShadow)
 		|| IS_HORSE(vict)) {
 		return (false);
 	}
@@ -877,7 +875,6 @@ void change_leader(CharData *ch, CharData *vict) {
 }
 
 void print_one_line(CharData *ch, CharData *k, int leader, int header) {
-	int ok, ok2, div;
 	const char *WORD_STATE[] = {"При смерти",
 								"Оч.тяж.ран",
 								"Оч.тяж.ран",
@@ -915,59 +912,35 @@ void print_one_line(CharData *ch, CharData *k, int leader, int header) {
 							   "Стоит"
 	};
 
-	if (k->IsNpc()) {
-		if (!header)
-//       SendMsgToChar("Персонаж       | Здоровье |Рядом| Доп | Положение     | Лояльн.\r\n",ch);
-			SendMsgToChar("Персонаж            | Здоровье |Рядом| Аффект | Положение\r\n", ch);
-		std::string name = GET_NAME(k);
-		name[0] = UPPER(name[0]);
-		sprintf(buf, "%s%-20s%s|", CCIBLU(ch, C_NRM),
-				name.substr(0, 20).c_str(), CCNRM(ch, C_NRM));
-		sprintf(buf + strlen(buf), "%s%10s%s|",
-				color_value(ch, GET_HIT(k), GET_REAL_MAX_HIT(k)),
-				WORD_STATE[posi_value(GET_HIT(k), GET_REAL_MAX_HIT(k)) + 1], CCNRM(ch, C_NRM));
-
-		ok = ch->in_room == IN_ROOM(k);
-		sprintf(buf + strlen(buf), "%s%5s%s|",
-				ok ? CCGRN(ch, C_NRM) : CCRED(ch, C_NRM), ok ? " Да  " : " Нет ", CCNRM(ch, C_NRM));
-
-		sprintf(buf + strlen(buf), " %s%s%s%s%s%s%s%s%s%s%s%s%s |",
-				CCIRED(ch, C_NRM),
-				AFF_FLAGGED(k, EAffect::kSanctuary) ? "О" : (AFF_FLAGGED(k, EAffect::kPrismaticAura) ? "П"
-																									 : " "),
-				CCGRN(ch, C_NRM),
-				AFF_FLAGGED(k, EAffect::kWaterBreath) ? "Д" : " ", CCICYN(ch, C_NRM),
-				AFF_FLAGGED(k, EAffect::kInvisible) ? "Н" : " ", CCIYEL(ch, C_NRM),
-				(AFF_FLAGGED(k, EAffect::kSingleLight)
+	auto generate_affects_string = [](CharData *k) -> std::string {
+		std::string affects;
+		affects += AFF_FLAGGED(k, EAffect::kSanctuary) ? "&RО" : (AFF_FLAGGED(k, EAffect::kPrismaticAura) ? "&RП" : " ");
+		affects += AFF_FLAGGED(k, EAffect::kWaterBreath) ? "&gД" : " ";
+		affects += AFF_FLAGGED(k, EAffect::kInvisible) ? "&CН" : " ";
+		affects += (AFF_FLAGGED(k, EAffect::kSingleLight) 
 					|| AFF_FLAGGED(k, EAffect::kHolyLight)
 					|| (GET_EQ(k, EEquipPos::kLight)
-						&& GET_OBJ_VAL(GET_EQ(k, EEquipPos::kLight), 2))) ? "С" : " ",
-				CCIBLU(ch, C_NRM), AFF_FLAGGED(k, EAffect::kFly) ? "Л" : " ", CCYEL(ch, C_NRM),
-				k->low_charm() ? "Т" : " ", CCNRM(ch, C_NRM));
+						&& GET_OBJ_VAL(GET_EQ(k, EEquipPos::kLight), 2))) ? "&YС" : " ";
+		affects += AFF_FLAGGED(k, EAffect::kFly) ? "&BЛ" : " ";
 
-		sprintf(buf + strlen(buf), "%-15s", POS_STATE[(int) GET_POS(k)]);
+		return affects;
+	};
 
-		act(buf, false, ch, nullptr, k, kToChar);
-	} else {
-		if (!header)
-			SendMsgToChar("Персонаж            | Здоровье |Энергия|Рядом|Учить| Аффект | Кто | Держит строй | Положение \r\n",
-				 ch);
+	auto generate_debuf_string = [](CharData *k) -> std::string {
+		std::string debuf;
+		debuf += AFF_FLAGGED(k, EAffect::kHold) ? "&RХ" : " ";
+		debuf += AFF_FLAGGED(k, EAffect::kSleep) ? "&BС" : " ";
+		debuf += AFF_FLAGGED(k, EAffect::kSilence) ? "&yМ" : " ";
+		debuf += AFF_FLAGGED(k, EAffect::kDeafness) ? "&gГ" : " ";
+		debuf += AFF_FLAGGED(k, EAffect::kBlind) ? "&YБ" : " ";
+		debuf += AFF_FLAGGED(k, EAffect::kCurse) ? "&mП" : " ";
+		debuf += IsAffectedBySpell(k, ESpell::kFever) ? "&cЛ" : " ";
 
-		std::string name = GET_NAME(k);
-		name[0] = UPPER(name[0]);
-		sprintf(buf, "%s%-20s%s|", CCIBLU(ch, C_NRM), name.c_str(), CCNRM(ch, C_NRM));
-		sprintf(buf + strlen(buf), "%s%10s%s|",
-				color_value(ch, GET_HIT(k), GET_REAL_MAX_HIT(k)),
-				WORD_STATE[posi_value(GET_HIT(k), GET_REAL_MAX_HIT(k)) + 1], CCNRM(ch, C_NRM));
+		return debuf;
+	};
 
-		sprintf(buf + strlen(buf), "%s%7s%s|",
-				color_value(ch, GET_MOVE(k), GET_REAL_MAX_MOVE(k)),
-				MOVE_STATE[posi_value(GET_MOVE(k), GET_REAL_MAX_MOVE(k)) + 1], CCNRM(ch, C_NRM));
-
-		ok = ch->in_room == IN_ROOM(k);
-		sprintf(buf + strlen(buf), "%s%5s%s|",
-				ok ? CCGRN(ch, C_NRM) : CCRED(ch, C_NRM), ok ? " Да  " : " Нет ", CCNRM(ch, C_NRM));
-
+	auto generate_mem_string = [](CharData *k) -> std::string {
+		int ok, ok2, div;
 		if ((!IS_MANA_CASTER(k) && !k->mem_queue.Empty()) ||
 			(IS_MANA_CASTER(k) && k->mem_queue.stored < GET_MAX_MANA(k))) {
 			div = CalcManaGain(k);
@@ -982,49 +955,66 @@ void print_one_line(CharData *ch, CharData *k, int leader, int header) {
 				ok = ok2 / 60;
 				ok2 %= 60;
 				if (ok > 99)
-					sprintf(buf + strlen(buf), "&g%5d&n|", ok);
+					return fmt::format("&g{:02}", ok);
 				else
-					sprintf(buf + strlen(buf), "&g%2d:%02d&n|", ok, ok2);
+					return fmt::format("&g{:02}:{:02}", ok, ok2);
 			} else {
-				sprintf(buf + strlen(buf), "&r    -&n|");
+				return "&r  -  ";				
 			}
 		} else
-			sprintf(buf + strlen(buf), "     |");
+			return " ";
+	};
 
-		sprintf(buf + strlen(buf),
-				" %s%s%s%s%s%s%s%s%s%s%s%s%s |",
-				CCIRED(ch, C_NRM),
-				AFF_FLAGGED(k, EAffect::kSanctuary) ? "О" : (AFF_FLAGGED(k, EAffect::kPrismaticAura)
-																	? "П" : " "),
-				CCGRN(ch,
-					  C_NRM),
-				AFF_FLAGGED(k, EAffect::kWaterBreath) ? "Д" : " ",
-				CCICYN(ch,
-					   C_NRM),
-				AFF_FLAGGED(k, EAffect::kInvisible) ? "Н" : " ",
-				CCIYEL(ch, C_NRM),
-				(AFF_FLAGGED(k, EAffect::kSingleLight)
-					|| AFF_FLAGGED(k, EAffect::kHolyLight)
-					|| (GET_EQ(k, EEquipPos::kLight)
-						&&
-							GET_OBJ_VAL(GET_EQ
-										(k, EEquipPos::kLight),
-										2))) ? "С" : " ",
-				CCIBLU(ch, C_NRM),
-				AFF_FLAGGED(k, EAffect::kFly) ? "Л" : " ",
-				CCYEL(ch, C_NRM),
-				k->IsOnHorse() ? "В" : " ",
-				CCNRM(ch, C_NRM));
 
-		sprintf(buf + strlen(buf), "%5s|", leader ? "Лидер" : "");
-		ok = PRF_FLAGGED(k, EPrf::kSkirmisher);
-		sprintf(buf + strlen(buf),
-				"%s%-14s%s|",
-				ok ? CCGRN(ch, C_NRM) : CCNRM(ch, C_NRM),
-				ok ? " Да  " : " Нет ",
-				CCNRM(ch, C_NRM));
-		sprintf(buf + strlen(buf), " %s", POS_STATE[(int) GET_POS(k)]);
-		act(buf, false, ch, nullptr, k, kToChar);
+	if (k->IsNpc()) {
+		std::ostringstream buffer;
+		if (!header)
+			buffer << "Персонаж            | Здоровье | Рядом | Аффект |  Дебаф  | Положение\r\n";
+
+		buffer << fmt::format("&B{:<20}&n|", k->get_name().substr(0, 20));
+
+		buffer << fmt::format("{}", color_value(ch, GET_HIT(k), GET_REAL_MAX_HIT(k)));
+		buffer << fmt::format("{:<10}&n|", WORD_STATE[posi_value(GET_HIT(k), GET_REAL_MAX_HIT(k)) + 1]);
+		buffer << fmt::format(" {:^7} &n|", ch->in_room == k->in_room ? "&gДа" : "&rНет");
+
+		// АФФЕКТЫ 
+		buffer << fmt::format(" {:<5}", generate_affects_string(k));
+		buffer << fmt::format("{:<1} &n|", k->low_charm() ? "&nТ" : " ");
+		
+		// ДЕБАФЫ
+		buffer << fmt::format(" {:<7} &n|", generate_debuf_string(k));
+		
+		buffer << fmt::format(" {:<10}\r\n", POS_STATE[(int) k->GetPosition()]);
+
+		SendMsgToChar(buffer.str().c_str(), ch);
+
+	} else {
+		std::ostringstream buffer;
+		if (!header)
+			buffer << "Персонаж            | Здоровье | Энергия | Рядом | Учить | Аффект |  Дебаф  |  Кто  | Строй | Положение \r\n";
+
+		std::string health_color = color_value(ch, GET_HIT(k), GET_REAL_MAX_HIT(k));
+		std::string move_color = color_value(ch, GET_MOVE(k), GET_REAL_MAX_MOVE(k));
+
+		buffer << fmt::format("&B{:<20}&n|", k->get_name()); 
+
+		buffer << fmt::format("{}", health_color);
+		buffer << fmt::format("{:<10}&n|", WORD_STATE[posi_value(GET_HIT(k), GET_REAL_MAX_HIT(k)) + 1]);
+
+		buffer << fmt::format("{}", move_color);
+		buffer << fmt::format("{:^9}&n|", MOVE_STATE[posi_value(GET_MOVE(k), GET_REAL_MAX_MOVE(k)) + 1]);
+
+		buffer << fmt::format(" {:^7} &n|", ch->in_room == k->in_room ? "&gДа" : "&rНет");
+
+		buffer << fmt::format(" {:^5} &n|", generate_mem_string(k));
+		buffer << fmt::format(" {:<5}  &n|", generate_affects_string(k));
+		buffer << fmt::format(" {:<7} &n|", generate_debuf_string(k));
+		
+		buffer << fmt::format(" {:^5} &n|", leader ? "Лидер" : "");
+		buffer << fmt::format(" {:^5} &n|", k->IsFlagged(EPrf::kSkirmisher) ? " &gДа  " : "Нет");
+		buffer << fmt::format(" {:<10}\r\n", POS_STATE[(int) k->GetPosition()]);
+
+		SendMsgToChar(buffer.str().c_str(), ch);
 	}
 }
 
@@ -1078,7 +1068,7 @@ void print_group(CharData *ch) {
 
 	for (f = ch->followers; f; f = f->next) {
 		if (!(AFF_FLAGGED(f->follower, EAffect::kCharmed)
-			|| MOB_FLAGGED(f->follower, EMobFlag::kTutelar) || MOB_FLAGGED(f->follower, EMobFlag::kMentalShadow))) {
+			|| f->follower->IsFlagged(EMobFlag::kTutelar) || f->follower->IsFlagged(EMobFlag::kMentalShadow))) {
 			continue;
 		}
 		if (!cfound)
@@ -1089,11 +1079,11 @@ void print_group(CharData *ch) {
 		SendMsgToChar("Но вы же не член (в лучшем смысле этого слова) группы!\r\n", ch);
 		return;
 	}
-	if (PRF_FLAGGED(ch, EPrf::kShowGroup)) {
+	if (ch->IsFlagged(EPrf::kShowGroup)) {
 		for (g = k->followers, cfound = 0; g; g = g->next) {
 			for (f = g->follower->followers; f; f = f->next) {
 				if (!(AFF_FLAGGED(f->follower, EAffect::kCharmed)
-					|| MOB_FLAGGED(f->follower, EMobFlag::kTutelar) || MOB_FLAGGED(f->follower, EMobFlag::kMentalShadow))
+					|| f->follower->IsFlagged(EMobFlag::kTutelar) || f->follower->IsFlagged(EMobFlag::kMentalShadow))
 					|| !AFF_FLAGGED(ch, EAffect::kGroup)) {
 					continue;
 				}
@@ -1103,10 +1093,9 @@ void print_group(CharData *ch) {
 					continue;
 				}
 
-				// shapirus: при включенном режиме не показываем клонов и хранителей
-				if (PRF_FLAGGED(ch, EPrf::kNoClones)
+				if (ch->IsFlagged(EPrf::kNoClones)
 					&& f->follower->IsNpc()
-					&& (MOB_FLAGGED(f->follower, EMobFlag::kClone)
+					&& (f->follower->IsFlagged(EMobFlag::kClone)
 						|| GET_MOB_VNUM(f->follower) == kMobKeeper)) {
 					continue;
 				}
@@ -1119,15 +1108,14 @@ void print_group(CharData *ch) {
 
 			if (ch->has_master()) {
 				if (!(AFF_FLAGGED(g->follower, EAffect::kCharmed)
-					|| MOB_FLAGGED(g->follower, EMobFlag::kTutelar) || MOB_FLAGGED(g->follower, EMobFlag::kMentalShadow))
+					|| g->follower->IsFlagged(EMobFlag::kTutelar) || g->follower->IsFlagged(EMobFlag::kMentalShadow))
 					|| !AFF_FLAGGED(ch, EAffect::kGroup)) {
 					continue;
 				}
 
-				// shapirus: при включенном режиме не показываем клонов и хранителей
-				if (PRF_FLAGGED(ch, EPrf::kNoClones)
+				if (ch->IsFlagged(EPrf::kNoClones)
 					&& g->follower->IsNpc()
-					&& (MOB_FLAGGED(g->follower, EMobFlag::kClone)
+					&& (g->follower->IsFlagged(EMobFlag::kClone)
 						|| GET_MOB_VNUM(g->follower) == kMobKeeper)) {
 					continue;
 				}
@@ -1158,7 +1146,7 @@ void do_group(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		return;
 	}
 
-	if (GET_POS(ch) < EPosition::kRest) {
+	if (ch->GetPosition() < EPosition::kRest) {
 		SendMsgToChar("Трудно управлять группой в таком состоянии.\r\n", ch);
 		return;
 	}
@@ -1204,7 +1192,7 @@ void do_group(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		// а то чото как-то глючно Двойник %1 не является членом вашей группы.
 		if (vict
 			&& vict->IsNpc()
-			&& MOB_FLAGGED(vict, EMobFlag::kClone)
+			&& vict->IsFlagged(EMobFlag::kClone)
 			&& AFF_FLAGGED(vict, EAffect::kCharmed)
 			&& vict->has_master()
 			&& !vict->get_master()->IsNpc()) {
@@ -1237,8 +1225,8 @@ void do_group(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		act("$N2 нужно следовать за вами, чтобы стать членом вашей группы.", false, ch, nullptr, vict, kToChar);
 	} else {
 		if (!AFF_FLAGGED(vict, EAffect::kGroup)) {
-			if (AFF_FLAGGED(vict, EAffect::kCharmed) || MOB_FLAGGED(vict, EMobFlag::kTutelar)
-				|| MOB_FLAGGED(vict, EMobFlag::kMentalShadow) || IS_HORSE(vict)) {
+			if (AFF_FLAGGED(vict, EAffect::kCharmed) || vict->IsFlagged(EMobFlag::kTutelar)
+				|| vict->IsFlagged(EMobFlag::kMentalShadow) || IS_HORSE(vict)) {
 				SendMsgToChar("Только равноправные персонажи могут быть включены в группу.\r\n", ch);
 				SendMsgToChar("Только равноправные персонажи могут быть включены в группу.\r\n", vict);
 			};
@@ -1402,7 +1390,7 @@ void do_split(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/, int cur
 		for (f = k->followers; f; f = f->next) {
 			if (AFF_FLAGGED(f->follower, EAffect::kGroup)
 				&& !f->follower->IsNpc()
-				&& IN_ROOM(f->follower) == ch->in_room) {
+				&& f->follower->in_room == ch->in_room) {
 				num++;
 			}
 		}
@@ -1425,7 +1413,7 @@ void do_split(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/, int cur
 
 		sprintf(buf, "%s разделил%s %d %s; вам досталось %d.\r\n",
 				GET_NAME(ch), GET_CH_SUF_1(ch), amount, GetDeclensionInNumber(amount, what_currency), share);
-		if (AFF_FLAGGED(k, EAffect::kGroup) && IN_ROOM(k) == ch->in_room && !k->IsNpc() && k != ch) {
+		if (AFF_FLAGGED(k, EAffect::kGroup) && k->in_room == ch->in_room && !k->IsNpc() && k != ch) {
 			SendMsgToChar(buf, k);
 			switch (currency) {
 				case currency::ICE : {
@@ -1441,7 +1429,7 @@ void do_split(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/, int cur
 		for (f = k->followers; f; f = f->next) {
 			if (AFF_FLAGGED(f->follower, EAffect::kGroup)
 				&& !f->follower->IsNpc()
-				&& IN_ROOM(f->follower) == ch->in_room
+				&& f->follower->in_room == ch->in_room
 				&& f->follower != ch) {
 				SendMsgToChar(buf, f->follower);
 				switch (currency) {
@@ -1524,29 +1512,29 @@ void do_wimpy(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 void set_display_bits(CharData *ch, bool flag) {
 	if (flag) {
-		PRF_FLAGS(ch).set(EPrf::kDispHp);
-		PRF_FLAGS(ch).set(EPrf::kDispMana);
-		PRF_FLAGS(ch).set(EPrf::kDispMove);
-		PRF_FLAGS(ch).set(EPrf::kDispExits);
-		PRF_FLAGS(ch).set(EPrf::kDispMoney);
-		PRF_FLAGS(ch).set(EPrf::kDispLvl);
-		PRF_FLAGS(ch).set(EPrf::kDispExp);
-		PRF_FLAGS(ch).set(EPrf::kDispFight);
-		PRF_FLAGS(ch).set(EPrf::kDispCooldowns);
+		ch->SetFlag(EPrf::kDispHp);
+		ch->SetFlag(EPrf::kDispMana);
+		ch->SetFlag(EPrf::kDispMove);
+		ch->SetFlag(EPrf::kDispExits);
+		ch->SetFlag(EPrf::kDispMoney);
+		ch->SetFlag(EPrf::kDispLvl);
+		ch->SetFlag(EPrf::kDispExp);
+		ch->SetFlag(EPrf::kDispFight);
+		ch->SetFlag(EPrf::kDispCooldowns);
 		if (!IS_IMMORTAL(ch)) {
-			PRF_FLAGS(ch).set(EPrf::kDispTimed);
+			ch->SetFlag(EPrf::kDispTimed);
 		}
 	} else {
-		PRF_FLAGS(ch).unset(EPrf::kDispHp);
-		PRF_FLAGS(ch).unset(EPrf::kDispMana);
-		PRF_FLAGS(ch).unset(EPrf::kDispMove);
-		PRF_FLAGS(ch).unset(EPrf::kDispExits);
-		PRF_FLAGS(ch).unset(EPrf::kDispMoney);
-		PRF_FLAGS(ch).unset(EPrf::kDispLvl);
-		PRF_FLAGS(ch).unset(EPrf::kDispExp);
-		PRF_FLAGS(ch).unset(EPrf::kDispFight);
-		PRF_FLAGS(ch).unset(EPrf::kDispTimed);
-		PRF_FLAGS(ch).unset(EPrf::kDispCooldowns);
+		ch->UnsetFlag(EPrf::kDispHp);
+		ch->UnsetFlag(EPrf::kDispMana);
+		ch->UnsetFlag(EPrf::kDispMove);
+		ch->UnsetFlag(EPrf::kDispExits);
+		ch->UnsetFlag(EPrf::kDispMoney);
+		ch->UnsetFlag(EPrf::kDispLvl);
+		ch->UnsetFlag(EPrf::kDispExp);
+		ch->UnsetFlag(EPrf::kDispFight);
+		ch->UnsetFlag(EPrf::kDispTimed);
+		ch->UnsetFlag(EPrf::kDispCooldowns);
 	}
 }
 
@@ -1580,34 +1568,34 @@ void do_display(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		for (size_t i = 0; i < len; i++) {
 			switch (LOWER(argument[i])) {
 				case 'h':
-				case 'ж': PRF_FLAGS(ch).set(EPrf::kDispHp);
+				case 'ж': ch->SetFlag(EPrf::kDispHp);
 					break;
 				case 'w':
-				case 'з': PRF_FLAGS(ch).set(EPrf::kDispMana);
+				case 'з': ch->SetFlag(EPrf::kDispMana);
 					break;
 				case 'm':
-				case 'э': PRF_FLAGS(ch).set(EPrf::kDispMove);
+				case 'э': ch->SetFlag(EPrf::kDispMove);
 					break;
 				case 'e':
-				case 'в': PRF_FLAGS(ch).set(EPrf::kDispExits);
+				case 'в': ch->SetFlag(EPrf::kDispExits);
 					break;
 				case 'g':
-				case 'д': PRF_FLAGS(ch).set(EPrf::kDispMoney);
+				case 'д': ch->SetFlag(EPrf::kDispMoney);
 					break;
 				case 'l':
-				case 'у': PRF_FLAGS(ch).set(EPrf::kDispLvl);
+				case 'у': ch->SetFlag(EPrf::kDispLvl);
 					break;
 				case 'x':
-				case 'о': PRF_FLAGS(ch).set(EPrf::kDispExp);
+				case 'о': ch->SetFlag(EPrf::kDispExp);
 					break;
 				case 'б':
-				case 'f': PRF_FLAGS(ch).set(EPrf::kDispFight);
+				case 'f': ch->SetFlag(EPrf::kDispFight);
 					break;
 				case 'п':
-				case 't': PRF_FLAGS(ch).set(EPrf::kDispTimed);
+				case 't': ch->SetFlag(EPrf::kDispTimed);
 					break;
 				case 'к':
-				case 'c': PRF_FLAGS(ch).set(EPrf::kDispCooldowns);
+				case 'c': ch->SetFlag(EPrf::kDispCooldowns);
 					break;
 				case ' ': break;
 				default: SendMsgToChar(DISPLAY_HELP, ch);
@@ -1617,542 +1605,6 @@ void do_display(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	}
 
 	SendMsgToChar(OK, ch);
-}
-
-#define TOG_OFF 0
-#define TOG_ON  1
-const char *gen_tog_type[] = {"автовыходы", "autoexits",
-							  "краткий", "brief",
-							  "сжатый", "compact",
-							  "повтор", "norepeat",
-							  "обращения", "notell",
-							  "кто-то", "noinvistell",
-							  "болтать", "nogossip",
-							  "кричать", "noshout",
-							  "орать", "noholler",
-							  "поздравления", "nogratz",
-							  "аукцион", "noauction",
-							  "базар", "exchange",
-							  "задание", "quest",
-							  "автозаучивание", "automem",
-							  "нет агров", "nohassle",
-							  "призыв", "nosummon",
-							  "частный", "nowiz",
-							  "флаги комнат", "roomflags",
-							  "замедление", "slowns",
-							  "выслеживание", "trackthru",
-							  "супервидение", "holylight",
-							  "кодер", "coder",
-							  "автозавершение", "goahead",
-							  "группа", "showgroup",
-							  "без двойников", "noclones",
-							  "автопомощь", "autoassist",
-							  "автограбеж", "autoloot",
-							  "автодележ", "autosplit",
-							  "брать куны", "automoney",
-							  "арена", "arena",
-							  "ширина", "length",
-							  "высота", "width",
-							  "экран", "screen",
-							  "новости", "news",
-							  "доски", "boards",
-							  "хранилище", "chest",
-							  "пклист", "pklist",
-							  "политика", "politics",
-							  "пкформат", "pkformat",
-							  "соклановцы", "workmate",
-							  "оффтоп", "offtop",
-							  "потеря связи", "disconnect",
-							  "ингредиенты", "ingredient",
-							  "вспомнить", "remember",
-							  "уведомления", "notify",
-							  "карта", "map",
-							  "вход в зону", "enter zone",
-							  "опечатки", "misprint",
-							  "магщиты", "mageshields",
-							  "автопризыв", "autonosummon",
-							  "сдемигодам", "sdemigod",
-							  "незрячий", "blind",
-							  "маппер", "mapper",
-							  "тестер", "tester",
-							  "контроль IP", "IP control",
-							  "\n"
-};
-
-struct gen_tog_param_type {
-	int level;
-	int subcmd;
-	bool tester;
-} gen_tog_param[] =
-	{
-		{
-			0, SCMD_AUTOEXIT, false}, {
-			0, SCMD_BRIEF, false}, {
-			0, SCMD_COMPACT, false}, {
-			0, SCMD_NOREPEAT, false}, {
-			0, SCMD_NOTELL, false}, {
-			0, SCMD_NOINVISTELL, false}, {
-			0, SCMD_NOGOSSIP, false}, {
-			0, SCMD_NOSHOUT, false}, {
-			0, SCMD_NOHOLLER, false}, {
-			0, SCMD_NOGRATZ, false}, {
-			0, SCMD_NOAUCTION, false}, {
-			0, SCMD_NOEXCHANGE, false}, {
-			0, SCMD_QUEST, false}, {
-			0, SCMD_AUTOMEM, false}, {
-			kLvlGreatGod, SCMD_NOHASSLE, false}, {
-			0, SCMD_NOSUMMON, false}, {
-			kLvlGod, SCMD_NOWIZ, false}, {
-			kLvlGreatGod, SCMD_ROOMFLAGS, false}, {
-			kLvlImplementator, SCMD_SLOWNS, false}, {
-			kLvlGod, SCMD_TRACK, false}, {
-			kLvlGod, SCMD_HOLYLIGHT, false}, {
-			kLvlImplementator, SCMD_CODERINFO, false}, {
-			0, SCMD_GOAHEAD, false}, {
-			0, SCMD_SHOWGROUP, false}, {
-			0, SCMD_NOCLONES, false}, {
-			0, SCMD_AUTOASSIST, false}, {
-			0, SCMD_AUTOLOOT, false}, {
-			0, SCMD_AUTOSPLIT, false}, {
-			0, SCMD_AUTOMONEY, false}, {
-			0, SCMD_NOARENA, false}, {
-			0, SCMD_LENGTH, false}, {
-			0, SCMD_WIDTH, false}, {
-			0, SCMD_SCREEN, false}, {
-			0, SCMD_NEWS_MODE, false}, {
-			0, SCMD_BOARD_MODE, false}, {
-			0, SCMD_CHEST_MODE, false}, {
-			0, SCMD_PKL_MODE, false}, {
-			0, SCMD_POLIT_MODE, false}, {
-			0, SCMD_PKFORMAT_MODE, false}, {
-			0, SCMD_WORKMATE_MODE, false}, {
-			0, SCMD_OFFTOP_MODE, false}, {
-			0, SCMD_ANTIDC_MODE, false}, {
-			0, SCMD_NOINGR_MODE, false}, {
-			0, SCMD_REMEMBER, false}, {
-			0, SCMD_NOTIFY_EXCH, false}, {
-			0, SCMD_DRAW_MAP, false}, {
-			0, SCMD_ENTER_ZONE, false}, {
-			kLvlGod, SCMD_MISPRINT, false}, {
-			0, SCMD_BRIEF_SHIELDS, false}, {
-			0, SCMD_AUTO_NOSUMMON, false}, {
-			kLvlImplementator, SCMD_SDEMIGOD, false}, {
-			0, SCMD_BLIND, false}, {
-			0, SCMD_MAPPER, false}, {
-			0, SCMD_TESTER, true}, {
-			0, SCMD_IPCONTROL, false}
-	};
-
-void do_mode(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
-	if (ch->IsNpc()) {
-		return;
-	}
-
-	argument = one_argument(argument, arg);
-//	skip_spaces(&argument);
-	int i{0};
-	bool showhelp{false};
-	if (!*arg) {
-		do_toggle(ch, argument, 0, 0);
-		return;
-	} else if (*arg == '?') {
-		showhelp = true;
-	} else if ((i = search_block(arg, gen_tog_type, false)) < 0) {
-		showhelp = true;
-	} else if ((GetRealLevel(ch) < gen_tog_param[i >> 1].level)
-		|| (!GET_GOD_FLAG(ch, EGf::kAllowTesterMode) && gen_tog_param[i >> 1].tester)) {
-		SendMsgToChar("Эта команда вам недоступна.\r\n", ch);
-		return;
-	} else {
-		do_gen_tog(ch, argument, 0, gen_tog_param[i >> 1].subcmd);
-	}
-
-	if (showhelp) {
-		SendMsgToChar(" Можно установить:\r\n", ch);
-		table_wrapper::Table table;
-		for (i = 0; *gen_tog_type[i << 1] != '\n'; i++) {
-			if ((GetRealLevel(ch) >= gen_tog_param[i].level)
-				&& (GET_GOD_FLAG(ch, EGf::kAllowTesterMode) || !gen_tog_param[i].tester)) {
-				table << gen_tog_type[i << 1] << gen_tog_type[(i << 1) + 1] << table_wrapper::kEndRow;
-			}
-		}
-		table_wrapper::DecorateNoBorderTable(ch, table);
-		table_wrapper::PrintTableToChar(ch, table);
-	}
-}
-
-// установки экрана flag: 0 - ширина, 1 - высота
-void SetScreen(CharData *ch, char *argument, int flag) {
-	if (ch->IsNpc())
-		return;
-	skip_spaces(&argument);
-	int size = atoi(argument);
-
-	if (!flag && (size < 30 || size > 300))
-		SendMsgToChar("Ширина экрана должна быть в пределах 30 - 300 символов.\r\n", ch);
-	else if (flag == 1 && (size < 10 || size > 100))
-		SendMsgToChar("Высота экрана должна быть в пределах 10 - 100 строк.\r\n", ch);
-	else if (!flag) {
-		STRING_LENGTH(ch) = size;
-		SendMsgToChar("Ладушки.\r\n", ch);
-		ch->save_char();
-	} else if (flag == 1) {
-		STRING_WIDTH(ch) = size;
-		SendMsgToChar("Ладушки.\r\n", ch);
-		ch->save_char();
-	} else {
-		std::ostringstream buffer;
-		for (int i = 50; i > 0; --i)
-			buffer << i << "\r\n";
-		SendMsgToChar(buffer.str(), ch);
-	}
-}
-
-// * 'режим автограбеж все|ингредиенты', по дефолту - все
-void set_autoloot_mode(CharData *ch, char *argument) {
-	static const char *message_on = "Автоматический грабеж трупов включен.\r\n";
-	static const char
-		*message_no_ingr = "Автоматический грабеж трупов, исключая ингредиенты и магические компоненты, включен.\r\n";
-	static const char *message_off = "Автоматический грабеж трупов выключен.\r\n";
-
-	skip_spaces(&argument);
-	if (!*argument) {
-		if (PRF_TOG_CHK(ch, EPrf::kAutoloot)) {
-			SendMsgToChar(PRF_FLAGGED(ch, EPrf::kNoIngrLoot) ? message_no_ingr : message_on, ch);
-		} else {
-			SendMsgToChar(message_off, ch);
-		}
-	} else if (utils::IsAbbr(argument, "все")) {
-		PRF_FLAGS(ch).set(EPrf::kAutoloot);
-		PRF_FLAGS(ch).unset(EPrf::kNoIngrLoot);
-		SendMsgToChar(message_on, ch);
-	} else if (utils::IsAbbr(argument, "ингредиенты")) {
-		PRF_FLAGS(ch).set(EPrf::kAutoloot);
-		PRF_FLAGS(ch).set(EPrf::kNoIngrLoot);
-		SendMsgToChar(message_no_ingr, ch);
-	} else if (utils::IsAbbr(argument, "нет")) {
-		PRF_FLAGS(ch).unset(EPrf::kAutoloot);
-		PRF_FLAGS(ch).unset(EPrf::kNoIngrLoot);
-		SendMsgToChar(message_off, ch);
-	} else {
-		SendMsgToChar("Формат команды: режим автограбеж <без-параметров|все|ингредиенты|нет>\r\n", ch);
-	}
-}
-
-//Polud установка оффлайн-уведомлений базара
-void setNotifyEchange(CharData *ch, char *argument) {
-	skip_spaces(&argument);
-	if (!*argument) {
-		SendMsgToChar(ch, "Формат команды: режим уведомления <минимальная цена, число от 0 до %d>.\r\n", 0x7fffffff);
-		return;
-	}
-	long size = atol(argument);
-	if (size >= 100) {
-		SendMsgToChar(ch,
-					  "Вам будут приходить уведомления о продаже с базара ваших лотов стоимостью не менее чем %ld %s.\r\n",
-					  size,
-					  GetDeclensionInNumber(size, EWhat::kMoneyA));
-		NOTIFY_EXCH_PRICE(ch) = size;
-		ch->save_char();
-	} else if (size >= 0 && size < 100) {
-		SendMsgToChar(ch,
-					  "Вам не будут приходить уведомления о продаже с базара ваших лотов, так как указана цена меньше 100 кун.\r\n");
-		NOTIFY_EXCH_PRICE(ch) = 0;
-		ch->save_char();
-	} else {
-		SendMsgToChar(ch, "Укажите стоимость лота от 0 до %d\r\n", 0x7fffffff);
-	}
-
-}
-
-//-Polud
-void do_gen_tog(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
-	long result = 0;
-
-	const char *tog_messages[][2] =
-		{
-			{"Вы защищены от призыва.\r\n",
-			 "Вы можете быть призваны.\r\n"},
-			{"Nohassle disabled.\r\n",
-			 "Nohassle enabled.\r\n"},
-			{"Краткий режим выключен.\r\n",
-			 "Краткий режим включен.\r\n"},
-			{"Сжатый режим выключен.\r\n",
-			 "Сжатый режим включен.\r\n"},
-			{"К вам можно обратиться.\r\n",
-			 "Вы глухи к обращениям.\r\n"},
-			{"Вам будут выводиться сообщения аукциона.\r\n",
-			 "Вы отключены от участия в аукционе.\r\n"},
-			{"Вы слышите то, что орут.\r\n",
-			 "Вы глухи к тому, что орут.\r\n"},
-			{"Вы слышите всю болтовню.\r\n",
-			 "Вы глухи к болтовне.\r\n"},
-			{"Вы слышите все поздравления.\r\n",
-			 "Вы глухи к поздравлениям.\r\n"},
-			{"You can now hear the Wiz-channel.\r\n",
-			 "You are now deaf to the Wiz-channel.\r\n"},
-			{"Вы больше не выполняете задания.\r\n",
-			 "Вы выполняете задание!\r\n"},
-			{"Вы больше не будете видеть флаги комнат.\r\n",
-			 "Вы способны различать флаги комнат.\r\n"},
-			{"Ваши сообщения будут дублироваться.\r\n",
-			 "Ваши сообщения не будут дублироваться вам.\r\n"},
-			{"HolyLight mode off.\r\n",
-			 "HolyLight mode on.\r\n"},
-			{"Nameserver_is_slow changed to NO; IP addresses will now be resolved.\r\n",
-			 "Nameserver_is_slow changed to YES; sitenames will no longer be resolved.\r\n"},
-			{"Показ выходов автоматически выключен.\r\n",
-			 "Показ выходов автоматически включен.\r\n"},
-			{"Вы не можете более выследить сквозь двери.\r\n",
-			 "Вы способны выслеживать сквозь двери.\r\n"},
-			{"\r\n",
-			 "\r\n"},
-			{"Режим показа дополнительной информации выключен.\r\n",
-			 "Режим показа дополнительной информации включен.\r\n"},
-			{"Автозаучивание заклинаний выключено.\r\n",
-			 "Автозаучивание заклинаний включено.\r\n"},
-			{"Сжатие запрещено.\r\n",
-			 "Сжатие разрешено.\r\n"},
-			{"\r\n",
-			 "\r\n"},
-			{"Вы слышите все крики.\r\n",
-			 "Вы глухи к крикам.\r\n"},
-			{"Режим автозавершения (IAC GA) выключен.\r\n",
-			 "Режим автозавершения (IAC GA) включен.\r\n"},
-			{"При просмотре состава группы будут отображаться только персонажи и ваши последователи.\r\n",
-			 "При просмотре состава группы будут отображаться все персонажи и последователи.\r\n"},
-			{"Вы не будете автоматически помогать согрупникам.\r\n",
-			 "Вы будете автоматически помогать согрупникам.\r\n"},
-			{"", ""}, // SCMD_AUTOLOOT
-			{"Вы не будете делить деньги, поднятые с трупов.\r\n",
-			 "Вы будете автоматически делить деньги, поднятые с трупов.\r\n"},
-			{"Вы не будете брать куны, оставшиеся в трупах.\r\n",
-			 "Вы будете автоматически брать куны, оставшиеся в трупах.\r\n"},
-			{"Вы будете слышать сообщения с арены.\r\n",
-			 "Вы не будете слышать сообщения с арены.\r\n"},
-			{"Вам будут выводиться сообщения базара.\r\n",
-			 "Вы отключены от участия в базаре.\r\n"},
-			{"При просмотре состава группы будут отображаться все последователи.\r\n",
-			 "При просмотре состава группы не будут отображаться чужие двойники и хранители.\r\n"},
-			{"К вам сможет обратиться кто угодно.\r\n",
-			 "К вам смогут обратиться только те, кого вы видите.\r\n"},
-			{"", ""}, // SCMD_LENGTH
-			{"", ""}, // SCMD_WIDTH
-			{"", ""}, // SCMD_SCREEN
-			{"Вариант чтения новостей былин и дружины: лента.\r\n",
-			 "Вариант чтения новостей былин и дружины: доска.\r\n"},
-			{"Вы не видите уведомлений о новых сообщениях на досках.\r\n",
-			 "Вы получаете уведомления о новых сообщениях на досках.\r\n"},
-			{"", ""}, // SCMD_CHEST_MODE
-			{"Вы игнорируете уведомления о добавлении или очистке вас из листов дружин.\r\n",
-			 "Вы получаете уведомления о добавлении или очистке вас из листов дружин.\r\n"},
-			{"Вы игнорируете уведомления об изменениях политики вашей и к вашей дружине.\r\n",
-			 "Вы получаете уведомления об изменениях политики вашей и к вашей дружине.\r\n"},
-			{"Формат показа пкл/дрл установлен как 'полный'.\r\n",
-			 "Формат показа пкл/дрл установлен как 'краткий'.\r\n"},
-			{"Вам не будут показываться входы и выходы из игры ваших соклановцев.\r\n",
-			 "Вы видите входы и выходы из игры ваших соклановцев.\r\n"},
-			{"Вы отключены от канала оффтоп.\r\n",
-			 "Вы будете слышать болтовню в канале оффтоп.\r\n"},
-			{"Вы отключили защиту от потери связь во время боя.\r\n",
-			 "Защита от потери связи во время боя включена.\r\n"},
-			{"Показ покупок и продаж ингредиентов в режиме базара отключен.\r\n",
-			 "Показ покупок и продаж ингредиентов в режиме базара включен.\r\n"},
-			{"", ""},        // SCMD_REMEMBER
-			{"", ""},        //SCMD_NOTIFY_EXCH
-			{"Показ карты окрестностей при перемещении отключен.\r\n",
-			 "Вы будете видеть карту окрестностей при перемещении.\r\n"},
-			{"Показ информации при входе в новую зону отключен.\r\n",
-			 "Вы будете видеть информацию при входе в новую зону.\r\n"},
-			{"Показ уведомлений доски опечаток отключен.\r\n",
-			 "Вы будете видеть уведомления доски опечаток.\r\n"},
-			{"Показ сообщений при срабатывании магических щитов: полный.\r\n",
-			 "Показ сообщений при срабатывании магических щитов: краткий.\r\n"},
-			{"Автоматический режим защиты от призыва выключен.\r\n",
-			 "Вы будете автоматически включать режим защиты от призыва после его использования.\r\n"},
-			{"Канал для демигодов выключен.\r\n",
-			 "Канал для демигодов включен.\r\n"},
-			{"Режим слепого игрока недоступен. Выключайте его в главном меню.\r\n",
-			 "Режим слепого игрока недоступен. Включайте его в главном меню.\r\n"},
-			{"Режим для мапперов выключен.\r\n",
-			 "Режим для мапперов включен.\r\n"},
-			{"Режим вывода тестовой информации выключен.\r\n",
-			 "Режим вывода тестовой информации включен.\r\n"},
-			{"Режим контроля смены IP-адреса персонажа выключен.\r\n",
-			 "Режим контроля смены IP-адреса персонажа включен.\r\n"}
-		};
-
-	if (ch->IsNpc())
-		return;
-
-	switch (subcmd) {
-		case SCMD_NOSUMMON: result = PRF_TOG_CHK(ch, EPrf::KSummonable);
-			break;
-		case SCMD_NOHASSLE: result = PRF_TOG_CHK(ch, EPrf::kNohassle);
-			break;
-		case SCMD_BRIEF: result = PRF_TOG_CHK(ch, EPrf::kBrief);
-			break;
-		case SCMD_COMPACT: result = PRF_TOG_CHK(ch, EPrf::kCompact);
-			break;
-		case SCMD_NOTELL: result = PRF_TOG_CHK(ch, EPrf::kNoTell);
-			break;
-		case SCMD_NOAUCTION: result = PRF_TOG_CHK(ch, EPrf::kNoAuction);
-			break;
-		case SCMD_NOHOLLER: result = PRF_TOG_CHK(ch, EPrf::kNoHoller);
-			break;
-		case SCMD_NOGOSSIP: result = PRF_TOG_CHK(ch, EPrf::kNoGossip);
-			break;
-		case SCMD_NOSHOUT: result = PRF_TOG_CHK(ch, EPrf::kNoShout);
-			break;
-		case SCMD_NOGRATZ: result = PRF_TOG_CHK(ch, EPrf::kNoGossip);
-			break;
-		case SCMD_NOWIZ: result = PRF_TOG_CHK(ch, EPrf::kNoWiz);
-			break;
-		case SCMD_QUEST: result = PRF_TOG_CHK(ch, EPrf::kQuest);
-			break;
-		case SCMD_ROOMFLAGS: result = PRF_TOG_CHK(ch, EPrf::kRoomFlags);
-			break;
-		case SCMD_NOREPEAT: result = PRF_TOG_CHK(ch, EPrf::kNoRepeat);
-			break;
-		case SCMD_HOLYLIGHT: result = PRF_TOG_CHK(ch, EPrf::kHolylight);
-			break;
-		case SCMD_SLOWNS: result = (nameserver_is_slow = !nameserver_is_slow);
-			break;
-		case SCMD_AUTOEXIT:
-			if (PLR_FLAGGED(ch, EPlrFlag::kScriptWriter)) {
-				SendMsgToChar("Скриптерам запрещено видеть автовыходы.\r\n", ch);
-				return;
-			}
-			result = PRF_TOG_CHK(ch, EPrf::kAutoexit);
-			break;
-		case SCMD_CODERINFO: result = PRF_TOG_CHK(ch, EPrf::kCoderinfo);
-			break;
-		case SCMD_AUTOMEM: result = PRF_TOG_CHK(ch, EPrf::kAutomem);
-			break;
-		case SCMD_SDEMIGOD: result = PRF_TOG_CHK(ch, EPrf::kDemigodChat);
-			break;
-		case SCMD_BLIND: break;
-		case SCMD_MAPPER:
-			if (PLR_FLAGGED(ch, EPlrFlag::kScriptWriter)) {
-				SendMsgToChar("Скриптерам запрещено видеть vnum комнаты.\r\n", ch);
-				return;
-			}
-			result = PRF_TOG_CHK(ch, EPrf::kMapper);
-			break;
-		case SCMD_TESTER:
-			//if (GET_GOD_FLAG(ch, EGodFlag::TESTER))
-			//{
-			result = PRF_TOG_CHK(ch, EPrf::kTester);
-			//return;
-			//}
-			break;
-		case SCMD_IPCONTROL: result = PRF_TOG_CHK(ch, EPrf::kIpControl);
-			break;
-#if defined(HAVE_ZLIB)
-		case SCMD_COMPRESS: result = toggle_compression(ch->desc);
-			break;
-#else
-			case SCMD_COMPRESS:
-				SendMsgToChar("Compression not supported.\r\n", ch);
-				return;
-#endif
-		case SCMD_GOAHEAD: result = PRF_TOG_CHK(ch, EPrf::kGoAhead);
-			break;
-		case SCMD_SHOWGROUP: result = PRF_TOG_CHK(ch, EPrf::kShowGroup);
-			break;
-		case SCMD_AUTOASSIST: result = PRF_TOG_CHK(ch, EPrf::kAutoassist);
-			break;
-		case SCMD_AUTOLOOT: set_autoloot_mode(ch, argument);
-			return;
-		case SCMD_AUTOSPLIT: result = PRF_TOG_CHK(ch, EPrf::kAutosplit);
-			break;
-		case SCMD_AUTOMONEY: result = PRF_TOG_CHK(ch, EPrf::kAutomoney);
-			break;
-		case SCMD_NOARENA: result = PRF_TOG_CHK(ch, EPrf::kNoArena);
-			break;
-		case SCMD_NOEXCHANGE: result = PRF_TOG_CHK(ch, EPrf::kNoExchange);
-			break;
-		case SCMD_NOCLONES: result = PRF_TOG_CHK(ch, EPrf::kNoClones);
-			break;
-		case SCMD_NOINVISTELL: result = PRF_TOG_CHK(ch, EPrf::kNoInvistell);
-			break;
-		case SCMD_LENGTH: SetScreen(ch, argument, 0);
-			return;
-			break;
-		case SCMD_WIDTH: SetScreen(ch, argument, 1);
-			return;
-			break;
-		case SCMD_SCREEN: SetScreen(ch, argument, 2);
-			return;
-			break;
-		case SCMD_NEWS_MODE: result = PRF_TOG_CHK(ch, EPrf::kNewsMode);
-			break;
-		case SCMD_BOARD_MODE: result = PRF_TOG_CHK(ch, EPrf::kBoardMode);
-			break;
-		case SCMD_CHEST_MODE: {
-			std::string buffer = argument;
-			SetChestMode(ch, buffer);
-			break;
-		}
-		case SCMD_PKL_MODE: result = PRF_TOG_CHK(ch, EPrf::kPklMode);
-			break;
-		case SCMD_POLIT_MODE: result = PRF_TOG_CHK(ch, EPrf::kPolitMode);
-			break;
-		case SCMD_PKFORMAT_MODE: result = PRF_TOG_CHK(ch, EPrf::kPkFormatMode);
-			break;
-		case SCMD_WORKMATE_MODE: result = PRF_TOG_CHK(ch, EPrf::kClanmembersMode);
-			break;
-		case SCMD_OFFTOP_MODE: result = PRF_TOG_CHK(ch, EPrf::kOfftopMode);
-			break;
-		case SCMD_ANTIDC_MODE: result = PRF_TOG_CHK(ch, EPrf::kAntiDcMode);
-			break;
-		case SCMD_NOINGR_MODE: result = PRF_TOG_CHK(ch, EPrf::kNoIngrMode);
-			break;
-		case SCMD_REMEMBER: {
-			skip_spaces(&argument);
-			if (!*argument) {
-				SendMsgToChar("Формат команды: режим вспомнить <число строк от 1 до 100>.\r\n", ch);
-				return;
-			}
-			unsigned int size = atoi(argument);
-			if (ch->remember_set_num(size)) {
-				SendMsgToChar(ch, "Количество выводимых строк по команде 'вспомнить' установлено в %d.\r\n", size);
-				ch->save_char();
-			} else {
-				SendMsgToChar(ch,
-							  "Количество строк для вывода может быть в пределах от 1 до %d.\r\n",
-							  Remember::MAX_REMEMBER_NUM);
-			}
-			return;
-		}
-		case SCMD_NOTIFY_EXCH: {
-			setNotifyEchange(ch, argument);
-			return;
-		}
-		case SCMD_DRAW_MAP: {
-			if (PRF_FLAGGED(ch, EPrf::kBlindMode)) {
-				SendMsgToChar("В режиме слепого игрока карта недоступна.\r\n", ch);
-				return;
-			}
-			result = PRF_TOG_CHK(ch, EPrf::kDrawMap);
-			break;
-		}
-		case SCMD_ENTER_ZONE: result = PRF_TOG_CHK(ch, EPrf::kShowZoneNameOnEnter);
-			break;
-		case SCMD_MISPRINT: result = PRF_TOG_CHK(ch, EPrf::kShowUnread);
-			break;
-		case SCMD_BRIEF_SHIELDS: result = PRF_TOG_CHK(ch, EPrf::kBriefShields);
-			break;
-		case SCMD_AUTO_NOSUMMON: result = PRF_TOG_CHK(ch, EPrf::kAutonosummon);
-			break;
-		default: SendMsgToChar(ch, "Введите параметр режима полностью.\r\n");
-//		log("SYSERR: Unknown subcmd %d in do_gen_toggle.", subcmd);
-			return;
-	}
-	if (result)
-		SendMsgToChar(tog_messages[subcmd][TOG_ON], ch);
-	else
-		SendMsgToChar(tog_messages[subcmd][TOG_OFF], ch);
 }
 
 void do_pray(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
@@ -2279,7 +1731,7 @@ void do_recall(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
 		return;
 	}
 
-	const int rent_room = real_room(GET_LOADROOM(ch));
+	const int rent_room = GetRoomRnum(GET_LOADROOM(ch));
 	if (rent_room == kNowhere || ch->in_room == kNowhere) {
 		SendMsgToChar("Вам некуда возвращаться!\r\n", ch);
 		return;
@@ -2324,7 +1776,7 @@ void perform_beep(CharData *ch, CharData *vict) {
 	act(buf, false, ch, nullptr, vict, kToVict | kToSleep);
 	SendMsgToChar(CCNRM(vict, C_NRM), vict);
 
-	if (PRF_FLAGGED(ch, EPrf::kNoRepeat))
+	if (ch->IsFlagged(EPrf::kNoRepeat))
 		SendMsgToChar(OK, ch);
 	else {
 		SendMsgToChar(CCRED(ch, C_CMP), ch);
@@ -2345,13 +1797,13 @@ void do_beep(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		SendMsgToChar(NOPERSON, ch);
 	else if (ch == vict)
 		SendMsgToChar("\007\007Вы вызвали себя!\r\n", ch);
-	else if (PRF_FLAGGED(ch, EPrf::kNoTell))
+	else if (ch->IsFlagged(EPrf::kNoTell))
 		SendMsgToChar("Вы не можете пищать в режиме обращения.\r\n", ch);
 	else if (ROOM_FLAGGED(ch->in_room, ERoomFlag::kSoundproof))
 		SendMsgToChar("Стены заглушили ваш писк.\r\n", ch);
 	else if (!vict->IsNpc() && !vict->desc)    // linkless
 		act("$N потерял связь.", false, ch, nullptr, vict, kToChar | kToSleep);
-	else if (PLR_FLAGGED(vict, EPlrFlag::kWriting))
+	else if (vict->IsFlagged(EPlrFlag::kWriting))
 		act("$N пишет сейчас; Попищите позже.", false, ch, nullptr, vict, kToChar | kToSleep);
 	else
 		perform_beep(ch, vict);
@@ -2359,72 +1811,13 @@ void do_beep(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 extern struct IndexData *obj_index;
 
-void do_bandage(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
-	if (ch->IsNpc()) {
-		return;
-	}
-	if (GET_HIT(ch) == GET_REAL_MAX_HIT(ch)) {
-		SendMsgToChar("Вы не нуждаетесь в перевязке!\r\n", ch);
-		return;
-	}
-	if (ch->GetEnemy()) {
-		SendMsgToChar("Вы не можете перевязывать раны во время боя!\r\n", ch);
-		return;
-	}
-	if (AFF_FLAGGED(ch, EAffect::kBandage)) {
-		SendMsgToChar("Вы и так уже занимаетесь перевязкой!\r\n", ch);
-		return;
-	}
-	if (AFF_FLAGGED(ch, EAffect::kCannotBeBandaged)) {
-		SendMsgToChar("Вы не можете перевязывать свои раны чаще раза в минуту!\r\n", ch);
-		return;
-	}
-
-	ObjData *bandage = nullptr;
-	for (ObjData *i = ch->carrying; i; i = i->get_next_content()) {
-		if (GET_OBJ_TYPE(i) == EObjType::kBandage) {
-			bandage = i;
-			break;
-		}
-	}
-	if (!bandage || GET_OBJ_WEIGHT(bandage) <= 0) {
-		SendMsgToChar("В вашем инвентаре нет подходящих для перевязки бинтов!\r\n", ch);
-		return;
-	}
-
-	SendMsgToChar("Вы достали бинты и начали оказывать себе первую помощь...\r\n", ch);
-	act("$n начал$g перевязывать свои раны.&n", true, ch, nullptr, nullptr, kToRoom | kToArenaListen);
-
-	Affect<EApply> af;
-	af.type = ESpell::kBandage;
-	af.location = EApply::kNone;
-	af.modifier = GET_OBJ_VAL(bandage, 0);
-	af.duration = CalcDuration(ch, 10, 0, 0, 0, 0);
-	af.bitvector = to_underlying(EAffect::kBandage);
-	af.battleflag = kAfPulsedec;
-	ImposeAffect(ch, af, false, false, false, false);
-
-	af.type = ESpell::kNoBandage;
-	af.location = EApply::kNone;
-	af.duration = CalcDuration(ch, 60, 0, 0, 0, 0);
-	af.bitvector = to_underlying(EAffect::kCannotBeBandaged);
-	af.battleflag = kAfPulsedec;
-	ImposeAffect(ch, af, false, false, false, false);
-
-	bandage->set_weight(bandage->get_weight() - 1);
-	IS_CARRYING_W(ch) -= 1;
-	if (GET_OBJ_WEIGHT(bandage) <= 0) {
-		SendMsgToChar("Очередная пачка бинтов подошла к концу.\r\n", ch);
-		ExtractObjFromWorld(bandage);
-	}
-}
 
 bool is_dark(RoomRnum room) {
 	double coef = 0.0;
 
 	// если на комнате висит флаг всегда светло, то добавляем
 	// +2 к коэф
-	if (ROOM_AFFECTED(room, room_spells::ERoomAffect::kLight))
+	if (room_spells::IsRoomAffected(world[room], ESpell::kLight))
 		coef += 2.0;
 	// если светит луна и комната !помещение и !город
 	if ((SECT(room) != ESector::kInside) && (SECT(room) != ESector::kCity)

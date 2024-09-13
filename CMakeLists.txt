@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 
 project(bylins CXX)
 
@@ -120,7 +119,6 @@ set(SOURCES
 		src/game_skills/morph.cpp
         src/administration/name_adviser.cpp
 		src/game_mechanics/named_stuff.cpp
-		src/name_list.cpp
 		src/administration/names.cpp
 		src/noob.cpp
 		src/entities/obj_data.cpp
@@ -136,7 +134,7 @@ set(SOURCES
 		src/utils/parse.cpp
 		src/administration/password.cpp
 		src/game_fight/pk.cpp
-		src/entities/player_races.cpp
+		src/game_mechanics/player_races.cpp
 		src/administration/privilege.cpp
         src/third_party_libs/pugixml/pugixml.cpp
 		src/game_quests/quested.cpp
@@ -150,7 +148,7 @@ set(SOURCES
 		src/cmd_god/shutdown_parameters.cpp
 		src/game_skills/skills.cpp
 		src/game_skills/skills_info.cpp
-		src/spam.cpp
+		src/communication/spam.cpp
 		src/spec_assign.cpp
 		src/spec_procs.cpp
 		src/structs/descriptor_data.cpp
@@ -174,8 +172,7 @@ set(SOURCES
 		src/game_economics/shops_implementation.cpp
 		src/entities/world_characters.cpp
 		src/utils/utils_debug.cpp
-		src/speedwalks.cpp
-		src/game_economics/shops_implementation.cpp
+        src/game_economics/shops_implementation.cpp
         src/structs/radix_trie.cpp
         src/structs/compact_trie.cpp
 		src/id.cpp
@@ -281,7 +278,30 @@ set(SOURCES
 		src/feats_constants.cpp
 		src/game_abilities/abilities_items_set.cpp
 		src/game_abilities/talents_actions.cpp
-		src/game_skills/slay.cpp src/game_skills/charge.cpp src/game_skills/dazzle.cpp)
+		src/game_skills/slay.cpp src/game_skills/charge.cpp src/game_skills/dazzle.cpp
+		src/communication/offtop.cpp
+		src/game_mechanics/dead_load.cpp
+		src/game_mechanics/city_guards.cpp
+		src/cmd/remort.cpp
+		src/game_mechanics/dungeons.cpp
+		src/cmd_god/tabulate.cpp
+		src/cmd_god/reload.cpp
+		src/game_mechanics/mob_races.cpp
+		src/cmd_god/do_set.cpp
+		src/game_mechanics/stable_objs.cpp
+		src/game_mechanics/treasure_cases.cpp
+		src/game_mechanics/cities.cpp
+		src/game_quests/bodrich_quests.cpp
+		src/cmd/do_affects.cpp
+		src/cmd/do_toggle.cpp
+		src/cmd/do_mode.cpp
+		src/cmd/levels.cpp
+		src/cmd/where.cpp
+		src/cmd/who.cpp
+		src/cmd/enter.cpp
+		src/cmd/sleep.cpp
+		src/cmd/wake.cpp
+		src/cmd/bandage.cpp)
 
 set(HEADERS
 		src/cmd/flee.h
@@ -335,7 +355,6 @@ set(HEADERS
 		src/game_limits.h
 		src/act_wizard.h
 		src/heartbeat.h
-		src/speedwalks.h
 		src/entities/world_characters.h
 		src/game_economics/shops_implementation.h
         src/structs/global_objects.h
@@ -438,7 +457,6 @@ set(HEADERS
 		src/modify.h
         src/administration/name_adviser.h
 		src/game_mechanics/named_stuff.h
-		src/name_list.h
 		src/noob.h
 		src/obj_enchant.h
 		src/entities/obj_data.h
@@ -451,7 +469,7 @@ set(HEADERS
 		src/administration/password.h
 		src/game_fight/pk.h
 		src/entities/player_i.h
-		src/entities/player_races.h
+		src/game_mechanics/player_races.h
 		src/administration/privilege.h
         src/third_party_libs/pugixml/pugiconfig.h
         src/third_party_libs/pugixml/pugixml.h
@@ -466,7 +484,7 @@ set(HEADERS
 		src/cmd_god/shutdown_parameters.h
 		src/game_skills/skills.h
 		src/game_skills/skills_info.h
-		src/spam.h
+		src/communication/spam.h
 		src/structs/descriptor_data.h
         src/structs/structs.h
 		src/stuff.h
@@ -542,7 +560,30 @@ set(HEADERS
 		src/game_abilities/talents_effects.h
 		src/feats_constants.h
 		src/game_abilities/talents_actions.h
-		src/game_skills/slay.h src/game_skills/charge.h src/game_skills/dazzle.h)
+		src/game_skills/slay.h src/game_skills/charge.h src/game_skills/dazzle.h
+		src/communication/offtop.h
+		src/game_mechanics/dead_load.h
+		src/game_mechanics/city_guards.h
+		src/cmd/remort.h
+		src/game_mechanics/dungeons.h
+		src/cmd_god/tabulate.h
+		src/cmd_god/reload.h
+		src/game_mechanics/mob_races.h
+		src/cmd_god/do_set.h
+		src/game_mechanics/stable_objs.h
+		src/game_mechanics/treasure_cases.h
+		src/game_mechanics/cities.h
+		src/game_quests/bodrich_quests.h
+		src/cmd/do_affects.h
+		src/cmd/do_toggle.h
+		src/cmd/do_mode.h
+		src/cmd/levels.h
+		src/cmd/where.h
+		src/cmd/who.h
+		src/cmd/wake.h
+		src/cmd/enter.h
+		src/cmd/sleep.h
+		src/cmd/bandage.h)
 
 # Build types
 set(CMAKE_CONFIGURATION_TYPES Release Debug Test FastTest)
@@ -594,7 +635,7 @@ add_definitions(${TIMED_SCRIPT_DEFINITION})
 # Turns on/off scripting. Use the option like:
 #     $ cmake -DSCRIPTING=ON..
 # to turn scripting ON.
-option(SCRIPTING "Turns on/off scripting engine" OFF)
+option(SCRIPTING "Turns on/off scripting engine" NO)
 if (SCRIPTING)
 	message(STATUS "Turning scripting ON")
 	list(APPEND HEADERS ${SCRIPTING_HEADERS})
@@ -753,58 +794,56 @@ add_subdirectory(src/third_party_libs/fmt EXCLUDE_FROM_ALL)
 target_link_libraries(circle.library fmt::fmt)
 
 # Boost
-set(BOOST_MODULES ${BOOST_PYTHON_MODULE} system filesystem)
-if (WIN32)
-	list(APPEND BOOST_MODULES locale)
-elseif (UNIX)
-	if (NOT DEFINED ENV{BOOST_ROOT} AND NOT DEFINED ENV{BOOST_INCLUDEDIR})
-		set(BOOST_INCLUDEDIR "/usr/include")
-		message(STATUS "Trying to use BOOST_INCLUDEDIR with value \"${BOOST_INCLUDEDIR}\"")
-	endif()
-	if (NOT DEFINED ENV{BOOST_ROOT} AND NOT DEFINED ENV{BOOST_LIBRARYDIR})
-		set(BOOST_LIBRARYDIR "/usr/lib/x86_64-linux-gnu")
-		message(STATUS "Trying to use BOOST_LIBRARYDIR with value \"${BOOST_LIBRARYDIR}\"")
-	endif()
-endif ()
-
-if (BOOST_NO_SYSTEM_PATHS)
-set(Boost_NO_SYSTEM_PATHS ON)
-endif ()
-
-if (NOT CYGWIN)
-	add_definitions("-DBOOST_PYTHON_STATIC_LIB")
-	set(Boost_USE_STATIC_LIBS ON)
-else ()
-endif ()
-
-if (DEFINED ENV{DEBUG_BOOST_FIND})
-	set(Boost_DEBUG ON)
-endif ()
-
-# In case of you have more than one Visual Studio and want to use specific version, uncomment the following three lines and specify compiler you want
-if (CMAKE_HOST_WIN32)
-	set(BOOST_REQUIRED_COMPILER "" CACHE STRING "Compiler which must be used to compile Boost libraries (for example: -vc141 for Visual Studio 15 (2017))")
-
-	if (BOOST_REQUIRED_COMPILER)
-		set(Boost_COMPILER "${BOOST_REQUIRED_COMPILER}")
-	else ()
-		set(Boost_COMPILER "-vc141")
+option(BOOST "Turns on/off scripting engine" NO)
+if (BOOST)
+	message(STATUS "Turning BOOST ON")
+	set(BOOST_MODULES ${BOOST_PYTHON_MODULE} system filesystem)
+	if (WIN32)
+		list(APPEND BOOST_MODULES locale)
+	elseif (UNIX)
+		if (NOT DEFINED ENV{BOOST_ROOT} AND NOT DEFINED ENV{BOOST_INCLUDEDIR})
+			set(BOOST_INCLUDEDIR "/usr/include")
+			message(STATUS "Trying to use BOOST_INCLUDEDIR with value \"${BOOST_INCLUDEDIR}\"")
+		endif()
+		if (NOT DEFINED ENV{BOOST_ROOT} AND NOT DEFINED ENV{BOOST_LIBRARYDIR})
+			set(BOOST_LIBRARYDIR "/usr/lib/x86_64-linux-gnu")
+			message(STATUS "Trying to use BOOST_LIBRARYDIR with value \"${BOOST_LIBRARYDIR}\"")
+		endif()
+	endif ()
+	if (BOOST_NO_SYSTEM_PATHS)
+		set(Boost_NO_SYSTEM_PATHS ON)
+	endif ()
+	if (NOT CYGWIN)
+		add_definitions("-DBOOST_PYTHON_STATIC_LIB")
+		set(Boost_USE_STATIC_LIBS ON)
+	endif ()
+	if (DEFINED ENV{DEBUG_BOOST_FIND})
+		set(Boost_DEBUG ON)
+	endif ()
+	# In case of you have more than one Visual Studio and want to use specific version, uncomment the following three lines and specify compiler you want
+	if (CMAKE_HOST_WIN32)
+		set(BOOST_REQUIRED_COMPILER "" CACHE STRING "Compiler which must be used to compile Boost libraries (for example: -vc141 for Visual Studio 15 (2017))")
+		if (BOOST_REQUIRED_COMPILER)
+			set(Boost_COMPILER "${BOOST_REQUIRED_COMPILER}")
+		else ()
+			set(Boost_COMPILER "-vc141")
+		endif ()
+		target_compile_options(circle.library PUBLIC /MP /MDd)
+		target_compile_options(circle.library PUBLIC $<$<CONFIG:Debug>:/Zi /Od>)
+		target_compile_options(circle.library PUBLIC $<$<CONFIG:Release>:/O2>)
+		target_compile_options(circle.library PUBLIC $<$<CONFIG:Test>:/Zi /Od>)
+		target_compile_options(circle.library PUBLIC $<$<CONFIG:FastTest>:/O2>)
 	endif ()
 
-	target_compile_options(circle.library PUBLIC /MP /MDd)
-	target_compile_options(circle.library PUBLIC $<$<CONFIG:Debug>:/Zi /Od>)
-	target_compile_options(circle.library PUBLIC $<$<CONFIG:Release>:/O2>)
-	target_compile_options(circle.library PUBLIC $<$<CONFIG:Test>:/Zi /Od>)
-	target_compile_options(circle.library PUBLIC $<$<CONFIG:FastTest>:/O2>)
+	set(BOOST_REQUIRED_VERSION OFF CACHE STRING "Optional version for Boost (for example, 1.54)")
+	set(BOOST_REQUIRED_VERSION_VALUE "")
+	if (BOOST_REQUIRED_VERSION)
+		set(BOOST_REQUIRED_VERSION_VALUE "${BOOST_REQUIRED_VERSION}")
+	endif ()
+	find_package(Boost ${BOOST_REQUIRED_VERSION_VALUE} REQUIRED COMPONENTS ${BOOST_MODULES})
+else()
+	message(STATUS "Turning BOOST OFF")
 endif ()
-
-set(BOOST_REQUIRED_VERSION OFF CACHE STRING "Optional version for Boost (for example, 1.54)")
-set(BOOST_REQUIRED_VERSION_VALUE "")
-if (BOOST_REQUIRED_VERSION)
-	set(BOOST_REQUIRED_VERSION_VALUE "${BOOST_REQUIRED_VERSION}")
-endif ()
-
-find_package(Boost ${BOOST_REQUIRED_VERSION_VALUE} REQUIRED COMPONENTS ${BOOST_MODULES})
 
 # ZLib
 if (CMAKE_HOST_WIN32)
@@ -901,22 +940,28 @@ else ()
 endif ()
 
 option(NOCRYPT "Allows to turn off usage of crypt() function." OFF)
-	set(DEBUG_CRYPT "")
-if (NOCRYPT)
-	set(DEBUG_CRYPT "-DNOCRYPT")
+set(DEBUG_CRYPT "")
+if (APPLE)
+  set(DEBUG_CRYPT "-DNOCRYPT")
+  message(STATUS "Turning OFF crypt")
+elseif (NOCRYPT)
+  set(DEBUG_CRYPT "-DNOCRYPT")
+  message(STATUS "Turning OFF crypt")
+else ()
+  message(STATUS "Turning ON crypt")
 endif ()
 
 if (CMAKE_HOST_UNIX)
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-		set(CMAKE_CXX_FLAGS_RELEASE  "-ggdb3 -Og    -Wall -Wextra -Wno-format-truncation")
-		set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0    -Wall -Wextra -Wno-format-truncation -D_GLIBCXX_DEBUG -D_GLIBXX_DEBUG_PEDANTIC ${ASAN_FLAGS} ${DEBUG_CRYPT}")
-		set(CMAKE_CXX_FLAGS_TEST     "       -O3    -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS} -DLOG_AUTOFLUSH")
-		set(CMAKE_CXX_FLAGS_FASTTEST "       -Ofast -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS}")
+		set(CMAKE_CXX_FLAGS_RELEASE  "-ggdb3 -Og -rdynamic -Wall -Wextra -Wno-format-truncation")
+		set(CMAKE_CXX_FLAGS_DEBUG    "-ggdb3 -O0 -rdynamic -Wall -Wextra -Wno-format-truncation -D_GLIBCXX_DEBUG -D_GLIBXX_DEBUG_PEDANTIC ${ASAN_FLAGS} ${DEBUG_CRYPT}")
+		set(CMAKE_CXX_FLAGS_TEST     "-O3 -rdynamic -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS} -DLOG_AUTOFLUSH")
+		set(CMAKE_CXX_FLAGS_FASTTEST "-Ofast -Wall -Wextra -Wno-format-truncation ${TESTBUILD_DEFINITIONS}")
 
 		if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 			add_definitions("-Wno-invalid-source-encoding")
 		endif ()
-		if(NOT NOCRYPT)
+		if(NOT NOCRYPT AND NOT APPLE)
 			target_link_libraries(circle.library crypt)
 		endif()
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")

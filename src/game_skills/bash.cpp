@@ -5,6 +5,8 @@
 #include "protect.h"
 #include "structs/global_objects.h"
 
+#include <cmath>
+
 // ************************* BASH PROCEDURES
 void do_bash(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (!ch->GetSkill(ESkill::kBash)) {
@@ -52,7 +54,7 @@ void go_bash(CharData *ch, CharData *vict) {
 		SendMsgToChar("Вы не можете сделать этого без щита.\r\n", ch);
 		return;
 	}
-	if (PRF_FLAGS(ch).get(EPrf::kIronWind)) {
+	if (ch->IsFlagged(EPrf::kIronWind)) {
 		SendMsgToChar("Вы не можете применять этот прием в таком состоянии!\r\n", ch);
 		return;
 	}
@@ -64,23 +66,21 @@ void go_bash(CharData *ch, CharData *vict) {
 		SendMsgToChar("Ваш сокрушающий удар поверг вас наземь... Вы почувствовали себя глупо.\r\n", ch);
 		return;
 	}
-	if (GET_POS(ch) < EPosition::kFight) {
+	if (ch->GetPosition() < EPosition::kFight) {
 		SendMsgToChar("Вам стоит встать на ноги.\r\n", ch);
 		return;
 	}
 
 	int lag;
-	int damage = number(GET_SKILL(ch, ESkill::kBash) / 1.25, GET_SKILL(ch, ESkill::kBash) * 1.25);
+	int damage = number(ch->GetSkill(ESkill::kBash) / 1.25, ch->GetSkill(ESkill::kBash) * 1.25);
 	bool can_shield_bash = false;
-	if (ch->GetSkill(ESkill::kShieldBash) && GET_EQ(ch, kShield) && (!PRF_FLAGGED(ch,kAwake))) {
+	if (ch->GetSkill(ESkill::kShieldBash) && GET_EQ(ch, kShield) && !ch->IsFlagged(kAwake)) {
 		can_shield_bash = true;
-		}
-	bool shield_bash_success;
+	}
+	SkillRollResult result_shield_bash = MakeSkillTest(ch, ESkill::kShieldBash, vict);
+	bool shield_bash_success = result_shield_bash.success;
 
 	if (can_shield_bash) {
-		SkillRollResult result_shield_bash = MakeSkillTest(ch, ESkill::kShieldBash, vict);
-		shield_bash_success = result_shield_bash.success;
-
 		TrainSkill(ch, ESkill::kShieldBash, shield_bash_success, vict);
 		if (shield_bash_success) {
 			//Описание аффекта "ошарашен" для умения "удар щитом":
@@ -99,10 +99,11 @@ void go_bash(CharData *ch, CharData *vict) {
 				false, vict, nullptr, ch, kToChar);
 			act("$N0 ошарашил$G $n3 ударом щита!",
 				false, vict, nullptr, ch, kToNotVict | kToArenaListen);
-			damage = number(ceil(((((GET_REAL_SIZE(ch) * ((GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield))) * 1.5)) / 5) + (GET_SKILL(ch,ESkill::kShieldBash) * 3)) + (GET_SKILL(ch, ESkill::kBash) * 2)) / 1.25),
-						 ceil(((((GET_REAL_SIZE(ch) * ((GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield))) * 1.5)) / 5) + (GET_SKILL(ch,ESkill::kShieldBash) * 3)) + (GET_SKILL(ch, ESkill::kBash) * 2)) * 1.25)) *
-				  GetRealLevel(ch) / 30;
-
+			auto shield_bash = ch->GetSkill(ESkill::kShieldBash);
+			auto char_size = GET_REAL_SIZE(ch);
+			auto shield_weight = GET_OBJ_WEIGHT(GET_EQ(ch, EEquipPos::kShield));
+			auto skill_base = (char_size * shield_weight * 1.5) / 5 + shield_bash * 3 + shield_bash * 2;
+			damage = number(ceil(skill_base / 1.25), ceil(skill_base * 1.25)) * GetRealLevel(ch) / 30;
 			if (GetRealStr(ch) < 55) {
 				damage /= 2;
 			}
@@ -116,7 +117,7 @@ void go_bash(CharData *ch, CharData *vict) {
 	if (AFF_FLAGGED(vict, EAffect::kHold) || GET_GOD_FLAG(vict, EGf::kGodscurse)) {
 		success = true;
 	}
-	if (MOB_FLAGGED(vict, EMobFlag::kNoBash) || GET_GOD_FLAG(ch, EGf::kGodscurse)) {
+	if (vict->IsFlagged(EMobFlag::kNoBash) || GET_GOD_FLAG(ch, EGf::kGodscurse)) {
 		success = false;
 	}
 
@@ -125,21 +126,21 @@ void go_bash(CharData *ch, CharData *vict) {
 // Если баш - фейл. Немного нахуевертил. Смысл в том, чтобы оставаться на ногах даже при фейле баша и удара щитом, если удар щитом прокачан 200+.
 	if (!success) {
 		bool still_stands = true;
-		if (number(1, 100) > (GET_SKILL(ch, ESkill::kShieldBash) / 2)) {
+		if (number(1, 100) > (ch->GetSkill(ESkill::kShieldBash) / 2)) {
 			still_stands = false;
 		}
 //Полный фейл, падаем на жопу:
 		if (!can_shield_bash || (!shield_bash_success && !still_stands)) {
 			SetFighting(ch, vict);
 			SetFighting(vict, ch);
-			GET_POS(ch) = EPosition::kSit;
+			ch->SetPosition(EPosition::kSit);
 			SetWait(ch, 2, true);
 			act("&WВы попытались сбить $N3, но упали сами. Учитесь.&n",
-				false, ch, nullptr,vict, kToChar);
+				false, ch, nullptr, vict, kToChar);
 			act("&r$N хотел$G завалить вас, но, не рассчитав сил, упал$G сам$G.&n",
-				false,vict, nullptr, ch, kToChar);
+				false, vict, nullptr, ch, kToChar);
 			act("$n избежал$G попытки $N1 завалить $s.",
-				false,vict, nullptr, ch, kToNotVict | kToArenaListen);
+				false, vict, nullptr, ch, kToNotVict | kToArenaListen);
 //Фейл баша, но успех удара щитом, наносим урон (сообщения про "ошарашил" уже прописаны выше):
 		} else if ((can_shield_bash && shield_bash_success)) {
 			Damage dmg(SkillDmg(ESkill::kShieldBash), damage, fight::kPhysDmg, nullptr);
@@ -151,11 +152,11 @@ void go_bash(CharData *ch, CharData *vict) {
 			SetFighting(ch, vict);
 			SetSkillCooldownInFight(ch, ESkill::kBash, 1);
 			act("&WНеуклюже попытавшись ударить $N3 щитом, Вы сами еле удержались на ногах!&n",
-				false, ch, nullptr,vict, kToChar);
+				false, ch, nullptr, vict, kToChar);
 			act("$N хотел$G сбить Вас, но в итоге сам$G еле удержал$U на ногах.",
-				false,vict, nullptr, ch, kToChar);
+				false, vict, nullptr, ch, kToChar);
 			act("Неуклюже попытавшись сбить $n3, $N0 сам$G еле удержал$U на ногах.",
-				false,vict, nullptr, ch, kToNotVict | kToArenaListen);
+				false, vict, nullptr, ch, kToNotVict | kToArenaListen);
 		}
 		return;
 	} else {
@@ -163,10 +164,10 @@ void go_bash(CharData *ch, CharData *vict) {
 		if ((GET_AF_BATTLE(vict, kEafBlock)
 			|| (CanUseFeat(vict, EFeat::kDefender)
 				&& GET_EQ(vict, kShield)
-				&& PRF_FLAGGED(vict, EPrf::kAwake)
+				&& vict->IsFlagged(EPrf::kAwake)
 				&& vict->GetSkill(ESkill::kAwake)
 				&& vict->GetSkill(ESkill::kShieldBlock)
-				&& GET_POS(vict) > EPosition::kSit))
+				&& vict->GetPosition() > EPosition::kSit))
 			&& !AFF_FLAGGED(vict, EAffect::kStopFight)
 			&& !AFF_FLAGGED(vict, EAffect::kMagicStopFight)
 			&& !AFF_FLAGGED(vict, EAffect::kStopLeft)
@@ -211,7 +212,9 @@ void go_bash(CharData *ch, CharData *vict) {
 		vict->DropFromHorse();
 		// Сам баш:
 		if (!IS_IMPL(vict)) {
-			GET_POS(vict) = EPosition::kSit;
+			if (vict->GetPosition() > EPosition::kSit) {
+				vict->SetPosition(EPosition::kSit);
+			}
 			SetWait(vict, 3, true);
 		}
 		lag = 1;
@@ -222,22 +225,19 @@ void go_bash(CharData *ch, CharData *vict) {
 		}
 		//Лаг на тот случай, если не используется/нет умения "удар щитом" или на жертве висит "Защита Богов":
 		if (AFF_FLAGGED(vict, EAffect::kGodsShield)
-		|| (!can_shield_bash)
-		|| (!shield_bash_success)) {
+			|| (!can_shield_bash)
+			|| (!shield_bash_success)) {
 			lag = 2;
 		}
 	}
 
 	//разные типы лагов в зависимости от того, есть ли "удар щитом", а так же при фейле/успехе и т.д.
 	switch (lag) {
-		case 0:
-			SetWait(ch, 0, true);
+		case 0: SetWait(ch, 0, true);
 			break;
-		case 1:
-			SetSkillCooldownInFight(ch, ESkill::kBash, 1);
+		case 1: SetSkillCooldownInFight(ch, ESkill::kBash, 1);
 			break;
-		case 2:
-			SetSkillCooldownInFight(ch, ESkill::kGlobalCooldown, 1);
+		case 2: SetSkillCooldownInFight(ch, ESkill::kGlobalCooldown, 1);
 			break;
 	}
 

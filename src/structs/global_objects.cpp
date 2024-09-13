@@ -1,5 +1,7 @@
 #include "global_objects.h"
 
+#include <memory>
+
 #include "cmd_god/ban.h"
 
 namespace {
@@ -10,13 +12,13 @@ struct GlobalObjectsStorage {
 	/// This object should be destroyed last because it serves all output operations. So I define it first.
 	std::shared_ptr<OutputThread> output_thread;
 
-	Celebrates::CelebrateList mono_celebrates;
-	Celebrates::CelebrateList poly_celebrates;
-	Celebrates::CelebrateList real_celebrates;
-	Celebrates::CelebrateMobs attached_mobs;
-	Celebrates::CelebrateMobs loaded_mobs;
-	Celebrates::CelebrateObjs attached_objs;
-	Celebrates::CelebrateObjs loaded_objs;
+	celebrates::CelebrateList mono_celebrates;
+	celebrates::CelebrateList poly_celebrates;
+	celebrates::CelebrateList real_celebrates;
+	celebrates::CelebrateMobs attached_mobs;
+	celebrates::CelebrateMobs loaded_mobs;
+	celebrates::CelebrateObjs attached_objs;
+	celebrates::CelebrateObjs loaded_objs;
 
 	GlobalTriggersStorage trigger_list;
 	Rooms world;
@@ -30,14 +32,14 @@ struct GlobalObjectsStorage {
 	classes::ClassesInfo classes_info;
 	guilds::GuildsInfo guilds_info;
 	currencies::CurrenciesInfo currencies_info;
+  	RunestoneRoster runestone_roster;
 	WorldObjects world_objects;
 	ShopExt::ShopListType shop_list;
 	PlayersIndex player_table;
 	Characters characters;
 	ShutdownParameters shutdown_parameters;
-	Speedwalks speedwalks;
 	SetAllInspReqListType setall_inspect_list;
-	InspReqListType inspect_list;
+  	InspectRequestDeque inspect_request_deque;
 	BanList *ban;
 	Heartbeat heartbeat;
 	std::shared_ptr<influxdb::Sender> stats_sender;
@@ -119,6 +121,10 @@ const currencies::CurrencyInfo &GlobalObjects::Currency(Vnum currency_vnum) {
 	return global_objects().currencies_info[currency_vnum];
 };
 
+RunestoneRoster &GlobalObjects::Runestones() {
+	return global_objects().runestone_roster;
+}
+
 WorldObjects &GlobalObjects::world_objects() {
 	return global_objects().world_objects;
 }
@@ -135,12 +141,8 @@ ShutdownParameters &GlobalObjects::shutdown_parameters() {
 	return global_objects().shutdown_parameters;
 }
 
-Speedwalks &GlobalObjects::speedwalks() {
-	return global_objects().speedwalks;
-}
-
-InspReqListType &GlobalObjects::inspect_list() {
-	return global_objects().inspect_list;
+InspectRequestDeque &GlobalObjects::InspectRequests() {
+	return global_objects().inspect_request_deque;
 }
 
 SetAllInspReqListType &GlobalObjects::setall_inspect_list() {
@@ -157,8 +159,8 @@ Heartbeat &GlobalObjects::heartbeat() {
 
 influxdb::Sender &GlobalObjects::stats_sender() {
 	if (!global_objects().stats_sender) {
-		global_objects().stats_sender.reset(new influxdb::Sender(
-			runtime_config.statistics().host(), runtime_config.statistics().port()));
+		global_objects().stats_sender = std::make_shared<influxdb::Sender>(
+			runtime_config.statistics().host(), runtime_config.statistics().port());
 	}
 
 	return *global_objects().stats_sender;
@@ -176,31 +178,31 @@ ZoneTable &GlobalObjects::zone_table() {
 	return global_objects().zone_table;
 }
 
-Celebrates::CelebrateList &GlobalObjects::mono_celebrates() {
+celebrates::CelebrateList &GlobalObjects::mono_celebrates() {
 	return global_objects().mono_celebrates;
 }
 
-Celebrates::CelebrateList &GlobalObjects::poly_celebrates() {
+celebrates::CelebrateList &GlobalObjects::poly_celebrates() {
 	return global_objects().poly_celebrates;
 }
 
-Celebrates::CelebrateList &GlobalObjects::real_celebrates() {
+celebrates::CelebrateList &GlobalObjects::real_celebrates() {
 	return global_objects().real_celebrates;
 }
 
-Celebrates::CelebrateMobs &GlobalObjects::attached_mobs() {
+celebrates::CelebrateMobs &GlobalObjects::attached_mobs() {
 	return global_objects().attached_mobs;
 }
 
-Celebrates::CelebrateMobs &GlobalObjects::loaded_mobs() {
+celebrates::CelebrateMobs &GlobalObjects::loaded_mobs() {
 	return global_objects().loaded_mobs;
 }
 
-Celebrates::CelebrateObjs &GlobalObjects::attached_objs() {
+celebrates::CelebrateObjs &GlobalObjects::attached_objs() {
 	return global_objects().attached_objs;
 }
 
-Celebrates::CelebrateObjs &GlobalObjects::loaded_objs() {
+celebrates::CelebrateObjs &GlobalObjects::loaded_objs() {
 	return global_objects().loaded_objs;
 }
 

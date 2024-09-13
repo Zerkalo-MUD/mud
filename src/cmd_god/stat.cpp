@@ -1,7 +1,7 @@
 #include "stat.h"
 #include "ban.h"
 #include "entities/char_player.h"
-#include "entities/player_races.h"
+#include "game_mechanics/player_races.h"
 #include "utils/utils_char_obj.inl"
 #include "description.h"
 #include "game_fight/fight_hit.h"
@@ -19,6 +19,8 @@
 #include "depot.h"
 #include "game_magic/magic.h"
 #include "noob.h"
+#include "administration/privilege.h"
+#include "game_mechanics/stable_objs.h"
 
 extern char *diag_weapon_to_char(const CObjectPrototype *obj, int show_wear);
 
@@ -47,6 +49,8 @@ std::string print_special(CharData *mob) {
 			out += "нубхелпер";
 		else if (func == mercenary)
 			out += "ватажник";
+		else
+			out += "глюк";
 	} else {
 		out += "нет";
 	}
@@ -93,10 +97,10 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 	struct FollowerType *fol;
 	char tmpbuf[128];
 	buf[0] = 0;
-	int god_level = PRF_FLAGGED(ch, EPrf::kCoderinfo) ? kLvlImplementator : GetRealLevel(ch);
+	int god_level = ch->IsFlagged(EPrf::kCoderinfo) ? kLvlImplementator : GetRealLevel(ch);
 	int k_room = -1;
 	if (!virt && (god_level == kLvlImplementator || (god_level == kLvlGreatGod && !k->IsNpc()))) {
-		k_room = GET_ROOM_VNUM(IN_ROOM(k));
+		k_room = GET_ROOM_VNUM(k->in_room);
 	}
 	// пишем пол  (мужчина)
 	sprinttype(to_underlying(GET_SEX(k)), genders, tmpbuf);
@@ -139,10 +143,10 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 			sprintf(buf, "Имя никем не одобрено!\r\n");
 			SendMsgToChar(buf, ch);
 		} else if (NAME_GOD(k) < 1000) {
-			sprintf(buf, "Имя запрещено! - %s\r\n", get_name_by_id(NAME_ID_GOD(k)));
+			sprintf(buf, "Имя запрещено! - %s\r\n", GetNameById(NAME_ID_GOD(k)));
 			SendMsgToChar(buf, ch);
 		} else {
-			sprintf(buf, "Имя одобрено! - %s\r\n", get_name_by_id(NAME_ID_GOD(k)));
+			sprintf(buf, "Имя одобрено! - %s\r\n", GetNameById(NAME_ID_GOD(k)));
 			SendMsgToChar(buf, ch);
 		}
 
@@ -161,36 +165,36 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 		if (k->player_specials->saved.telegram_id != 0)
 			SendMsgToChar(ch, "Подключен Телеграм, chat_id: %lu\r\n", k->player_specials->saved.telegram_id);
 
-		if (PLR_FLAGGED(k, EPlrFlag::kFrozen) && FREEZE_DURATION(k)) {
+		if (k->IsFlagged(EPlrFlag::kFrozen) && FREEZE_DURATION(k)) {
 			sprintf(buf, "Заморожен : %ld час [%s].\r\n",
 					static_cast<long>((FREEZE_DURATION(k) - time(nullptr)) / 3600),
 					FREEZE_REASON(k) ? FREEZE_REASON(k) : "-");
 			SendMsgToChar(buf, ch);
 		}
-		if (PLR_FLAGGED(k, EPlrFlag::kHelled) && HELL_DURATION(k)) {
+		if (k->IsFlagged(EPlrFlag::kHelled) && HELL_DURATION(k)) {
 			sprintf(buf, "Находится в темнице : %ld час [%s].\r\n",
 					static_cast<long>((HELL_DURATION(k) - time(nullptr)) / 3600),
 					HELL_REASON(k) ? HELL_REASON(k) : "-");
 			SendMsgToChar(buf, ch);
 		}
-		if (PLR_FLAGGED(k, EPlrFlag::kNameDenied) && NAME_DURATION(k)) {
+		if (k->IsFlagged(EPlrFlag::kNameDenied) && NAME_DURATION(k)) {
 			sprintf(buf, "Находится в комнате имени : %ld час.\r\n",
 					static_cast<long>((NAME_DURATION(k) - time(nullptr)) / 3600));
 			SendMsgToChar(buf, ch);
 		}
-		if (PLR_FLAGGED(k, EPlrFlag::kMuted) && MUTE_DURATION(k)) {
+		if (k->IsFlagged(EPlrFlag::kMuted) && MUTE_DURATION(k)) {
 			sprintf(buf, "Будет молчать : %ld час [%s].\r\n",
 					static_cast<long>((MUTE_DURATION(k) - time(nullptr)) / 3600),
 					MUTE_REASON(k) ? MUTE_REASON(k) : "-");
 			SendMsgToChar(buf, ch);
 		}
-		if (PLR_FLAGGED(k, EPlrFlag::kDumbed) && DUMB_DURATION(k)) {
+		if (k->IsFlagged(EPlrFlag::kDumbed) && DUMB_DURATION(k)) {
 			sprintf(buf, "Будет нем : %ld мин [%s].\r\n",
 					static_cast<long>((DUMB_DURATION(k) - time(nullptr)) / 60),
 					DUMB_REASON(k) ? DUMB_REASON(k) : "-");
 			SendMsgToChar(buf, ch);
 		}
-		if (!PLR_FLAGGED(k, EPlrFlag::kRegistred) && UNREG_DURATION(k)) {
+		if (!k->IsFlagged(EPlrFlag::kRegistred) && UNREG_DURATION(k)) {
 			sprintf(buf, "Не будет зарегистрирован : %ld час [%s].\r\n",
 					static_cast<long>((UNREG_DURATION(k) - time(nullptr)) / 3600),
 					UNREG_REASON(k) ? UNREG_REASON(k) : "-");
@@ -256,7 +260,7 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 		}
 
 		//added by WorM когда статишь файл собсно показывалось текущее время а не время последнего входа
-		time_t ltime = get_lastlogon_by_unique(GET_UNIQUE(k));
+		time_t ltime = GetLastlogonByUnique(GET_UNIQUE(k));
 		char t1[11];
 		char t2[11];
 		strftime(t1, sizeof(t1), "%d-%m-%Y", localtime(&(k->player_data.time.birth)));
@@ -359,7 +363,7 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 			GET_AR(k),
 			GET_MR(k),
 			GET_PR(k),
-			k->add_abils.percent_magdam_add,
+			k->add_abils.percent_spellpower_add,
 			k->add_abils.percent_physdam_add);
 	SendMsgToChar(buf, ch);
 	sprintf(buf,
@@ -373,7 +377,7 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 			GET_INITIATIVE(k));
 	SendMsgToChar(buf, ch);
 
-	sprinttype(static_cast<int>(GET_POS(k)), position_types, smallBuf);
+	sprinttype(static_cast<int>(k->GetPosition()), position_types, smallBuf);
 	sprintf(buf, "Положение: %s, Сражается: %s, Экипирован в металл: %s",
 			smallBuf, (k->GetEnemy() ? GET_NAME(k->GetEnemy()) : "Нет"), (IsEquipInMetall(k) ? "Да" : "Нет"));
 
@@ -464,12 +468,12 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 			// пытаемся просчитать маршрут на несколько клеток вперед
 			std::vector<RoomVnum> predictive_path_vnum_list;
 			static const int max_path_size = 25;
-			RoomVnum current_room = world[k->in_room]->room_vn;
+			RoomVnum current_room = world[k->in_room]->vnum;
 			while (current_room != GET_DEST(k) && predictive_path_vnum_list.size() < max_path_size && current_room > kNowhere) {
-				const auto direction = find_first_step(real_room(current_room), real_room(GET_DEST(k)), k);
+				const auto direction = find_first_step(GetRoomRnum(current_room), GetRoomRnum(GET_DEST(k)), k);
 				if (direction >= 0) {
-					const auto exit_room_rnum = world[real_room(current_room)]->dir_option[direction]->to_room();
-					current_room = world[exit_room_rnum]->room_vn;
+					const auto exit_room_rnum = world[GetRoomRnum(current_room)]->dir_option[direction]->to_room();
+					current_room = world[exit_room_rnum]->vnum;
 					predictive_path_vnum_list.push_back(current_room);
 				} else {
 					break;
@@ -520,7 +524,7 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 				k->mob_specials.damnodice, k->mob_specials.damsizedice);
 		SendMsgToChar(buf, ch);
 	}
-	sprintf(buf, "Несет - вес %d, предметов %d; ", IS_CARRYING_W(k), IS_CARRYING_N(k));
+	sprintf(buf, "Несет - вес %d, предметов %d; ", k->GetCarryingWeight(), k->GetCarryingQuantity());
 
 	for (i = 0, j = k->carrying; j; j = j->get_next_content(), i++) { ; }
 	sprintf(buf + strlen(buf), "(в инвентаре) : %d, ", i);
@@ -546,7 +550,7 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 		for (fol = k->followers; fol; fol = fol->next) {
 			sprintf(buf2, "%s %s (%d)", found++ ? "," : "", PERS(fol->follower, ch, 0), GET_MOB_VNUM(fol->follower));
 			strcat(buf, buf2);
-			if (strlen(buf) >= 62) {
+			if (strlen(buf) >= 162) {
 				if (fol->next)
 					SendMsgToChar(strcat(buf, ",\r\n"), ch);
 				else
@@ -557,6 +561,16 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 
 		if (*buf)
 			SendMsgToChar(strcat(buf, "\r\n"), ch);
+
+		SendMsgToChar(ch, "Помогают: ");
+		if (!k->summon_helpers.empty()) {
+			for (auto helper : k->summon_helpers) {
+				SendMsgToChar(ch, "%d ", helper);
+			}
+			SendMsgToChar(ch, "\r\n");
+		} else {
+			SendMsgToChar(ch, "нет.\r\n");
+		}
 	}
 	// Showing the bitvector
 	k->char_specials.saved.affected_by.sprintbits(affected_bits, smallBuf, ",", 4);
@@ -604,25 +618,24 @@ void do_stat_character(CharData *ch, CharData *k, const int virt = 0) {
 		}
 	} else        // this is a PC, display their global variables
 	{
-		if (SCRIPT(k)->global_vars) {
-			struct TriggerVar *tv;
+		if (!SCRIPT(k)->global_vars.empty()) {
 			char name[kMaxInputLength];
-			void find_uid_name(char *uid, char *name);
+			void find_uid_name(const char *uid, char *name);
 			SendMsgToChar("Глобальные переменные:\r\n", ch);
 			// currently, variable context for players is always 0, so it is
 			// not displayed here. in the future, this might change
-			for (tv = k->script->global_vars; tv; tv = tv->next) {
-				if (*(tv->value) == UID_CHAR) {
-					find_uid_name(tv->value, name);
-					sprintf(buf, "    %10s:  [CharUID]: %s\r\n", tv->name, name);
-				} else if (*(tv->value) == UID_OBJ) {
-					find_uid_name(tv->value, name);
-					sprintf(buf, "    %10s:  [ObjUID]: %s\r\n", tv->name, name);
-				} else if (*(tv->value) == UID_ROOM) {
-					find_uid_name(tv->value, name);
-					sprintf(buf, "    %10s:  [RoomUID]: %s\r\n", tv->name, name);
+			for (auto tv : k->script->global_vars) {
+				if (tv.value[0] == UID_CHAR) {
+					find_uid_name(tv.value.c_str(), name);
+					sprintf(buf, "    %10s:  [CharUID]: %s\r\n", tv.name.c_str(), name);
+				} else if (tv.value[0] == UID_OBJ) {
+					find_uid_name(tv.value.c_str(), name);
+					sprintf(buf, "    %10s:  [ObjUID]: %s\r\n", tv.name.c_str(), name);
+				} else if (tv.value[0] == UID_ROOM) {
+					find_uid_name(tv.value.c_str(), name);
+					sprintf(buf, "    %10s:  [RoomUID]: %s\r\n", tv.name.c_str(), name);
 				} else
-					sprintf(buf, "    %10s:  %s\r\n", tv->name, tv->value);
+					sprintf(buf, "    %10s:  %s\r\n", tv.name.c_str(), tv.value.c_str());
 				SendMsgToChar(buf, ch);
 			}
 		}
@@ -650,7 +663,7 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 	ObjVnum rnum, vnum;
 	ObjData *j2;
 	long int li;
-	bool is_grgod = (IS_GRGOD(ch) || PRF_FLAGGED(ch, EPrf::kCoderinfo)) ? true : false;
+	bool is_grgod = (IS_GRGOD(ch) || ch->IsFlagged(EPrf::kCoderinfo)) ? true : false;
 
 	vnum = GET_OBJ_VNUM(j);
 	rnum = GET_OBJ_RNUM(j);
@@ -674,27 +687,27 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 		strcpy(buf2, "None");
 	}
 
-	SendMsgToChar(ch, "VNum: [%s%5d%s], RNum: [%5d], UID: [%d], Id: [%ld]\r\n",
-				  CCGRN(ch, C_NRM), vnum, CCNRM(ch, C_NRM), GET_OBJ_RNUM(j), GET_OBJ_UID(j), j->get_id());
+	SendMsgToChar(ch, "VNum: [%s%5d%s], RNum: [%5d], UniqueID: [%ld], Id: [%ld]\r\n",
+				  CCGRN(ch, C_NRM), vnum, CCNRM(ch, C_NRM), GET_OBJ_RNUM(j), GET_OBJ_UNIQUE_ID(j), j->get_id());
 
 	SendMsgToChar(ch, "Расчет критерия: %f, мортов: (%f) \r\n", j->show_koef_obj(), j->show_mort_req());
 	SendMsgToChar(ch, "Тип: %s, СпецПроцедура: %s", buf1, buf2);
 
 	if (GET_OBJ_OWNER(j)) {
-		auto *tmpstr = get_name_by_unique(GET_OBJ_OWNER(j));
+		auto *tmpstr = GetPlayerNameByUnique(GET_OBJ_OWNER(j));
 		SendMsgToChar(ch, ", Владелец : %s", tmpstr == nullptr ? "УДАЛЕН": tmpstr);
 	}
 //	if (GET_OBJ_ZONE(j))
 	SendMsgToChar(ch, ", Принадлежит зоне VNUM : %d", GET_OBJ_VNUM_ZONE_FROM(j));
 	if (GET_OBJ_MAKER(j)) {
-		const char *to_name = get_name_by_unique(GET_OBJ_MAKER(j));
+		const char *to_name = GetPlayerNameByUnique(GET_OBJ_MAKER(j));
 		if (to_name)
 			SendMsgToChar(ch, ", Создатель : %s", to_name);
 		else
 			SendMsgToChar(ch, ", Создатель : не найден");
 	}
-	if (GET_OBJ_PARENT(j)) {
-		SendMsgToChar(ch, ", Родитель(VNum) : [%d]", GET_OBJ_PARENT(j));
+	if (obj_proto[j->get_rnum()]->get_parent_rnum() > -1) {
+		SendMsgToChar(ch, ", Родитель(VNum) : [%d]", obj_proto[j->get_rnum()]->get_parent_vnum());
 	}
 	if (GET_OBJ_CRAFTIMER(j) > 0) {
 		SendMsgToChar(ch, ", &Yскрафчена с таймером : [%d]&n", GET_OBJ_CRAFTIMER(j));
@@ -750,7 +763,7 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 	sprintf(buf, "Вес: %d, Цена: %d, Рента(eq): %d, Рента(inv): %d, ",
 			GET_OBJ_WEIGHT(j), GET_OBJ_COST(j), GET_OBJ_RENTEQ(j), GET_OBJ_RENT(j));
 	SendMsgToChar(buf, ch);
-	if (check_unlimited_timer(j))
+	if (stable_objs::IsTimerUnlimited(j))
 		sprintf(buf, "Таймер: нерушимо, ");
 	else
 		sprintf(buf, "Таймер: %d, ", j->get_timer());
@@ -918,8 +931,6 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 			break;
 
 		case EObjType::kContainer:sprintbit(GET_OBJ_VAL(j, 1), container_bits, smallBuf);
-			//sprintf(buf, "Объем: %d, Тип ключа: %s, Номер ключа: %d, Труп: %s",
-			//	GET_OBJ_VAL(j, 0), buf2, GET_OBJ_VAL(j, 2), YESNO(GET_OBJ_VAL(j, 3)));
 			if (IS_CORPSE(j)) {
 				sprintf(buf, "Объем: %d, Тип ключа: %s, VNUM моба: %d, Труп: да",
 						GET_OBJ_VAL(j, 0), smallBuf, GET_OBJ_VAL(j, 2));
@@ -960,14 +971,14 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 			);
 			break;
 
-		case EObjType::kIngredient:sprintbit(GET_OBJ_SKILL(j), ingradient_bits, smallBuf);
+		case EObjType::kIngredient:sprintbit(j->get_spec_param(), ingradient_bits, smallBuf);
 			sprintf(buf, "ingr bits %s", smallBuf);
 
-			if (IS_SET(GET_OBJ_SKILL(j), kItemCheckUses)) {
+			if (IS_SET(j->get_spec_param(), kItemCheckUses)) {
 				sprintf(buf + strlen(buf), "\r\nможно применить %d раз", GET_OBJ_VAL(j, 2));
 			}
 
-			if (IS_SET(GET_OBJ_SKILL(j), kItemCheckLag)) {
+			if (IS_SET(j->get_spec_param(), kItemCheckLag)) {
 				sprintf(buf + strlen(buf), "\r\nможно применить 1 раз в %d сек", (i = GET_OBJ_VAL(j, 0) & 0xFF));
 				if (GET_OBJ_VAL(j, 3) == 0 || GET_OBJ_VAL(j, 3) + i < time(nullptr))
 					sprintf(buf + strlen(buf), "(можно применять).");
@@ -977,11 +988,11 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 				}
 			}
 
-			if (IS_SET(GET_OBJ_SKILL(j), kItemCheckLevel)) {
+			if (IS_SET(j->get_spec_param(), kItemCheckLevel)) {
 				sprintf(buf + strlen(buf), "\r\nможно применить с %d уровня.", (GET_OBJ_VAL(j, 0) >> 8) & 0x1F);
 			}
 
-			if ((i = real_object(GET_OBJ_VAL(j, 1))) >= 0) {
+			if ((i = GetObjRnum(GET_OBJ_VAL(j, 1))) >= 0) {
 				sprintf(buf + strlen(buf), "\r\nпрототип %s%s%s.",
 						CCICYN(ch, C_NRM), obj_proto[i]->get_PName(0).c_str(), CCNRM(ch, C_NRM));
 			}
@@ -1064,9 +1075,9 @@ void do_stat_object(CharData *ch, ObjData *j, const int virt = 0) {
 	if (is_grgod) {
 		sprintf(buf,
 				"Сейчас в мире : %d. На постое : %d. Макс в мире: %d\r\n",
-				rnum >= 0 ? obj_proto.CountInWorld(rnum) - (virt ? 1 : 0) : -1,
+				rnum >= 0 ? obj_proto.total_online(rnum) - (virt ? 1 : 0) : -1,
 				rnum >= 0 ? obj_proto.stored(rnum) : -1,
-				GET_OBJ_MIW(j));
+				GetObjMIW(j->get_rnum()));
 		SendMsgToChar(buf, ch);
 		// check the object for a script
 		do_sstat_object(ch, j);
@@ -1090,7 +1101,7 @@ void do_stat_room(CharData *ch, const int rnum = 0) {
 	sprinttype(rm->sector_type, sector_types, smallBuf);
 	sprintf(buf,
 			"Зона: [%3d], VNum: [%s%5d%s], RNum: [%5d], Тип  сектора: %s\r\n",
-			zone_table[rm->zone_rn].vnum, CCGRN(ch, C_NRM), rm->room_vn, CCNRM(ch, C_NRM), ch->in_room, smallBuf);
+			zone_table[rm->zone_rn].vnum, CCGRN(ch, C_NRM), rm->vnum, CCNRM(ch, C_NRM), rnum, smallBuf);
 	SendMsgToChar(buf, ch);
 
 	rm->flags_sprint(smallBuf, ",");
@@ -1186,12 +1197,11 @@ void do_stat_room(CharData *ch, const int rnum = 0) {
 	if (!rm->affected.empty()) {
 		sprintf(buf1, "&GАффекты на комнате:\r\n&n");
 		for (const auto &aff : rm->affected) {
-			sprintf(buf1 + strlen(buf1), "       Заклинание \"%s\" (%d) - %s.\r\n",
+			sprintf(buf1 + strlen(buf1), "       Заклинание \"%s\" (длит: %d, модиф: %d) - %s.\r\n",
 					MUD::Spell(aff->type).GetCName(),
 					aff->duration,
-					((k = find_char(aff->caster_id))
-					 ? GET_NAME(k)
-					 : "неизвестно"));
+					aff->type == ESpell::kPortalTimer ? world[aff->modifier]->vnum : aff->modifier,
+					(k = find_char(aff->caster_id)) ? GET_NAME(k) : "неизвестно");
 		}
 		SendMsgToChar(buf1, ch);
 	}
@@ -1199,130 +1209,164 @@ void do_stat_room(CharData *ch, const int rnum = 0) {
 	do_sstat_room(rm, ch);
 }
 
-void do_stat(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
+void do_stat(CharData *ch, char *argument, int cmd, int/* subcmd*/) {
 	CharData *victim;
 	ObjData *object;
 	int tmp;
+	int level = ch->IsFlagged(EPrf::kCoderinfo) ? kLvlImplementator : GetRealLevel(ch);
 
 	half_chop(argument, buf1, buf2);
 
+	if (!(privilege::HasPrivilege(ch, std::string(cmd_info[cmd].command), 0, 0, false)) && (GET_OLC_ZONE(ch) <=0)) {
+		SendMsgToChar("Чаво?\r\n", ch);
+		return;
+	}
 	if (!*buf1) {
 		SendMsgToChar("Состояние КОГО или ЧЕГО?\r\n", ch);
 		return;
 	}
-
-	int level = PRF_FLAGGED(ch, EPrf::kCoderinfo) ? kLvlImplementator : GetRealLevel(ch);
-
-	if (utils::IsAbbr(buf1, "room") && level >= kLvlBuilder) {
-		int vnum, rnum = kNowhere;
-		if (*buf2 && (vnum = atoi(buf2))) {
-			if ((rnum = real_room(vnum)) != kNowhere)
-				do_stat_room(ch, rnum);
-			else
-				SendMsgToChar("Состояние какой комнаты?\r\n", ch);
-		}
-		if (!*buf2)
-			do_stat_room(ch);
-	} else if (utils::IsAbbr(buf1, "mob") && level >= kLvlBuilder) {
-		if (!*buf2)
-			SendMsgToChar("Состояние какого создания?\r\n", ch);
-		else {
-			if ((victim = get_char_vis(ch, buf2, EFind::kCharInWorld)) != nullptr)
-				do_stat_character(ch, victim, 0);
-			else
-				SendMsgToChar("Нет такого создания в этом МАДе.\r\n", ch);
-		}
-	} else if (utils::IsAbbr(buf1, "player")) {
-		if (!*buf2) {
-			SendMsgToChar("Состояние какого игрока?\r\n", ch);
-		} else {
-			if ((victim = get_player_vis(ch, buf2, EFind::kCharInWorld)) != nullptr)
-				do_stat_character(ch, victim);
-			else
-				SendMsgToChar("Этого персонажа сейчас нет в игре.\r\n", ch);
-		}
-	} else if (utils::IsAbbr(buf1, "ip")) {
-		if (!*buf2) {
-			SendMsgToChar("Состояние ip какого игрока?\r\n", ch);
-		} else {
-			if ((victim = get_player_vis(ch, buf2, EFind::kCharInWorld)) != nullptr) {
-				do_statip(ch, victim);
-				return;
-			} else {
-				SendMsgToChar("Этого персонажа сейчас нет в игре, смотрим пфайл.\r\n", ch);
+	if (*buf1 && IS_IMMORTAL(ch)) {
+		if (utils::IsAbbr(buf1, "room") && level >= kLvlBuilder) {
+			int vnum, rnum = kNowhere;
+			if (*buf2 && (vnum = atoi(buf2))) {
+				if ((rnum = GetRoomRnum(vnum)) != kNowhere)
+					do_stat_room(ch, rnum);
+				else
+					SendMsgToChar("Состояние какой комнаты?\r\n", ch);
 			}
-			Player t_vict;
-			if (load_char(buf2, &t_vict) > -1) {
-				do_statip(ch, &t_vict);
-			} else {
-				SendMsgToChar("Такого игрока нет ВООБЩЕ.\r\n", ch);
-			}
+			if (!*buf2)
+				do_stat_room(ch);
+			return;
 		}
-	} else if (utils::IsAbbr(buf1, "karma") || utils::IsAbbr(buf1, "карма")) {
-		if (!*buf2) {
-			SendMsgToChar("Карму какого игрока?\r\n", ch);
-		} else {
-			if ((victim = get_player_vis(ch, buf2, EFind::kCharInWorld)) != nullptr) {
-				DoStatKarma(ch, victim);
-				return;
-			} else {
-				SendMsgToChar("Этого персонажа сейчас нет в игре, смотрим пфайл.\r\n", ch);
+		if (utils::IsAbbr(buf1, "mob") && level >= kLvlBuilder) {
+			if (!*buf2)
+				SendMsgToChar("Состояние какого создания?\r\n", ch);
+			else {
+				if ((victim = get_char_vis(ch, buf2, EFind::kCharInWorld)) != nullptr)
+					do_stat_character(ch, victim, 0);
+				else
+					SendMsgToChar("Нет такого создания в этом МАДе.\r\n", ch);
 			}
-			Player t_vict;
-			if (load_char(buf2, &t_vict) > -1) {
-				DoStatKarma(ch, &t_vict);
+			return;
+		} 
+		if (utils::IsAbbr(buf1, "player")) {
+			if (!*buf2) {
+				SendMsgToChar("Состояние какого игрока?\r\n", ch);
 			} else {
-				SendMsgToChar("Такого игрока нет ВООБЩЕ.\r\n", ch);
+				if ((victim = get_player_vis(ch, buf2, EFind::kCharInWorld)) != nullptr)
+					do_stat_character(ch, victim);
+				else
+					SendMsgToChar("Этого персонажа сейчас нет в игре.\r\n", ch);
 			}
+			return;
 		}
-	} else if (utils::IsAbbr(buf1, "file")) {
-		if (!*buf2) {
-			SendMsgToChar("Состояние какого игрока(из файла)?\r\n", ch);
-		} else {
-			Player t_vict;
-			if (load_char(buf2, &t_vict) > -1) {
-				if (GetRealLevel(&t_vict) > level) {
-					SendMsgToChar("Извините, вам это еще рано.\r\n", ch);
+		if (utils::IsAbbr(buf1, "ip")) {
+			if (!*buf2) {
+				SendMsgToChar("Состояние ip какого игрока?\r\n", ch);
+			} else {
+				if ((victim = get_player_vis(ch, buf2, EFind::kCharInWorld)) != nullptr) {
+					do_statip(ch, victim);
+					return;
 				} else {
-					Clan::SetClanData(&t_vict);
-					do_stat_character(ch, &t_vict);
+					SendMsgToChar("Этого персонажа сейчас нет в игре, смотрим пфайл.\r\n", ch);
 				}
-			} else {
-				SendMsgToChar("Такого игрока нет ВООБЩЕ.\r\n", ch);
+				Player t_vict;
+				if (LoadPlayerCharacter(buf2, &t_vict, ELoadCharFlags::kFindId) > -1) {
+					do_statip(ch, &t_vict);
+				} else {
+					SendMsgToChar("Такого игрока нет ВООБЩЕ.\r\n", ch);
+				}
 			}
+			return;
 		}
-	} else if (utils::IsAbbr(buf1, "object") && level >= kLvlBuilder) {
-		if (!*buf2)
-			SendMsgToChar("Состояние какого предмета?\r\n", ch);
-		else {
-			if ((object = get_obj_vis(ch, buf2)) != nullptr)
-				do_stat_object(ch, object);
-			else
-				SendMsgToChar("Нет такого предмета в игре.\r\n", ch);
+		if (utils::IsAbbr(buf1, "karma") || utils::IsAbbr(buf1, "карма")) {
+			if (!*buf2) {
+				SendMsgToChar("Карму какого игрока?\r\n", ch);
+			} else {
+				if ((victim = get_player_vis(ch, buf2, EFind::kCharInWorld)) != nullptr) {
+					DoStatKarma(ch, victim);
+					return;
+				} else {
+					SendMsgToChar("Этого персонажа сейчас нет в игре, смотрим пфайл.\r\n", ch);
+				}
+				Player t_vict;
+				if (LoadPlayerCharacter(buf2, &t_vict, ELoadCharFlags::kFindId) > -1) {
+					DoStatKarma(ch, &t_vict);
+				} else {
+					SendMsgToChar("Такого игрока нет ВООБЩЕ.\r\n", ch);
+				}
+			}
+			return;
 		}
-	} else {
-		if (level >= kLvlBuilder) {
-			if ((object = get_object_in_equip_vis(ch, buf1, ch->equipment, &tmp)) != nullptr)
-				do_stat_object(ch, object);
-			else if ((object = get_obj_in_list_vis(ch, buf1, ch->carrying)) != nullptr)
-				do_stat_object(ch, object);
-			else if ((victim = get_char_vis(ch, buf1, EFind::kCharInRoom)) != nullptr)
-				do_stat_character(ch, victim);
-			else if ((object = get_obj_in_list_vis(ch, buf1, world[ch->in_room]->contents)) != nullptr)
-				do_stat_object(ch, object);
-			else if ((victim = get_char_vis(ch, buf1, EFind::kCharInWorld)) != nullptr)
-				do_stat_character(ch, victim);
-			else if ((object = get_obj_vis(ch, buf1)) != nullptr)
-				do_stat_object(ch, object);
-			else
-				SendMsgToChar("Ничего похожего с этим именем нет.\r\n", ch);
-		} else {
-			if ((victim = get_player_vis(ch, buf1, EFind::kCharInRoom)) != nullptr)
-				do_stat_character(ch, victim);
-			else if ((victim = get_player_vis(ch, buf1, EFind::kCharInWorld)) != nullptr)
-				do_stat_character(ch, victim);
-			else
-				SendMsgToChar("Никого похожего с этим именем нет.\r\n", ch);
+		if (utils::IsAbbr(buf1, "file")) {
+			if (!*buf2) {
+				SendMsgToChar("Состояние какого игрока(из файла)?\r\n", ch);
+			} else {
+				Player t_vict;
+				if (LoadPlayerCharacter(buf2, &t_vict, ELoadCharFlags::kFindId) > -1) {
+					if (GetRealLevel(&t_vict) > level) {
+						SendMsgToChar("Извините, вам это еще рано.\r\n", ch);
+					} else {
+						Clan::SetClanData(&t_vict);
+						do_stat_character(ch, &t_vict);
+					}
+				} else {
+					SendMsgToChar("Такого игрока нет ВООБЩЕ.\r\n", ch);
+				}
+			}
+			return;
+		}
+		if (utils::IsAbbr(buf1, "object") && level >= kLvlBuilder) {
+			if (!*buf2)
+				SendMsgToChar("Состояние какого предмета?\r\n", ch);
+			else {
+				if ((object = get_obj_vis(ch, buf2)) != nullptr)
+					do_stat_object(ch, object);
+				else
+					SendMsgToChar("Нет такого предмета в игре.\r\n", ch);
+			}
+			return;
 		}
 	}
+	if (IS_IMMORTAL(ch)) {
+		if ((object = get_object_in_equip_vis(ch, buf1, ch->equipment, &tmp)) != nullptr) {
+			do_stat_object(ch, object);
+			return;
+		}
+		if ((object = get_obj_in_list_vis(ch, buf1, ch->carrying)) != nullptr) {
+			do_stat_object(ch, object);
+			return;
+		}
+		if ((victim = get_char_vis(ch, buf1, EFind::kCharInRoom)) != nullptr) {
+			do_stat_character(ch, victim);
+			return;
+		}
+		if ((object = get_obj_in_list_vis(ch, buf1, world[ch->in_room]->contents)) != nullptr) {
+			do_stat_object(ch, object);
+			return;
+		}
+		if ((victim = get_char_vis(ch, buf1, EFind::kCharInWorld)) != nullptr) {
+			do_stat_character(ch, victim);
+			return;
+		}
+		if ((object = get_obj_vis(ch, buf1)) != nullptr) {
+			do_stat_object(ch, object);
+			return;
+		}
+	} 
+	if (GET_OLC_ZONE(ch) == zone_table[world[ch->in_room]->zone_rn].vnum) {
+		if ((object = get_object_in_equip_vis(ch, buf1, ch->equipment, &tmp)) != nullptr) {
+			do_stat_object(ch, object);
+			return;
+		}
+		if ((object = get_obj_in_list_vis(ch, buf1, world[ch->in_room]->contents)) != nullptr) {
+			do_stat_object(ch, object);
+			return;
+		}
+		if ((victim = get_char_vis(ch, buf1, EFind::kCharInRoom)) != nullptr) {
+			do_stat_character(ch, victim);
+			return;
+		}
+	}
+	SendMsgToChar("Ничего похожего с этим именем нет.\r\n", ch);
 }

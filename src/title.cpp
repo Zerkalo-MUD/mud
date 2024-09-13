@@ -3,9 +3,6 @@
 // Part of Bylins http://www.bylins.su
 
 #include "title.h"
-
-#include <boost/algorithm/string.hpp>
-
 #include "entities/char_player.h"
 #include "game_fight/pk.h"
 #include "handler.h"
@@ -67,7 +64,7 @@ DescriptorData *send_result_message(long unique, bool action);
 void TitleSystem::do_title(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (ch->IsNpc()) return;
 
-	if (!privilege::CheckFlag(ch, privilege::kTitle) && PLR_FLAGGED(ch, EPlrFlag::kNoTitle)) {
+	if (!privilege::CheckFlag(ch, privilege::kTitle) && ch->IsFlagged(EPlrFlag::kNoTitle)) {
 		SendMsgToChar("Вам запрещена работа с титулами.\r\n", ch);
 		return;
 	}
@@ -91,7 +88,7 @@ void TitleSystem::do_title(CharData *ch, char *argument, int/* cmd*/, int/* subc
 				SendMsgToChar("Нет такого игрока.\r\n", ch);
 				return;
 			}
-			if (GetRealLevel(vict) >= kLvlImmortal || PRF_FLAGGED(vict, EPrf::kCoderinfo)) {
+			if (GetRealLevel(vict) >= kLvlImmortal || vict->IsFlagged(EPrf::kCoderinfo)) {
 				SendMsgToChar("Вы не можете сделать этого.\r\n", ch);
 				return;
 			}
@@ -114,7 +111,7 @@ void TitleSystem::do_title(CharData *ch, char *argument, int/* cmd*/, int/* subc
 	if (CompareParam(buffer2, "установить")) {
 		utils::Trim(buffer);
 		if (buffer.size() > MAX_TITLE_LENGTH) {
-			if (PLR_FLAGGED(ch, EPlrFlag::kNoTitle)) {
+			if (ch->IsFlagged(EPlrFlag::kNoTitle)) {
 				SendMsgToChar(ch, "Вам запрещено устанавливать самому себе титул.\r\n");
 				return;
 			}
@@ -221,20 +218,20 @@ bool TitleSystem::check_title(const std::string &text, CharData *ch) {
 * \return 0 не сканало, 1 сканало
 */
 bool TitleSystem::check_pre_title(std::string text, CharData *ch) {
-	if (!check_alphabet(text, ch, " .-?Ёё")) return 0;
+	if (!check_alphabet(text, ch, " .-?Ёё")) 
+		return 0;
 
-	if (IS_GOD(ch) || privilege::CheckFlag(ch, privilege::kTitle)) return 1;
+	if (IS_GOD(ch) || privilege::CheckFlag(ch, privilege::kTitle)) 
+		return 1;
 
 	if (!GetRealRemort(ch)) {
 		SendMsgToChar(ch, "Вы должны иметь по крайней мере одно перевоплощение для предтитула.\r\n");
 		return 0;
 	}
-
+	std::vector<std::string> list = utils::Split(text);
 	int word = 0, prep = 0;
-	typedef boost::split_iterator<std::string::iterator> split_it;
-	for (split_it it = boost::make_split_iterator(text, boost::first_finder(" ", boost::is_iequal())); it != split_it();
-		 ++it) {
-		if (boost::copy_range<std::string>(*it).size() > 3)
+	for (auto it : list) {
+		if (it.size() > 3)
 			++word;
 		else
 			++prep;
@@ -276,7 +273,7 @@ bool TitleSystem::check_alphabet(const std::string &text, CharData *ch, const st
 * \param action - 0 если запрещаем, 1 если одобряем
 */
 DescriptorData *TitleSystem::send_result_message(long unique, bool action) {
-	DescriptorData *d = DescByUID(unique);
+	DescriptorData *d = DescriptorByUid(unique);
 	if (d) {
 		SendMsgToChar(d->character.get(), "Ваш титул был %s Богами.\r\n", action ? "одобрен" : "запрещен");
 	}
@@ -301,7 +298,7 @@ bool TitleSystem::manage_title_list(std::string &name, bool action, CharData *ch
 				send_to_gods(buf, true);
 			} else {
 				Player victim;
-				if (load_char(it->first.c_str(), &victim) < 0) {
+				if (LoadPlayerCharacter(it->first.c_str(), &victim, ELoadCharFlags::kFindId) < 0) {
 					SendMsgToChar("Персонаж был удален или ошибочка какая-то вышла.\r\n", ch);
 					title_list.erase(it);
 					return TITLE_FIND_CHAR;
@@ -320,7 +317,7 @@ bool TitleSystem::manage_title_list(std::string &name, bool action, CharData *ch
 				send_to_gods(buf, true);
 			} else {
 				Player victim;
-				if (load_char(it->first.c_str(), &victim) < 0) {
+				if (LoadPlayerCharacter(it->first.c_str(), &victim, ELoadCharFlags::kFindId) < 0) {
 					SendMsgToChar("Персонаж был удален или ошибочка какая-то вышла.\r\n", ch);
 					title_list.erase(it);
 					return TITLE_FIND_CHAR;

@@ -28,7 +28,7 @@
 #include "statistics/top.h"
 #include "structs/global_objects.h"
 
-extern void add_karma(CharData *ch, const char *punish, const char *reason);
+extern void AddKarma(CharData *ch, const char *punish, const char *reason);
 extern void check_max_hp(CharData *ch);
 
 namespace GloryConst {
@@ -107,7 +107,7 @@ const char *olc_stat_name[] =
 		"Разум",
 		"Запоминание",
 		"Физ. урон %",
-		"Маг. урон %"
+		"Сила заклинаний %"
 	};
 
 void glory_hide(CharData *ch,
@@ -179,7 +179,7 @@ void add_glory(long uid, int amount) {
 		glory_list[uid] = temp_node;
 	}
 
-	DescriptorData *d = DescByUID(uid);
+	DescriptorData *d = DescriptorByUid(uid);
 	if (d) {
 		SendMsgToChar(d->character.get(), "%sВы заслужили %d %s постоянной славы!%s\r\n",
 					  CCGRN(d->character, C_NRM),
@@ -605,7 +605,7 @@ void do_spend_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 		Player p_vict;
 		CharData *vict = &p_vict;
-		if (load_char(name.c_str(), vict) < 0) {
+		if (LoadPlayerCharacter(name.c_str(), vict, ELoadCharFlags::kFindId) < 0) {
 			SendMsgToChar(ch, "%s - некорректное имя персонажа.\r\n", name.c_str());
 			return;
 		}
@@ -640,10 +640,10 @@ void do_spend_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 		snprintf(buf, kMaxStringLength,
 				 "Transfer %d const glory from %s", total_amount, GET_NAME(ch));
-		add_karma(vict, buf, "командой");
+		AddKarma(vict, buf, "командой");
 
 		snprintf(buf, kMaxStringLength, "Transfer %d const glory to %s", amount, GET_NAME(vict));
-		add_karma(ch, buf, "командой");
+		AddKarma(ch, buf, "командой");
 
 		total_charge += tax;
 		transfer_log("%s -> %s transfered %d (%d tax)", GET_NAME(ch), GET_NAME(vict), total_amount, tax);
@@ -791,7 +791,7 @@ void do_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	}
 	Player t_vict; // TODO: мутно
 	if (!vict) {
-		if (load_char(arg, &t_vict) < 0) {
+		if (LoadPlayerCharacter(arg, &t_vict, ELoadCharFlags::kFindId) < 0) {
 			SendMsgToChar("Такого персонажа не существует.\r\n", ch);
 			return;
 		}
@@ -809,7 +809,7 @@ void do_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			mudlog(buf, NRM, MAX(kLvlGod, GET_INVIS_LEV(ch)), SYSLOG, true);
 			imm_log("%s", buf);
 			sprintf(buf, "Change const glory +%d by %s", amount, GET_NAME(ch));
-			add_karma(vict, buf, reason);
+			AddKarma(vict, buf, reason);
 			GloryMisc::add_log(mode, amount, std::string(buf), std::string(reason), vict);
 			break;
 		}
@@ -826,7 +826,7 @@ void do_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			mudlog(buf, NRM, MAX(kLvlGod, GET_INVIS_LEV(ch)), SYSLOG, true);
 			imm_log("%s", buf);
 			sprintf(buf, "Change const glory -%d by %s", amount, GET_NAME(ch));
-			add_karma(vict, buf, reason);
+			AddKarma(vict, buf, reason);
 			GloryMisc::add_log(mode, amount, std::string(buf), std::string(reason), vict);
 			break;
 		}
@@ -838,7 +838,7 @@ void do_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				mudlog(buf, NRM, MAX(kLvlGod, GET_INVIS_LEV(ch)), SYSLOG, true);
 				imm_log("%s", buf);
 				sprintf(buf, "Reset stats and const glory by %s", GET_NAME(ch));
-				add_karma(vict, buf, reason);
+				AddKarma(vict, buf, reason);
 				GloryMisc::add_log(mode, 0, std::string(buf), std::string(reason), vict);
 			} else {
 				SendMsgToChar(ch, "%s - запись постоянной славы и так пустая.\r\n", vict->get_name().c_str());

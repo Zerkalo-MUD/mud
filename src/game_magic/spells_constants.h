@@ -270,9 +270,10 @@ enum class ESpell {
 	kQUest = 353,
 	kPortalTimer = 354,
 	kNoCharge = 355,
-	kDazzle =356,
+	kDazzle = 356,
+	kGreatHeal = 357,
 	kFirst = kArmor,
-	kLast = 356	// Не забываем менять
+	kLast = 357	// Не забываем менять
 };
 
 const ESpell &operator++(ESpell &s);
@@ -331,6 +332,7 @@ enum EMagic : Bitvector {
 	kMagManual = 1 << 10,
 	kMagWarcry = 1 << 11,
 	kMagNeedControl = 1 << 12,
+	kMagCharRelocate = 1 << 13,
 // А чего это тут дырка Ж)
 	kNpcDamagePc = 1 << 16,
 	kNpcDamagePcMinhp = 1 << 17,

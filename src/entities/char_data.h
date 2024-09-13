@@ -7,18 +7,18 @@
 #include "player_i.h"
 #include "game_skills/morph.hpp"
 #include "game_mechanics/obj_sets.h"
+#include "game_mechanics/dead_load.h"
 #include "db.h"
 #include "entities/entities_constants.h"
 #include "room_data.h"
 #include "communication/ignores.h"
 #include "game_crafts/im.h"
 #include "game_skills/skills.h"
+#include "game_skills/townportal.h"
 #include "utils/utils.h"
 #include "conf.h"
 #include "game_affects/affect_data.h"
 #include "game_mechanics/mem_queue.h"
-
-#include <boost/dynamic_bitset.hpp>
 
 #include <unordered_map>
 #include <bitset>
@@ -83,7 +83,7 @@ struct char_played_ability_data {
 	int pray_add;
 	int percent_exp_add;
 	int percent_physdam_add;
-	int percent_magdam_add;
+	int percent_spellpower_add;
 	int percent_spell_blink_phys;
 	int percent_spell_blink_mag;
 	std::array<int, to_underlying(ESaving::kLast) + 1> apply_saving_throw;	// Saving throw (Bonuses)
@@ -108,7 +108,7 @@ struct char_ability_data {
 // Char's points.
 struct char_point_data {
 	int hit;
-	sh_int move;
+	int move;
 
 	int max_move;    // Max move for PC/NPC
 	int max_hit;        // Max hit for PC/NPC
@@ -131,7 +131,6 @@ struct char_special_data_saved {
 
 // Special playing constants shared by PCs and NPCs which aren't in pfile
 struct char_special_data {
-	//byte position;        // Standing, fighting, sleeping, etc.
 	EPosition position;        // Standing, fighting, sleeping, etc.
 
 	int carry_weight;        // Carried weight
@@ -218,7 +217,6 @@ struct player_special_data_saved {
 	int Rip_pk_this; // рипы от чаров на этом морте
 	int Rip_dt_this; // дт на этом морте
 	int Rip_other_this; // рипы от триггеров и прочее на этом морте
-	//edited by WorM переделал на unsigned long long чтоб экспа в минуса не уходила
 	unsigned long long Exp_arena; //потеряно экспы за рипы на арене
 	unsigned long long Exp_mob; //потеряно экспы  рипы от мобов всего
 	unsigned long long Exp_pk; //потеряно экспы  рипы от чаров всего
@@ -229,9 +227,8 @@ struct player_special_data_saved {
 	unsigned long long Exp_dt_this; //потеряно экспы  дт на этом морте
 	unsigned long long Exp_other_this; //потеряно экспы  рипы от триггеров и прочее на этом морте
 	//конец правки (с) Василиса
-	//Polud храним цену, начиная с которой нужно присылать оффлайн-уведомления с базара
 	long ntfyExchangePrice;
-	int HiredCost;// added by WorM (Видолюб) 2010.06.04 сумма потраченная на найм(возвращается при креше)
+	int HiredCost;
 	unsigned int who_mana; // количество энергии для использования команды кто
 	unsigned long int telegram_id;// идентификатор телеграма
 	time_t lastGloryRespecTime; // дата последнего респека славой
@@ -252,7 +249,7 @@ struct player_special_data {
 	int agressor;        // Agression room(it is also a flag)
 	time_t agro_time;        // Last agression time (it is also a flag)
 	im_rskill *rskill;    // Известные рецепты
-	struct CharacterPortal *portals;    // порталы теперь живут тут
+  	CharacterRunestoneRoster runestones; // рунные камни для врат и не только
 	int *logs;        // уровни подробности каналов log
 
 	char *Exchange_filter;
@@ -355,7 +352,7 @@ class CharData : public ProtectedCharData {
 	using shared_ptr = std::shared_ptr<CharData>;
 	using char_affects_list_t = std::list<Affect<EApply>::shared_ptr>;
 	using morphs_list_t = std::list<std::string>;
-	using role_t = boost::dynamic_bitset<std::size_t>;
+	using role_t = std::bitset<9>;
 	using followers_list_t = std::list<CharData *>;
 
 	CharData();
@@ -369,7 +366,7 @@ class CharData : public ProtectedCharData {
 	bool HaveFeat(EFeat feat_id) const { return real_abils.Feats.test(to_underlying(feat_id)); };
 
 	void set_skill(const ESkill skill_id, int percent);
-	void SetSkillAfterRemort(short remort);
+	void SetSkillAfterRemort(int remort);
 	void clear_skills();
 	int GetSkill(const ESkill skill_id) const;
 	int GetSkillWithoutEquip(const ESkill skill_id) const;
@@ -627,7 +624,7 @@ class CharData : public ProtectedCharData {
 	bool has_any_affect(const affects_list_t &affects);
 	size_t remove_random_affects(const size_t count);
 
-	const auto &get_role() const { return role_; }
+	const role_t &get_role() const { return role_; }
 	void set_role(const role_t &new_role) { role_ = new_role; }
 	void msdp_report(const std::string &name);
 
@@ -772,16 +769,48 @@ class CharData : public ProtectedCharData {
 
  public:
 	int punctual_wait;        // wait for how many loops (punctual style)
-	char *last_comm;        // последний приказ чармису перед окончанием лага
+	std::string last_comm;        // последний приказ чармису перед окончанием лага
 
 	struct char_player_data player_data;        // Normal data
 	struct char_played_ability_data add_abils;        // Abilities that add to main
 	struct char_ability_data real_abils;        // Abilities without modifiers
 	struct char_point_data points;        // Points
+
 	struct char_special_data char_specials;        // PC/NPC specials
+
+	EPosition GetPosition() const { return char_specials.position; };
+  	void SetPosition(const EPosition position) { char_specials.position = position; };
+	/* Character's flags actions */
+	// Костыльная функция, которая пока нужна, потому что загрузчик файлов не часть чардаты и не friend class.
+	void SetFlagsFromString(const std::string &string) { char_specials.saved.act.from_string(string.c_str()); };
+  	void PrintFlagsToAscii(char *sink) const { char_specials.saved.act.tascii(FlagData::kPlanesNumber, sink); };
+  	void CopyFlagsFrom(CharData *source) { char_specials.saved.act = source->char_specials.saved.act ; };
+	void SetFlag(const EMobFlag flag) { if (IsNpc()) { char_specials.saved.act.set(flag); }; };
+  	void UnsetFlag(const EMobFlag flag) { if (IsNpc()) { char_specials.saved.act.unset(flag); }; };
+  	[[nodiscard]] bool IsFlagged(const EMobFlag flag) const { return (IsNpc() && char_specials.saved.act.get(flag)); };
+  	void SetFlag(const ENpcFlag flag) { if (IsNpc()) { mob_specials.npc_flags.set(flag); }; };
+  	void UnsetFlag(const ENpcFlag flag) { if (IsNpc()) { mob_specials.npc_flags.unset(flag); }; };
+  	[[nodiscard]] bool IsFlagged(const ENpcFlag flag) const { return (IsNpc() && mob_specials.npc_flags.get(flag)); };
+  	void SetFlag(const EPlrFlag flag) { if (!IsNpc()) { char_specials.saved.act.set(flag); }; };
+  	void UnsetFlag(const EPlrFlag flag) { if (!IsNpc()) { char_specials.saved.act.unset(flag); }; };
+  	[[nodiscard]] bool IsFlagged(const EPlrFlag flag) const { return (!IsNpc() && char_specials.saved.act.get(flag)); };
+
 	struct mob_special_data mob_specials;        // NPC specials
 
 	player_special_data::shared_ptr player_specials;    // PC specials
+  	void ClearRunestones() { player_specials->runestones.Clear(); };
+  	void AddRunestone(const Runestone &stone);
+  	void RemoveRunestone(const Runestone &stone);
+  	void DeleteIrrelevantRunestones() { player_specials->runestones.DeleteIrrelevant(this); };
+	void PageRunestonesToChar() { player_specials->runestones.PageToChar(this); };
+  	bool IsRunestoneKnown(const Runestone &stone) { return player_specials->runestones.Contains(stone); };
+
+  	void SetFlag(const EPrf flag) { if (!IsNpc()) { player_specials->saved.pref.set(flag); }; };
+  	void UnsetFlag(const EPrf flag) { if (!IsNpc()) { player_specials->saved.pref.unset(flag); }; };
+  	[[nodiscard]] bool IsFlagged(const EPrf flag) const { return (!IsNpc() && player_specials->saved.pref.get(flag)); };
+
+	int GetCarryingWeight() const { return char_specials.carry_weight; };
+  	int GetCarryingQuantity() const { return char_specials.carry_items; };
 
 	char_affects_list_t affected;    // affected by what spells
 	struct TimedSkill *timed;    // use which timed skill/spells
@@ -793,8 +822,6 @@ class CharData : public ProtectedCharData {
 	long id;            // used by DG triggers
 	ObjData::triggers_list_ptr proto_script;    // list of default triggers
 	Script::shared_ptr script;    // script info for the object
-
-	CharData *next_fighting;    // For fighting list
 
 	//отладочные сообщения имморталу/тестеру/кодеру
 	void send_to_TC(bool to_impl, bool to_tester, bool to_coder, const char *msg, ...);
@@ -820,7 +847,7 @@ class CharData : public ProtectedCharData {
 
 	int poisoner;
 
-	OnDeadLoadList *dl_list;    // загружаемые в труп предметы
+	dead_load::OnDeadLoadList *dl_list;    // загружаемые в труп предметы
 	bool agrobd;        // показывает, агробд или нет
 
 	std::map<ESpell, TemporarySpell> temp_spells;
@@ -890,13 +917,12 @@ inline const FlagData &AFF_FLAGS(const CharData *ch) { return ch->char_specials.
 inline const FlagData &AFF_FLAGS(const CharData::shared_ptr &ch) { return ch->char_specials.saved.affected_by; }
 
 inline bool AFF_FLAGGED(const CharData *ch, const EAffect flag) {
-	return AFF_FLAGS(ch).get(flag)
-		|| ch->isAffected(flag);
+	return AFF_FLAGS(ch).get(flag);
 }
 
 inline bool AFF_FLAGGED(const CharData::shared_ptr &ch, const EAffect flag) {
-	return AFF_FLAGS(ch).get(flag)
-		|| ch->isAffected(flag);
+	return AFF_FLAGS(ch).get(flag);
+//		|| ch->isAffected(flag); //обойдемся без морфа
 }
 
 bool IS_CHARMICE(const CharData *ch);
@@ -947,12 +973,9 @@ inline bool AWAKE(const CharData::shared_ptr &ch) { return AWAKE(ch.get()); }
 bool CLEAR_MIND(const CharData *ch);
 inline bool CLEAR_MIND(const CharData::shared_ptr &ch) { return CLEAR_MIND(ch.get()); }
 
-// Polud условие для проверки перед запуском всех mob-триггеров КРОМЕ death, random и global
-//пока здесь только чарм, как и было раньше
 inline bool CAN_START_MTRIG(const CharData *ch) {
 	return !AFF_FLAGGED(ch, EAffect::kCharmed);
 }
-//-Polud
 
 bool OK_GAIN_EXP(const CharData *ch, const CharData *victim);
 
@@ -997,6 +1020,13 @@ inline auto GetSave(CharData *ch, ESaving save) {
 
 inline void SetSave(CharData *ch, ESaving save, int mod) {
 	ch->add_abils.apply_saving_throw[to_underlying(save)] = mod;
+}
+
+inline bool IS_UNDEAD(CharData *ch) {
+	return ch->IsNpc()
+			&& (ch->IsFlagged(EMobFlag::kResurrected)
+					|| GET_RACE(ch) == ENpcRace::kZombie
+					|| GET_RACE(ch) == ENpcRace::kGhost);
 }
 
 void change_fighting(CharData *ch, int need_stop);

@@ -35,7 +35,7 @@
 #include "entities/room_data.h"
 #include "modify.h"
 #include "house.h"
-#include "entities/player_races.h"
+#include "game_mechanics/player_races.h"
 #include "depot.h"
 #include "obj_save.h"
 #include "game_fight/fight.h"
@@ -47,14 +47,14 @@
 #include "conf.h"
 #include "game_mechanics/obj_sets.h"
 #include "utils_string.h"
+#include "backtrace.h"
+
 //#include "noob.h"
 //#include "game_mechanics/guilds.h"
 
 #ifdef HAVE_ICONV
 #include <iconv.h>
 #endif
-
-#include <boost/algorithm/string/trim.hpp>
 
 #include <vector>
 #include <string>
@@ -68,10 +68,11 @@
 extern DescriptorData *descriptor_list;
 extern CharData *mob_proto;
 extern const char *weapon_class[];
+extern std::pair<int, int> TotalMemUse();
+
 // local functions
 TimeInfoData *real_time_passed(time_t t2, time_t t1);
-TimeInfoData *mud_time_passed(time_t t2, time_t t1);
-void prune_crlf(char *txt);
+TimeInfoData *CalcMudTimePassed(time_t time_to, time_t time_from);
 bool IsValidEmail(const char *address);
 
 // external functions
@@ -100,9 +101,9 @@ const char *ACTNULL = "<NULL>";
 
 // return char with UID n
 CharData *find_char(long n) {
-	CharData *mob = mob_by_uid[n];
-	if (mob) {
-		return mob;
+	CharData *ch = chardata_by_uid[n];
+	if (ch) {
+		return ch;
 	}
 	return find_pc(n);
 }
@@ -228,7 +229,7 @@ return result;
 */
 
 // * Strips \r\n from end of string.
-void prune_crlf(char *txt) {
+void PruneCrlf(char *txt) {
 	size_t i = strlen(txt) - 1;
 
 	while (txt[i] == '\n' || txt[i] == '\r') {
@@ -464,12 +465,12 @@ TimeInfoData *real_time_passed(time_t t2, time_t t1) {
 	return (&now);
 }
 
-// Calculate the MUD time passed over the last t2-t1 centuries (secs) //
-TimeInfoData *mud_time_passed(time_t t2, time_t t1) {
+// Calculate the MUD time passed over the last time_to-time_from centuries (secs) //
+TimeInfoData *CalcMudTimePassed(time_t time_to, time_t time_from) {
 	long secs;
 	static TimeInfoData now;
 
-	secs = (long) (t2 - t1);
+	secs = (long) (time_to - time_from);
 
 	now.hours = (secs / (kSecsPerMudHour * kTimeKoeff)) % kHoursPerDay;    // 0..23 hours //
 	secs -= kSecsPerMudHour * kTimeKoeff * now.hours;
@@ -488,7 +489,7 @@ TimeInfoData *mud_time_passed(time_t t2, time_t t1) {
 TimeInfoData *age(const CharData *ch) {
 	static TimeInfoData player_age;
 
-	player_age = *mud_time_passed(time(nullptr), ch->player_data.time.birth);
+	player_age = *CalcMudTimePassed(time(nullptr), ch->player_data.time.birth);
 
 	player_age.year += 17;    // All players start at 17 //
 
@@ -940,8 +941,8 @@ bool same_group(CharData *ch, CharData *tch) {
 		&& !ch->get_master()->IsNpc()
 		&& (IS_HORSE(ch)
 			|| AFF_FLAGGED(ch, EAffect::kCharmed)
-			|| MOB_FLAGGED(ch, EMobFlag::kTutelar)
-			|| MOB_FLAGGED(ch, EMobFlag::kMentalShadow))) {
+			|| ch->IsFlagged(EMobFlag::kTutelar)
+			|| ch->IsFlagged(EMobFlag::kMentalShadow))) {
 		ch = ch->get_master();
 	}
 
@@ -950,8 +951,8 @@ bool same_group(CharData *ch, CharData *tch) {
 		&& !tch->get_master()->IsNpc()
 		&& (IS_HORSE(tch)
 			|| AFF_FLAGGED(tch, EAffect::kCharmed)
-			|| MOB_FLAGGED(tch, EMobFlag::kTutelar)
-			|| MOB_FLAGGED(tch, EMobFlag::kMentalShadow))) {
+			|| tch->IsFlagged(EMobFlag::kTutelar)
+			|| tch->IsFlagged(EMobFlag::kMentalShadow))) {
 		tch = tch->get_master();
 	}
 
@@ -1149,7 +1150,6 @@ char *format_act(const char *orig, CharData *ch, ObjData *obj, const void *vict_
 					else CHECK_NULL(obj, GET_OBJ_SUF_4(obj));
 					//dg_victim = (CharacterData *) vict_obj;
 					break;
-//Polud Добавил склонение местоимения ваш(е,а,и)
 				case 'z':
 					if (obj)
 						i = OYOU(obj);
@@ -1160,7 +1160,6 @@ char *format_act(const char *orig, CharData *ch, ObjData *obj, const void *vict_
 						i = HYOU((const CharData *) vict_obj);
 					else CHECK_NULL(vict_obj, HYOU((const CharData *) vict_obj));
 					break;
-//-Polud
 				default: log("SYSERR: Illegal $-code to act(): %c", *orig);
 					log("SYSERR: %s", orig);
 					i = "";
@@ -1217,12 +1216,12 @@ int roundup(float fl) {
 // Функция проверяет может ли ch нести предмет obj и загружает предмет
 // в инвентарь игрока или в комнату, где игрок находится
 void can_carry_obj(CharData *ch, ObjData *obj) {
-	if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)) {
+	if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)) {
 		SendMsgToChar("Вы не можете нести столько предметов.", ch);
 		PlaceObjToRoom(obj, ch->in_room);
 		CheckObjDecay(obj);
 	} else {
-		if (GET_OBJ_WEIGHT(obj) + IS_CARRYING_W(ch) > CAN_CARRY_W(ch)) {
+		if (GET_OBJ_WEIGHT(obj) + ch->GetCarryingWeight() > CAN_CARRY_W(ch)) {
 			sprintf(buf, "Вам слишком тяжело нести еще и %s.", obj->get_PName(3).c_str());
 			SendMsgToChar(buf, ch);
 			PlaceObjToRoom(obj, ch->in_room);
@@ -1235,8 +1234,8 @@ void can_carry_obj(CharData *ch, ObjData *obj) {
 
 /**
  * Бывшее #define CAN_CARRY_OBJ(ch,obj)  \
-   (((IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj)) <= CAN_CARRY_W(ch)) &&   \
-    ((IS_CARRYING_N(ch) + 1) <= CAN_CARRY_N(ch)))
+   (((ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj)) <= CAN_CARRY_W(ch)) &&   \
+    ((ch->GetCarryingQuantity() + 1) <= CAN_CARRY_N(ch)))
  */
 bool CAN_CARRY_OBJ(const CharData *ch, const ObjData *obj) {
 	// для анлимного лута мобами из трупов
@@ -1244,21 +1243,19 @@ bool CAN_CARRY_OBJ(const CharData *ch, const ObjData *obj) {
 		return true;
 	}
 
-	if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj) <= CAN_CARRY_W(ch)
-		&& IS_CARRYING_N(ch) + 1 <= CAN_CARRY_N(ch)) {
+	if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj) <= CAN_CARRY_W(ch)
+		&& ch->GetCarryingQuantity() + 1 <= CAN_CARRY_N(ch)) {
 		return true;
 	}
 
 	return false;
 }
 
-// shapirus: проверка, игнорирет ли чар who чара whom
 bool ignores(CharData *who, CharData *whom, unsigned int flag) {
 	if (who->IsNpc()) return false;
 
 	long ign_id;
 
-// имморталов не игнорит никто
 	if (IS_IMMORTAL(whom)) {
 		return false;
 	}
@@ -1371,14 +1368,6 @@ std::string FormatTimeToStr(long in_timer, bool flag) {
 // * Для обрезания точек в карме при сете славы.
 void skip_dots(char **string) {
 	for (; **string && (strchr(" .", **string) != nullptr); (*string)++);
-}
-
-int RealZoneNum(ZoneVnum zvn) {
-	for (int zrn = 0; zrn < static_cast<ZoneRnum>(zone_table.size()); zrn++) {
-		if (zone_table[zrn].vnum == zvn)
-			return zrn;
-	}
-	return -1;
 }
 
 // Return pointer to first occurrence in string ct in
@@ -1609,8 +1598,24 @@ void add(int zone_vnum, long exp) {
 	}
 }
 
+void MemLeakInfo() {
+ 	static int last_pmem_used = 0;
+	auto get_mem = TotalMemUse();
+	int vmem_used = get_mem.first;
+	int pmem_used = get_mem.second;
+	char buf [256];
+
+	if (pmem_used != last_pmem_used) {
+		debug::backtrace(runtime_config.logs(SYSLOG).handle());
+		last_pmem_used = pmem_used;
+		sprintf(buf, "Memory size mismatch, last: phys (%d kb), current: virt (%d kB) phys (%d kB)", last_pmem_used, vmem_used, pmem_used);
+		mudlog(buf, CMP, kLvlGreatGod, SYSLOG, true);
+		last_pmem_used = pmem_used;
+	}
+}
+
 void print_gain(CharData *ch) {
-	if (!PRF_FLAGGED(ch, EPrf::kCoderinfo)) {
+	if (!ch->IsFlagged(EPrf::kCoderinfo)) {
 		SendMsgToChar(ch, "Пока в разработке.\r\n");
 		return;
 	}
@@ -1887,7 +1892,7 @@ int calc_str_req(int weight, int type) {
 }
 
 void message_str_need(CharData *ch, ObjData *obj, int type) {
-	if (GET_POS(ch) == EPosition::kDead)
+	if (ch->GetPosition() == EPosition::kDead)
 		return;
 	int need_str = 0;
 	switch (type) {
@@ -1968,7 +1973,7 @@ size_t strlen_no_colors(const char *str) {
 // Симуляция телла от моба
 void tell_to_char(CharData *keeper, CharData *ch, const char *arg) {
 	char local_buf[kMaxInputLength];
-	if (AFF_FLAGGED(ch, EAffect::kDeafness) || PRF_FLAGGED(ch, EPrf::kNoTell)) {
+	if (AFF_FLAGGED(ch, EAffect::kDeafness) || ch->IsFlagged(EPrf::kNoTell)) {
 		sprintf(local_buf, "жестами показал$g на свой рот и уши. Ну его, болезного ..");
 		do_echo(keeper, local_buf, 0, SCMD_EMOTE);
 		return;

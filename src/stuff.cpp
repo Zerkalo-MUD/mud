@@ -20,7 +20,31 @@
 #include "structs/global_objects.h"
 
 
-extern std::vector<RandomObj> random_objs;
+class RandomObj {
+ public:
+  // внум объекта
+  int vnum;
+  // массив, в котором показывается, кому шмотка недоступна + шанс, что эта "недоступность" при выпадении предмета будет на нем
+  std::map<std::string, int> not_wear;
+  // минимальный и максимальный вес
+  int min_weight;
+  int max_weight;
+  // минимальная и максимальная цена за предмет
+  int min_price;
+  int max_price;
+  // прочность
+  int min_stability;
+  int max_stability;
+  // value0, value1, value2, value3
+  int value0_min, value1_min, value2_min, value3_min;
+  int value0_max, value1_max, value2_max, value3_max;
+  // список аффектов и их шанс упасть на шмотку
+  std::map<std::string, int> affects;
+  // список экстраффектов и их шанс упасть на шмотку
+  std::vector<ExtraAffects> extraffect;
+};
+
+std::vector<RandomObj> random_objs;
 extern void set_obj_eff(ObjData *itemobj, const EApply type, int mod);
 extern void set_obj_aff(ObjData *itemobj, const EAffect bitv);
 extern int planebit(const char *str, int *plane, int *bit);
@@ -99,7 +123,7 @@ void oload_class::init() {
 			isstream.str(cppstr);
 			isstream >> std::noskipws >> ovnum;
 
-			if (!isstream.eof() || real_object(ovnum) < 0) {
+			if (!isstream.eof() || GetObjRnum(ovnum) < 0) {
 				isstream.clear();
 				cppstr = "oload_class:: Error in line '#" + cppstr + "' expected '#<RIGHT_obj_vnum>' !!!";
 				mudlog(cppstr.c_str(), LGH, kLvlImmortal, SYSLOG, true);
@@ -116,7 +140,7 @@ void oload_class::init() {
 			isstream.str(cppstr);
 			isstream >> std::skipws >> mvnum >> oqty >> lprob;
 
-			if (lprob < 0 || lprob > MAX_LOAD_PROB || oqty < 0 || real_mobile(mvnum) < 0 || !isstream.eof()) {
+			if (lprob < 0 || lprob > MAX_LOAD_PROB || oqty < 0 || GetMobRnum(mvnum) < 0 || !isstream.eof()) {
 				isstream.clear();
 				cppstr = "oload_class:: Error in line '" + cppstr + "'";
 				mudlog(cppstr.c_str(), LGH, kLvlImmortal, SYSLOG, true);
@@ -139,7 +163,7 @@ void oload_class::init() {
 oload_class oload_table;
 
 ObjRnum ornum_by_info(const std::pair<ObjVnum, obj_load_info> &it) {
-	ObjRnum i = real_object(it.first);
+	ObjRnum i = GetObjRnum(it.first);
 	ObjRnum resutl_obj = number(1, MAX_LOAD_PROB) <= it.second.load_prob
 						  ? (it.first >= 0 && i >= 0
 							 ? (obj_proto.actual_count(i) < it.second.obj_qty
@@ -333,7 +357,7 @@ void obj_to_corpse(ObjData *corpse, CharData *ch, int rnum, bool setload) {
 		}
 	}
 	o->set_vnum_zone_from(99999);
-	if (MOB_FLAGGED(ch, EMobFlag::kCorpse)) {
+	if (ch->IsFlagged(EMobFlag::kCorpse)) {
 		PlaceObjToRoom(o.get(), ch->in_room);
 	} else {
 		PlaceObjIntoObj(o.get(), corpse);
@@ -350,7 +374,7 @@ void obj_to_corpse(ObjData *corpse, CharData *ch, int rnum, bool setload) {
 void obj_load_on_death(ObjData *corpse, CharData *ch) {
 	if (ch == nullptr
 		|| !ch->IsNpc()
-		|| (!MOB_FLAGGED(ch, EMobFlag::kCorpse)
+		|| (!ch->IsFlagged(EMobFlag::kCorpse)
 			&& corpse == nullptr)) {
 		return;
 	}
@@ -427,7 +451,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kClubs: // дубины
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 12);
-		obj->set_skill(141);
+		obj->set_spec_param(141);
 		obj->set_extra_flag(EObjFlag::kThrowing);
 		obj->set_affected(0, EApply::kStr, floorf(diff/12.0));
 		obj->set_affected(1, EApply::kSavingStability, -floorf(diff/4.0));
@@ -437,7 +461,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kSpades: // копья
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 11);
-		obj->set_skill(148);
+		obj->set_spec_param(148);
 		obj->set_extra_flag(EObjFlag::kThrowing);
 		create_charmice_stuff(ch, ESkill::kShieldBlock, diff);
 		create_charmice_stuff(ch, ESkill::kUndefined, diff);
@@ -446,7 +470,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kPicks: // стабер
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 11);
-		obj->set_skill(147);
+		obj->set_spec_param(147);
 		obj->set_affected(0, EApply::kStr, floorf(diff/16.0));
 		obj->set_affected(1, EApply::kDex, floorf(diff/10.0));
 		create_charmice_stuff(ch, ESkill::kUndefined, diff);
@@ -455,7 +479,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kAxes: // секиры
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 8);
-		obj->set_skill(142);
+		obj->set_spec_param(142);
 		obj->set_affected(0, EApply::kStr, floorf(diff/12.0));
 		obj->set_affected(1, EApply::kDex, floorf(diff/15.0));
 		obj->set_affected(2, EApply::kDamroll, floorf(diff/10.0));
@@ -467,7 +491,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kBows: // луки
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 2);
-		obj->set_skill(154);
+		obj->set_spec_param(154);
 		obj->set_affected(0, EApply::kStr, floorf(diff/20.0));
 		obj->set_affected(1, EApply::kDex, floorf(diff/15.0));
 		create_charmice_stuff(ch, ESkill::kUndefined, diff);
@@ -476,7 +500,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kTwohands: // двуруч
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 1);
-		obj->set_skill(146);
+		obj->set_spec_param(146);
 		obj->set_weight(floorf(diff/4.0)); // 50 вес при 200% скила
 		obj->set_affected(0, EApply::kStr, floorf(diff/15.0));
 		obj->set_affected(1, EApply::kDamroll, floorf(diff/13.0));
@@ -492,7 +516,7 @@ void create_charmice_stuff(CharData *ch, const ESkill skill_id, int diff) {
 	case ESkill::kLongBlades: // длинные
 		obj->set_type(EObjType::kWeapon);
 		obj->set_val(3, 10);
-		obj->set_skill(143);
+		obj->set_spec_param(143);
 		obj->set_affected(0, EApply::kStr, floorf(diff/15.0));
 		obj->set_affected(1, EApply::kDex, floorf(diff/12.0));
 		obj->set_affected(2, EApply::kSavingReflex, -floorf(diff/3.5));

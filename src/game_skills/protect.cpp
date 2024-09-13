@@ -92,13 +92,13 @@ CharData *TryToFindProtector(CharData *victim, CharData *ch) {
 	if (ch->GetEnemy() == victim)
 		return victim;
 
-	for (const auto vict : world[IN_ROOM(victim)]->people) {
+	for (const auto vict : world[victim->in_room]->people) {
 		if (vict->get_protecting() == victim
 			&& !AFF_FLAGGED(vict, EAffect::kStopFight)
 			&& !AFF_FLAGGED(vict, EAffect::kMagicStopFight)
 			&& !AFF_FLAGGED(vict, EAffect::kBlind)
 			&& !AFF_FLAGGED(vict, EAffect::kHold)
-			&& GET_POS(vict) >= EPosition::kFight) {
+			&& vict->GetPosition() >= EPosition::kFight) {
 			if (vict == ch) {
 				act("Вы попытались напасть на того, кого прикрывали, и замерли в глубокой задумчивости.",
 					false, vict, 0, victim, kToChar);

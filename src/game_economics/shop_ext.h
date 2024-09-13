@@ -10,6 +10,7 @@
 #include "interpreter.h"
 #include "dictionary.h"
 
+
 namespace ShopExt {
 
 void do_shops_list(CharData *ch);

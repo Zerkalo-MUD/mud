@@ -3,6 +3,8 @@
 #include <random>
 
 #include "game_affects/affect_data.h"
+#include "game_mechanics/dead_load.h"
+#include "game_mechanics/dungeons.h"
 #include "mobact.h"
 #include "entities/obj_data.h"
 #include "cmd/flee.h"
@@ -22,7 +24,6 @@
 #include "backtrace.h"
 #include "game_magic/magic_utils.h"
 #include "entities/char_player.h"
-#include "structs/global_objects.h"
 #include "utils/utils_char_obj.inl"
 
 // extern
@@ -35,6 +36,7 @@ void SetWait(CharData *ch, int waittime, int victim_in_room);
 
 extern int material_value[];
 extern int max_exp_gain_npc;
+extern std::list<combat_list_element> combat_list;
 
 //интервал в секундах между восстановлением кругов после рипа
 void process_mobmax(CharData *ch, CharData *killer) {
@@ -46,8 +48,8 @@ void process_mobmax(CharData *ch, CharData *killer) {
 	CharData *master = nullptr;
 	if (killer->IsNpc()
 		&& (AFF_FLAGGED(killer, EAffect::kCharmed)
-			|| MOB_FLAGGED(killer, EMobFlag::kTutelar)
-			|| MOB_FLAGGED(killer, EMobFlag::kMentalShadow))
+			|| killer->IsFlagged(EMobFlag::kTutelar)
+			|| killer->IsFlagged(EMobFlag::kMentalShadow))
 		&& killer->has_master()) {
 		master = killer->get_master();
 	} else if (!killer->IsNpc()) {
@@ -64,7 +66,7 @@ void process_mobmax(CharData *ch, CharData *killer) {
 				master = master->get_master();
 			}
 
-			if (IN_ROOM(master) == IN_ROOM(killer)) {
+			if (master->in_room == killer->in_room) {
 				// лидер группы в тойже комнате, что и убивец
 				cnt = 1;
 				if (CanUseFeat(master, EFeat::kPartner)) {
@@ -75,7 +77,7 @@ void process_mobmax(CharData *ch, CharData *killer) {
 			for (struct FollowerType *f = master->followers; f; f = f->next) {
 				if (AFF_FLAGGED(f->follower, EAffect::kGroup)) ++total_group_members;
 				if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-					&& IN_ROOM(f->follower) == IN_ROOM(killer)) {
+					&& f->follower->in_room == killer->in_room) {
 					++cnt;
 					if (leader_partner) {
 						if (!f->follower->IsNpc()) {
@@ -102,12 +104,12 @@ void process_mobmax(CharData *ch, CharData *killer) {
 
 			// выбираем всех мемберов в группе в комнате с убивецом
 			std::vector<CharData *> members_to_mobmax;
-			if (IN_ROOM(master) == IN_ROOM(killer)) {
+			if (master->in_room == killer->in_room) {
 				members_to_mobmax.push_back(master);
 			}
 			for (struct FollowerType *f = master->followers; f; f = f->next) {
 				if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-					&& IN_ROOM(f->follower) == IN_ROOM(killer)) {
+					&& f->follower->in_room == killer->in_room) {
 					members_to_mobmax.push_back(f->follower);
 				}
 			}
@@ -126,7 +128,7 @@ void process_mobmax(CharData *ch, CharData *killer) {
 			int i = 0;
 			for (struct FollowerType *f = master->followers; f && i < n; f = f->next) {
 				if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-					&& IN_ROOM(f->follower) == IN_ROOM(killer)) {
+					&& f->follower->in_room == killer->in_room) {
 					++i;
 					master = f->follower;
 				}
@@ -144,8 +146,8 @@ void update_die_counts(CharData *ch, CharData *killer, int dec_exp) {
 		&& rkiller->IsNpc()
 		&& (IS_CHARMICE(rkiller)
 			|| IS_HORSE(rkiller)
-			|| MOB_FLAGGED(killer, EMobFlag::kTutelar)
-			|| MOB_FLAGGED(killer, EMobFlag::kMentalShadow))) {
+			|| killer->IsFlagged(EMobFlag::kTutelar)
+			|| killer->IsFlagged(EMobFlag::kMentalShadow))) {
 		if (rkiller->has_master()) {
 			rkiller = rkiller->get_master();
 		} else {
@@ -223,7 +225,7 @@ void update_leadership(CharData *ch, CharData *killer) {
 			&& AFF_FLAGGED(killer, EAffect::kGroup)
 			&& killer->has_master()
 			&& killer->get_master()->GetSkill(ESkill::kLeadership) > 0
-			&& IN_ROOM(killer) == IN_ROOM(killer->get_master())) {
+			&& killer->in_room == killer->get_master()->in_room) {
 			ImproveSkill(killer->get_master(), ESkill::kLeadership, number(0, 1), ch);
 		} else if (killer->IsNpc() // Убил чармис загрупленного чара
 			&& IS_CHARMICE(killer)
@@ -231,8 +233,8 @@ void update_leadership(CharData *ch, CharData *killer) {
 			&& AFF_FLAGGED(killer->get_master(), EAffect::kGroup)) {
 			if (killer->get_master()->has_master() // Владелец чармиса НЕ лидер
 				&& killer->get_master()->get_master()->GetSkill(ESkill::kLeadership) > 0
-				&& IN_ROOM(killer) == IN_ROOM(killer->get_master())
-				&& IN_ROOM(killer) == IN_ROOM(killer->get_master()->get_master())) {
+				&& killer->in_room == killer->get_master()->in_room
+				&& killer->in_room == killer->get_master()->get_master()->in_room) {
 				ImproveSkill(killer->get_master()->get_master(), ESkill::kLeadership, number(0, 1), ch);
 			}
 		}
@@ -244,7 +246,7 @@ void update_leadership(CharData *ch, CharData *killer) {
 		&& killer->IsNpc()
 		&& AFF_FLAGGED(ch, EAffect::kGroup)
 		&& ch->has_master()
-		&& ch->in_room == IN_ROOM(ch->get_master())
+		&& ch->in_room == ch->get_master()->in_room
 		&& ch->get_master()->GetTrainedSkill(ESkill::kLeadership) > 1) {
 		const auto current_skill = ch->get_master()->GetMorphSkill(ESkill::kLeadership);
 		ch->get_master()->set_skill(ESkill::kLeadership, current_skill - 1);
@@ -259,13 +261,13 @@ bool stone_rebirth(CharData *ch, CharData *killer) {
 	if (killer && (!killer->IsNpc() || IS_CHARMICE(killer)) && (ch != killer)) { //не нычка в ПК
 		return false;
 	}
-	act("$n погиб$q смертью храбрых.", false, ch, nullptr, nullptr, kToRoom);
 	GetZoneRooms(world[ch->in_room]->zone_rn, &rnum_start, &rnum_stop);
 	for (; rnum_start <= rnum_stop; rnum_start++) {
 		RoomData *rm = world[rnum_start];
 		if (rm->contents) {
 			for (ObjData *j = rm->contents; j; j = j->get_next_content()) {
 				if (j->get_vnum() == 1000) { // камень возрождения
+					act("$n погиб$q смертью храбрых.", false, ch, nullptr, nullptr, kToRoom);
 					SendMsgToChar("Божественная сила спасла вашу жизнь!\r\n", ch);
 					RemoveCharFromRoom(ch);
 					PlaceCharToRoom(ch, rnum_start);
@@ -276,7 +278,7 @@ bool stone_rebirth(CharData *ch, CharData *killer) {
 						ch->AffectRemove(ch->affected.begin());
 					}
 					affect_total(ch);
-					GET_POS(ch) = EPosition::kStand;
+					ch->SetPosition(EPosition::kStand);
 					look_at_room(ch, 0);
 					greet_mtrigger(ch, -1);
 					greet_otrigger(ch, -1);
@@ -307,7 +309,7 @@ bool check_tester_death(CharData *ch, CharData *killer) {
 	// Сюда попадают только тестеры на волоске от смерти. Для инх функция должна вернуть true.
 	// Теоретически ожидается, что вызывающая функция в этом случае не убъёт игрока-тестера.
 	act("$n погиб$q смертью храбрых.", false, ch, nullptr, nullptr, kToRoom);
-	const int rent_room = real_room(GET_LOADROOM(ch));
+	const int rent_room = GetRoomRnum(GET_LOADROOM(ch));
 	if (rent_room == kNowhere) {
 		SendMsgToChar("Вам некуда возвращаться!\r\n", ch);
 		return true;
@@ -324,7 +326,7 @@ bool check_tester_death(CharData *ch, CharData *killer) {
 		ch->AffectRemove(ch->affected.begin());
 	}
 	affect_total(ch);
-	GET_POS(ch) = EPosition::kStand;
+	ch->SetPosition(EPosition::kStand);
 	look_at_room(ch, 0);
 	greet_mtrigger(ch, -1);
 	greet_otrigger(ch, -1);
@@ -351,7 +353,7 @@ void die(CharData *ch, CharData *killer) {
 	{
 		act("$n глупо погиб$q не закончив обучение.", false, ch, nullptr, nullptr, kToRoom);
 		RemoveCharFromRoom(ch);
-		PlaceCharToRoom(ch, real_room(75989));
+		PlaceCharToRoom(ch, GetRoomRnum(75989));
 		ch->dismount();
 		GET_HIT(ch) = 1;
 		update_pos(ch);
@@ -369,7 +371,7 @@ void die(CharData *ch, CharData *killer) {
 		if (!(ch->IsNpc()
 			|| IS_IMMORTAL(ch)
 			|| GET_GOD_FLAG(ch, EGf::kGodsLike)
-			|| (killer && PRF_FLAGGED(killer, EPrf::kExecutor))))//если убил не палач
+			|| (killer && killer->IsFlagged(EPrf::kExecutor))))//если убил не палач
 		{
 			if (!NORENTABLE(ch))
 				dec_exp =
@@ -407,7 +409,7 @@ int can_loot(CharData *ch) {
 			&& AFF_FLAGGED(ch, EAffect::kHold) == 0 // если под холдом
 			&& !AFF_FLAGGED(ch, EAffect::kStopFight) // парализован точкой
 			&& !AFF_FLAGGED(ch, EAffect::kBlind)    // слеп
-			&& (GET_POS(ch) >= EPosition::kRest)) // мертв, умирает, без сознания, спит
+			&& (ch->GetPosition() >= EPosition::kRest)) // мертв, умирает, без сознания, спит
 		{
 			return true;
 		}
@@ -419,8 +421,10 @@ void death_cry(CharData *ch, CharData *killer) {
 	int door;
 	if (killer) {
 		if (IS_CHARMICE(killer)) {
-			act("Кровушка стынет в жилах от предсмертного крика $N1.",
-				false, killer->get_master(), nullptr, ch, kToRoom | kToNotDeaf);
+			if (killer->get_master() && killer->get_master()->in_room == killer->in_room) {
+				act("Кровушка стынет в жилах от предсмертного крика $N1.",
+					false, killer->get_master(), nullptr, ch, kToRoom | kToNotDeaf);
+			}
 		} else {
 			act("Кровушка стынет в жилах от предсмертного крика $N1.",
 				false, killer, nullptr, ch, kToRoom | kToNotDeaf);
@@ -443,20 +447,20 @@ void death_cry(CharData *ch, CharData *killer) {
 void arena_kill(CharData *ch, CharData *killer) {
 	make_arena_corpse(ch, killer);
 	//Если убил палач то все деньги перекачивают к нему
-	if (killer && PRF_FLAGGED(killer, EPrf::kExecutor)) {
+	if (killer && killer->IsFlagged(EPrf::kExecutor)) {
 		killer->set_gold(ch->get_gold() + killer->get_gold());
 		ch->set_gold(0);
 	}
 	change_fighting(ch, true);
 	GET_HIT(ch) = 1;
-	GET_POS(ch) = EPosition::kSit;
-	int to_room = real_room(GET_LOADROOM(ch));
+	ch->SetPosition(EPosition::kSit);
+	int to_room = GetRoomRnum(GET_LOADROOM(ch));
 	// тут придется ручками тащить чара за ворота, если ему в замке не рады
 	if (!Clan::MayEnter(ch, to_room, kHousePortal)) {
 		to_room = Clan::CloseRent(to_room);
 	}
 	if (to_room == kNowhere) {
-		PLR_FLAGS(ch).set(EPlrFlag::kHelled);
+		ch->SetFlag(EPlrFlag::kHelled);
 		HELL_DURATION(ch) = time(nullptr) + 6;
 		to_room = r_helled_start_room;
 	}
@@ -485,7 +489,7 @@ void arena_kill(CharData *ch, CharData *killer) {
 void auto_loot(CharData *ch, CharData *killer, ObjData *corpse, int local_gold) {
 	char obj[256];
 
-	if (is_dark(IN_ROOM(killer))
+	if (is_dark(killer->in_room)
 		&& !(CAN_SEE_IN_DARK(killer) || CanUseFeat(killer, EFeat::kDarkReading))
 		&& !(killer->IsNpc()
 			&& AFF_FLAGGED(killer, EAffect::kCharmed)
@@ -496,7 +500,7 @@ void auto_loot(CharData *ch, CharData *killer, ObjData *corpse, int local_gold) 
 
 	if (ch->IsNpc()
 		&& !killer->IsNpc()
-		&& PRF_FLAGGED(killer, EPrf::kAutoloot)
+		&& killer->IsFlagged(EPrf::kAutoloot)
 		&& (corpse != nullptr)
 		&& can_loot(killer)) {
 		sprintf(obj, "all");
@@ -504,7 +508,7 @@ void auto_loot(CharData *ch, CharData *killer, ObjData *corpse, int local_gold) 
 	} else if (ch->IsNpc()
 		&& !killer->IsNpc()
 		&& local_gold
-		&& PRF_FLAGGED(killer, EPrf::kAutomoney)
+		&& killer->IsFlagged(EPrf::kAutomoney)
 		&& (corpse != nullptr)
 		&& can_loot(killer)) {
 		sprintf(obj, "all.coin");
@@ -512,12 +516,12 @@ void auto_loot(CharData *ch, CharData *killer, ObjData *corpse, int local_gold) 
 	} else if (ch->IsNpc()
 		&& killer->IsNpc()
 		&& (AFF_FLAGGED(killer, EAffect::kCharmed)
-			|| MOB_FLAGGED(killer, EMobFlag::kTutelar)
-			|| MOB_FLAGGED(killer, EMobFlag::kMentalShadow))
+			|| killer->IsFlagged(EMobFlag::kTutelar)
+			|| killer->IsFlagged(EMobFlag::kMentalShadow))
 		&& (corpse != nullptr)
 		&& killer->has_master()
 		&& killer->in_room == killer->get_master()->in_room
-		&& PRF_FLAGGED(killer->get_master(), EPrf::kAutoloot)
+		&& killer->get_master()->IsFlagged(EPrf::kAutoloot)
 		&& can_loot(killer->get_master())) {
 		sprintf(obj, "all");
 		get_from_container(killer->get_master(), corpse, obj, EFind::kObjInventory, 1, true);
@@ -525,12 +529,12 @@ void auto_loot(CharData *ch, CharData *killer, ObjData *corpse, int local_gold) 
 		&& killer->IsNpc()
 		&& local_gold
 		&& (AFF_FLAGGED(killer, EAffect::kCharmed)
-			|| MOB_FLAGGED(killer, EMobFlag::kTutelar)
-			|| MOB_FLAGGED(killer, EMobFlag::kMentalShadow))
+			|| killer->IsFlagged(EMobFlag::kTutelar)
+			|| killer->IsFlagged(EMobFlag::kMentalShadow))
 		&& (corpse != nullptr)
 		&& killer->has_master()
 		&& killer->in_room == killer->get_master()->in_room
-		&& PRF_FLAGGED(killer->get_master(), EPrf::kAutomoney)
+		&& killer->get_master()->IsFlagged(EPrf::kAutomoney)
 		&& can_loot(killer->get_master())) {
 		sprintf(obj, "all.coin");
 		get_from_container(killer->get_master(), corpse, obj, EFind::kObjInventory, 1, false);
@@ -541,16 +545,16 @@ void check_spell_capable(CharData *ch, CharData *killer) {
 	if (ch->IsNpc()
 		&& killer
 		&& killer != ch
-		&& MOB_FLAGGED(ch, EMobFlag::kClone)
+		&& ch->IsFlagged(EMobFlag::kClone)
 		&& ch->has_master()
 		&& IsAffectedBySpell(ch, ESpell::kCapable)) {
 		RemoveAffectFromCharAndRecalculate(ch, ESpell::kCapable);
 		act("Чары, наложенные на $n3, тускло засветились и стали превращаться в нечто опасное.",
 			false, ch, nullptr, killer, kToRoom | kToArenaListen);
-		auto pos = GET_POS(ch);
-		GET_POS(ch) = EPosition::kStand;
+		auto pos = ch->GetPosition();
+		ch->SetPosition(EPosition::kStand);
 		CallMagic(ch, killer, nullptr, world[ch->in_room], ch->mob_specials.capable_spell, GetRealLevel(ch));
-		GET_POS(ch) = pos;
+		ch->SetPosition(pos);
 	}
 }
 
@@ -612,12 +616,11 @@ void real_kill(CharData *ch, CharData *killer) {
 			log("Killed: %d %d %ld", GetRealLevel(ch), GET_MAX_HIT(ch), GET_EXP(ch));
 			obj_load_on_death(corpse, ch);
 		}
-		if (MOB_FLAGGED(ch, EMobFlag::kCorpse)) {
+		if (ch->IsFlagged(EMobFlag::kCorpse)) {
 			PerformDropGold(ch, local_gold);
 			ch->set_gold(0);
 		}
-		dl_load_obj(corpse, ch, nullptr, DL_ORDINARY);
-//		dl_load_obj(corpse, ch, NULL, DL_PROGRESSION); вот зачем это неработающее?
+		dead_load::LoadObjFromDeadLoad(corpse, ch, nullptr, dead_load::kOrdinary);
 #if defined WITH_SCRIPTING
 		//scripting::on_npc_dead(ch, killer, corpse);
 #endif
@@ -626,7 +629,7 @@ void real_kill(CharData *ch, CharData *killer) {
 	if (!ch->IsNpc() && GetRealRemort(ch) > 7 && (GetRealLevel(ch) == 29 || GetRealLevel(ch) == 30))
 	{
 		// лоадим свиток с экспой
-		const auto rnum = real_object(100);
+		const auto rnum = GetObjRnum(100);
 		if (rnum >= 0)
 		{
 			const auto o = world_objects.create_from_prototype_by_rnum(rnum);
@@ -649,9 +652,9 @@ void raw_kill(CharData *ch, CharData *killer) {
 	if (ch->GetEnemy())
 		stop_fighting(ch, true);
 
-	for (CharData *hitter = combat_list; hitter; hitter = hitter->next_fighting) {
-		if (hitter->GetEnemy() == ch) {
-			SetWaitState(hitter, 0);
+	for (auto &hitter : combat_list) {
+		if (hitter.ch->GetEnemy() == ch) {
+			SetWaitState(hitter.ch, 0);
 		}
 	}
 
@@ -659,10 +662,7 @@ void raw_kill(CharData *ch, CharData *killer) {
 //		debug::coredump();
 		debug::backtrace(runtime_config.logs(ERRLOG).handle());
 		mudlog("SYSERR: Опять где-то кто-то спуржился не в то в время, не в том месте. Сброшен текущий стек и кора.",
-			   NRM,
-			   kLvlGod,
-			   ERRLOG,
-			   true);
+				NRM, kLvlGod, ERRLOG, true);
 		return;
 	}
 	if (!ROOM_FLAGGED(ch->in_room, ERoomFlag::kDominationArena)) {
@@ -724,6 +724,9 @@ int get_remort_mobmax(CharData *ch) {
 // за совсем неубитых мобов не даем, что бы новые зоны не давали x10 экспу.
 int get_npc_long_live_exp_bounus(CharData *victim) {
 	if (GET_MOB_VNUM(victim) == -1) {
+		return 1;
+	}
+	if (GET_MOB_VNUM(victim) / 100 >= dungeons::kZoneStartDungeons) {
 		return 1;
 	}
 
@@ -877,11 +880,11 @@ void perform_group_gain(CharData *ch, CharData *victim, int members, int koef) {
 				&& !IS_IMMORTAL(ch)
 				&& victim->IsNpc()
 				&& !IS_CHARMICE(victim)
-				&& !ROOM_FLAGGED(IN_ROOM(victim), ERoomFlag::kArena)) {
+				&& !ROOM_FLAGGED(victim->in_room, ERoomFlag::kArena)) {
 				mob_stat::AddMob(victim, members);
 				EXTRA_FLAGS(victim).set(EXTRA_GRP_KILL_COUNT);
 		} else if (ch->IsNpc() && !victim->IsNpc()
-			&& !ROOM_FLAGGED(IN_ROOM(victim), ERoomFlag::kArena)) {
+			&& !ROOM_FLAGGED(victim->in_room, ERoomFlag::kArena)) {
 			mob_stat::AddMob(ch, 0);
 		}
 	}
@@ -920,7 +923,7 @@ void group_gain(CharData *killer, CharData *victim) {
 
 	// k - подозрение на лидера группы
 	const bool leader_inroom = AFF_FLAGGED(leader, EAffect::kGroup)
-		&& leader->in_room == IN_ROOM(killer);
+		&& leader->in_room == killer->in_room;
 
 	// Количество согрупников в комнате
 	if (leader_inroom) {
@@ -934,7 +937,7 @@ void group_gain(CharData *killer, CharData *victim) {
 	for (f = leader->followers; f; f = f->next) {
 		if (AFF_FLAGGED(f->follower, EAffect::kGroup)) ++total_group_members;
 		if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-			&& f->follower->in_room == IN_ROOM(killer)) {
+			&& f->follower->in_room == killer->in_room) {
 			// если в группе наем, то режим опыт всей группе
 			// дабы наема не выгодно было бы брать в группу
 			// ставим 300, чтобы вообще под ноль резало
@@ -991,7 +994,7 @@ void group_gain(CharData *killer, CharData *victim) {
 
 	for (f = leader->followers; f; f = f->next) {
 		if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-			&& f->follower->in_room == IN_ROOM(killer)) {
+			&& f->follower->in_room == killer->in_room) {
 			perform_group_gain(f->follower, victim, inroom_members, koef);
 		}
 	}
@@ -1004,7 +1007,7 @@ void gain_battle_exp(CharData *ch, CharData *victim, int dam) {
 	}
 	if (!victim->IsNpc()) { return; }
 	// не даем получать экспу с !эксп мобов
-	if (MOB_FLAGGED(victim, EMobFlag::kNoBattleExp) || InTestZone(ch)) { 
+	if (victim->IsFlagged(EMobFlag::kNoBattleExp) || InTestZone(ch)) {
 		return;
 	}
 	// если цель не нпс то тоже не даем экспы
@@ -1053,7 +1056,7 @@ void alterate_object(ObjData *obj, int dam, int chance) {
 		MAX(1, GET_OBJ_MAX(obj) *
 			(obj->has_flag(EObjFlag::kNodrop) ? 5 :
 			 obj->has_flag(EObjFlag::kBless) ? 15 : 10)
-			 * (static_cast<ESkill>(GET_OBJ_SKILL(obj)) == ESkill::kBows ? 3 : 1)));
+			 * (static_cast<ESkill>(obj->get_spec_param()) == ESkill::kBows ? 3 : 1)));
 
 	if (dam > 0 && chance >= number(1, 100)) {
 		if (dam > 1 && obj->get_worn_by() && GET_EQ(obj->get_worn_by(), EEquipPos::kShield) == obj) {
@@ -1108,8 +1111,9 @@ void alt_equip(CharData *ch, int pos, int dam, int chance) {
 			pos = EEquipPos::kHold;
 	}
 
-	if (pos <= 0 || pos > EEquipPos::kBoths || !GET_EQ(ch, pos) || dam < 0 || AFF_FLAGGED(ch, EAffect::kGodsShield))
-		return; // Добавил: под "зб" не убивается стаф (Купала)
+	if (pos <= 0 || pos > EEquipPos::kBoths || !GET_EQ(ch, pos) || dam < 0 || AFF_FLAGGED(ch, EAffect::kGodsShield)) {
+		return;
+	}
 	alterate_object(GET_EQ(ch, pos), dam, chance);
 }
 
@@ -1163,7 +1167,7 @@ void char_dam_message(int dam, CharData *ch, CharData *victim, bool noflee) {
 		return;
 	if (!victim || victim->purged())
 		return;
-	switch (GET_POS(victim)) {
+	switch (victim->GetPosition()) {
 		case EPosition::kPerish:
 			if (IS_POLY(victim))
 				act("$n смертельно ранены и умрут, если им не помогут.",
@@ -1192,7 +1196,7 @@ void char_dam_message(int dam, CharData *ch, CharData *victim, bool noflee) {
 			SendMsgToChar("Сознание покинуло вас. В битве от вас пока проку мало.\r\n", victim);
 			break;
 		case EPosition::kDead:
-			if (victim->IsNpc() && (MOB_FLAGGED(victim, EMobFlag::kCorpse))) {
+			if (victim->IsNpc() && (victim->IsFlagged(EMobFlag::kCorpse))) {
 				act("$n вспыхнул$g и рассыпал$u в прах.", false, victim, nullptr, nullptr, kToRoom | kToArenaListen);
 				SendMsgToChar("Похоже вас убили и даже тела не оставили!\r\n", victim);
 			} else {
@@ -1220,14 +1224,14 @@ void char_dam_message(int dam, CharData *ch, CharData *victim, bool noflee) {
 			if (ch != victim
 				&& victim->IsNpc()
 				&& GET_HIT(victim) < (GET_REAL_MAX_HIT(victim) / 4)
-				&& MOB_FLAGGED(victim, EMobFlag::kWimpy)
+				&& victim->IsFlagged(EMobFlag::kWimpy)
 				&& !noflee
-				&& GET_POS(victim) > EPosition::kSit) {
+				&& victim->GetPosition() > EPosition::kSit) {
 				DoFlee(victim, nullptr, 0, 0);
 			}
 
 			if (ch != victim
-				&& GET_POS(victim) > EPosition::kSit
+				&& victim->GetPosition() > EPosition::kSit
 				&& !victim->IsNpc()
 				&& HERE(victim)
 				&& GET_WIMP_LEV(victim)

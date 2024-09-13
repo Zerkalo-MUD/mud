@@ -28,22 +28,22 @@ char *matching_quote(char *p);
 
 void ADD_UID_CHAR_VAR(char *buf, Trigger *trig, const ObjData *go, const char *name, const long context) {
 	sprintf(buf, "%c%ld", UID_CHAR, go->get_id());
-	add_var_cntx(&GET_TRIG_VARS(trig), name, buf, context);
+	add_var_cntx(trig->var_list, name, buf, context);
 }
 
 void ADD_UID_CHAR_VAR(char *buf, Trigger *trig, const CharData *go, const char *name, const long context) {
 	sprintf(buf, "%c%ld", UID_CHAR, GET_ID(go));
-	add_var_cntx(&GET_TRIG_VARS(trig), name, buf, context);
+	add_var_cntx(trig->var_list, name, buf, context);
 }
 
 void ADD_UID_OBJ_VAR(char *buf, Trigger *trig, const ObjData *go, const char *name, const long context) {
 	sprintf(buf, "%c%ld", UID_OBJ, go->get_id());
-	add_var_cntx(&GET_TRIG_VARS(trig), name, buf, context);
+	add_var_cntx(trig->var_list, name, buf, context);
 }
 
 void ADD_UID_OBJ_VAR(char *buf, Trigger *trig, const CharData *go, const char *name, const long context) {
 	sprintf(buf, "%c%ld", UID_OBJ, GET_ID(go));
-	add_var_cntx(&GET_TRIG_VARS(trig), name, buf, context);
+	add_var_cntx(trig->var_list, name, buf, context);
 }
 
 // mob trigger types
@@ -246,7 +246,7 @@ void bribe_mtrigger(CharData *ch, CharData *actor, int amount) {
 		if (TRIGGER_CHECK(t, MTRIG_BRIBE)
 			&& (amount >= GET_TRIG_NARG(t))) {
 			snprintf(buf, kMaxInputLength, "%d", amount);
-			add_var_cntx(&GET_TRIG_VARS(t), "amount", buf, 0);
+			add_var_cntx(t->var_list, "amount", buf, 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 			script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
 
@@ -263,7 +263,7 @@ void greet_mtrigger(CharData *actor, int dir) {
 		return;
 	}
 
-	const auto people_copy = world[IN_ROOM(actor)]->people;
+	const auto people_copy = world[actor->in_room]->people;
 	for (const auto ch : people_copy) {
 		if (ch->purged()) {
 			continue;
@@ -289,7 +289,7 @@ void greet_mtrigger(CharData *actor, int dir) {
 					&& !actor->IsNpc())) && !GET_TRIG_DEPTH(t)
 				&& (number(1, 100) <= GET_TRIG_NARG(t))) {
 				if (dir >= 0) {
-					add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[rev_dir[dir]], 0);
+					add_var_cntx(t->var_list, "direction", dirs[rev_dir[dir]], 0);
 				}
 
 				ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
@@ -329,7 +329,7 @@ void income_mtrigger(CharData *ch, int dir) {
 		if ((TRIGGER_CHECK(t, MTRIG_INCOME) || (TRIGGER_CHECK(t, MTRIG_INCOME_PC) && ispcinroom))
 			&& number(1, 100) <= GET_TRIG_NARG(t)) {
 			if (dir >= 0) {
-				add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[rev_dir[dir]], 0);
+				add_var_cntx(t->var_list, "direction", dirs[rev_dir[dir]], 0);
 			}
 
 			if (actor) {
@@ -388,7 +388,7 @@ int compare_cmd(int mode, const char *source, const char *dest) {
 int command_mtrigger(CharData *actor, char *cmd, const char *argument) {
 	char buf[kMaxInputLength];
 
-	const auto people_copy = world[IN_ROOM(actor)]->people;
+	const auto people_copy = world[actor->in_room]->people;
 	for (const auto ch : people_copy) {
 		if ((CheckScript(ch, MTRIG_COMMAND)
 			&& CAN_START_MTRIG(ch)
@@ -427,7 +427,7 @@ int command_mtrigger(CharData *actor, char *cmd, const char *argument) {
 
 				if (compare_cmd(GET_TRIG_NARG(t), t->arglist.c_str(), cmd)) {
 					if (!actor->IsNpc()
-						&& (GET_POS(actor) == EPosition::kSleep))   // command триггер не будет срабатывать если игрок спит
+						&& (actor->GetPosition() == EPosition::kSleep))   // command триггер не будет срабатывать если игрок спит
 					{
 						SendMsgToChar("Сделать это в ваших снах?\r\n", actor);
 						return 1;
@@ -435,9 +435,9 @@ int command_mtrigger(CharData *actor, char *cmd, const char *argument) {
 
 					ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 					skip_spaces(&argument);
-					add_var_cntx(&GET_TRIG_VARS(t), "arg", argument, 0);
+					add_var_cntx(t->var_list, "arg", argument, 0);
 					skip_spaces(&cmd);
-					add_var_cntx(&GET_TRIG_VARS(t), "cmd", cmd, 0);
+					add_var_cntx(t->var_list, "cmd", cmd, 0);
 
 					if (script_driver(ch, t, MOB_TRIGGER, TRIG_NEW)) {
 						return 1;
@@ -456,7 +456,7 @@ void speech_mtrigger(CharData *actor, char *str) {
 	if (!actor || actor->purged())
 		return;
 
-	const auto people_copy = world[IN_ROOM(actor)]->people;
+	const auto people_copy = world[actor->in_room]->people;
 	for (const auto ch : people_copy) {
 		if ((CheckScript(ch, MTRIG_SPEECH)
 			&& AWAKE(ch)
@@ -480,7 +480,7 @@ void speech_mtrigger(CharData *actor, char *str) {
 
 				if (compare_cmd(GET_TRIG_NARG(t), t->arglist.c_str(), str)) {
 					ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
-					add_var_cntx(&GET_TRIG_VARS(t), "speech", str, 0);
+					add_var_cntx(t->var_list, "speech", str, 0);
 					script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
 
 					break;
@@ -527,7 +527,7 @@ void act_mtrigger(CharData *ch, char *str, CharData *actor, CharData *victim,
 
 				if (arg) {
 					skip_spaces(&arg);
-					add_var_cntx(&GET_TRIG_VARS(t), "arg", arg, 0);
+					add_var_cntx(t->var_list, "arg", arg, 0);
 				}
 
 				script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
@@ -543,20 +543,17 @@ int fight_mtrigger(CharData *ch) {
 	if (!ch || ch->purged()) {
 		return 1;
 	}
-
 	if (!CheckScript(ch, MTRIG_FIGHT) || !ch->GetEnemy() || !CAN_START_MTRIG(ch))
 		return 1;
-
 	for (auto t : SCRIPT(ch)->trig_list) {
 		if (TRIGGER_CHECK(t, MTRIG_FIGHT) && (number(1, 100) <= GET_TRIG_NARG(t))) {
 			snprintf(buf, kMaxInputLength, "%d", ch->round_counter);
-			add_var_cntx(&GET_TRIG_VARS(t), "round", buf, 0);
+			add_var_cntx(t->var_list, "round", buf, 0);
 			ADD_UID_CHAR_VAR(buf, t, ch->GetEnemy(), "actor", 0);
 			return script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
 			break;
 		}
 	}
-
 	return 1;
 }
 
@@ -579,9 +576,9 @@ int damage_mtrigger(CharData *damager, CharData *victim, int amount, const char*
 	for (auto t : SCRIPT(victim)->trig_list) {
 		if (TRIGGER_CHECK(t, MTRIG_DAMAGE) && (number(1, 100) <= GET_TRIG_NARG(t))) {
 			ADD_UID_CHAR_VAR(buf, t, damager, "damager", 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "amount", std::to_string(amount).c_str(), 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "name", name_skillorspell, 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "is_skill", std::to_string(is_skill).c_str(), 0);
+			add_var_cntx(t->var_list, "amount", std::to_string(amount).c_str(), 0);
+			add_var_cntx(t->var_list, "name", name_skillorspell, 0);
+			add_var_cntx(t->var_list, "is_skill", std::to_string(is_skill).c_str(), 0);
 			if(obj) {
 				ADD_UID_OBJ_VAR(buf, t, obj, "weapon", 0);
 			}
@@ -644,7 +641,6 @@ int death_mtrigger(CharData *ch, CharData *actor) {
 	}
 
 	char buf[kMaxInputLength];
-
 	if (!CheckScript(ch, MTRIG_DEATH)
 		|| AFF_FLAGGED(ch, EAffect::kCharmed)) {
 		return 1;
@@ -689,7 +685,7 @@ int kill_mtrigger(CharData *ch, CharData *actor) {
 					out_list << " " << UID_CHAR << *it;
 				}
 			}
-			add_var_cntx(&GET_TRIG_VARS(t), "list", out_list.str().c_str(), 0);
+			add_var_cntx(t->var_list, "list", out_list.str().c_str(), 0);
 
 			return script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
 		}
@@ -784,12 +780,12 @@ int cast_mtrigger(CharData *ch, CharData *actor, ESpell spell_id) {
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
 			ADD_UID_CHAR_VAR(local_buf, t, actor, "actor", 0);
 			sprintf(buf, "%d", to_underlying(spell_id));
-			add_var_cntx(&GET_TRIG_VARS(t), "castnum", buf, 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "castname", MUD::Spell(spell_id).GetCName(), 0);
+			add_var_cntx(t->var_list, "castnum", buf, 0);
+			add_var_cntx(t->var_list, "castname", MUD::Spell(spell_id).GetCName(), 0);
 			if (MUD::Spell(spell_id).IsViolent()) {
-				add_var_cntx(&GET_TRIG_VARS(t), "violent", "1", 0);
+				add_var_cntx(t->var_list, "violent", "1", 0);
 			} else {
-				add_var_cntx(&GET_TRIG_VARS(t), "violent", "0", 0);
+				add_var_cntx(t->var_list, "violent", "0", 0);
 			}
 			return script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
 		}
@@ -810,9 +806,9 @@ void timechange_mtrigger(CharData *ch, const int time, const int time_day) {
 	for (auto t : SCRIPT(ch)->trig_list) {
 		if (TRIGGER_CHECK(t, MTRIG_TIMECHANGE)) {
 			snprintf(buf, kMaxInputLength, "%d", time);
-			add_var_cntx(&GET_TRIG_VARS(t), "time", buf, 0);
+			add_var_cntx(t->var_list, "time", buf, 0);
 			snprintf(buf, kMaxInputLength, "%d", time_day);
-			add_var_cntx(&GET_TRIG_VARS(t), "timeday", buf, 0);
+			add_var_cntx(t->var_list, "timeday", buf, 0);
 			script_driver(ch, t, MOB_TRIGGER, TRIG_NEW);
 			break;
 		}
@@ -847,7 +843,7 @@ Bitvector try_run_fight_otriggers(CharData *actor, ObjData *obj, int mode) {
 	for (auto t : obj->get_script()->trig_list) {
 		if (TRIGGER_CHECK(t, OTRIG_FIGHT) && IS_SET(GET_TRIG_NARG(t), mode)) {
 			snprintf(buf, kMaxInputLength, "%d", actor->round_counter);
-			add_var_cntx(&GET_TRIG_VARS(t), "round", buf, 0);
+			add_var_cntx(t->var_list, "round", buf, 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 			SET_BIT(result, script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW));
 		}
@@ -937,16 +933,16 @@ int cmd_otrig(ObjData *obj, CharData *actor, char *cmd, const char *argument, in
 				&& (t->arglist[0] == '*'
 				|| 0 == strn_cmp(t->arglist.c_str(), cmd, t->arglist.size()))) {
 				if (!actor->IsNpc()
-					&& (GET_POS(actor) == EPosition::kSleep))   // command триггер не будет срабатывать если игрок спит
+					&& (actor->GetPosition() == EPosition::kSleep))   // command триггер не будет срабатывать если игрок спит
 				{
 					SendMsgToChar("Сделать это в ваших снах?\r\n", actor);
 					return 1;
 				}
 				ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 				skip_spaces(&argument);
-				add_var_cntx(&GET_TRIG_VARS(t), "arg", argument, 0);
+				add_var_cntx(t->var_list, "arg", argument, 0);
 				skip_spaces(&cmd);
-				add_var_cntx(&GET_TRIG_VARS(t), "cmd", cmd, 0);
+				add_var_cntx(t->var_list, "cmd", cmd, 0);
 
 				if (script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW)) {
 					return 1;
@@ -974,7 +970,7 @@ int command_otrigger(CharData *actor, char *cmd, const char *argument) {
 		}
 	}
 
-	for (ObjData *obj = world[IN_ROOM(actor)]->contents; obj; obj = obj->get_next_content()) {
+	for (ObjData *obj = world[actor->in_room]->contents; obj; obj = obj->get_next_content()) {
 		if (cmd_otrig(obj, actor, cmd, argument, OCMD_ROOM)) {
 			return 1;
 		}
@@ -993,7 +989,7 @@ int wear_otrigger(ObjData *obj, CharData *actor, int where) {
 		if (TRIGGER_CHECK(t, OTRIG_WEAR)) {
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 			snprintf(buf, kMaxInputLength, "%d", where);
-			add_var_cntx(&GET_TRIG_VARS(t), "where", buf, 0);
+			add_var_cntx(t->var_list, "where", buf, 0);
 			return script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW);
 		}
 	}
@@ -1130,7 +1126,7 @@ int open_otrigger(ObjData *obj, CharData *actor, int unlock) {
 	for (auto t : obj->get_script()->trig_list) {
 		if (TRIGGER_CHECK(t, open_mode)
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
-			add_var_cntx(&GET_TRIG_VARS(t), "mode", unlock ? "1" : "0", 0);
+			add_var_cntx(t->var_list, "mode", unlock ? "1" : "0", 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 
 			return script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW);
@@ -1151,7 +1147,7 @@ int close_otrigger(ObjData *obj, CharData *actor, int lock) {
 	for (auto t : obj->get_script()->trig_list) {
 		if (TRIGGER_CHECK(t, close_mode)
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
-			add_var_cntx(&GET_TRIG_VARS(t), "mode", lock ? "1" : "0", 0);
+			add_var_cntx(t->var_list, "mode", lock ? "1" : "0", 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 
 			return script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW);
@@ -1170,7 +1166,7 @@ void greet_otrigger(CharData *actor, int dir) {
 		return;
 	}
 
-	for (obj = world[IN_ROOM(actor)]->contents; obj; obj = obj->get_next_content()) {
+	for (obj = world[actor->in_room]->contents; obj; obj = obj->get_next_content()) {
 		if (!CheckSript(obj, OTRIG_GREET_ALL_PC)) {
 			continue;
 		}
@@ -1180,7 +1176,7 @@ void greet_otrigger(CharData *actor, int dir) {
 				ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 
 				if (dir >= 0) {
-					add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[rev_dir[dir]], 0);
+					add_var_cntx(t->var_list, "direction", dirs[rev_dir[dir]], 0);
 				}
 
 				script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW);
@@ -1198,9 +1194,9 @@ int timechange_otrigger(ObjData *obj, const int time, const int time_day) {
 	for (Trigger *t : obj->get_script()->trig_list) {
 		if (TRIGGER_CHECK(t, OTRIG_TIMECHANGE)) {
 			snprintf(buf, kMaxInputLength, "%d", time);
-			add_var_cntx(&GET_TRIG_VARS(t), "time", buf, 0);
+			add_var_cntx(t->var_list, "time", buf, 0);
 			snprintf(buf, kMaxInputLength, "%d", time_day);
-			add_var_cntx(&GET_TRIG_VARS(t), "timeday", buf, 0);
+			add_var_cntx(t->var_list, "timeday", buf, 0);
 			script_driver(obj, t, OBJ_TRIGGER, TRIG_NEW);
 			break;
 		}
@@ -1254,7 +1250,7 @@ int enter_wtrigger(RoomData *room, CharData *actor, int dir) {
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 			if (dir >= 0) {
-				add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[rev_dir[dir]], 0);
+				add_var_cntx(t->var_list, "direction", dirs[rev_dir[dir]], 0);
 			// триггер может удалить выход, но не вернуть 0 (есть такие билдеры)
 				return (script_driver(room, t, WLD_TRIGGER, TRIG_NEW) && CAN_GO(actor, dir));
 			} else {
@@ -1270,11 +1266,11 @@ int command_wtrigger(CharData *actor, char *cmd, const char *argument) {
 	RoomData *room;
 	char buf[kMaxInputLength];
 
-	if (!actor || IN_ROOM(actor) == kNowhere || !CheckSript(world[IN_ROOM(actor)], WTRIG_COMMAND)
+	if (!actor || actor->in_room == kNowhere || !CheckSript(world[actor->in_room], WTRIG_COMMAND)
 		|| GET_INVIS_LEV(actor))
 		return 0;
 
-	room = world[IN_ROOM(actor)];
+	room = world[actor->in_room];
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (t->get_attach_type() != WLD_TRIGGER)//детачим триги не для комнат
 		{
@@ -1285,7 +1281,7 @@ int command_wtrigger(CharData *actor, char *cmd, const char *argument) {
 					 attach_name[(int) t->get_attach_type()],
 					 attach_name[WLD_TRIGGER],
 					 room->name,
-					 room->room_vn);
+					 room->vnum);
 			mudlog(buf, NRM, kLvlBuilder, ERRLOG, true);
 			snprintf(buf, kMaxInputLength, "%d", GET_TRIG_VNUM(t));
 			SCRIPT(room)->remove_trigger(buf);
@@ -1305,22 +1301,22 @@ int command_wtrigger(CharData *actor, char *cmd, const char *argument) {
 
 		if (compare_cmd(GET_TRIG_NARG(t), t->arglist.c_str(), cmd)) {
 			if (!actor->IsNpc()
-				&& (GET_POS(actor) == EPosition::kSleep))   // command триггер не будет срабатывать если игрок спит
+				&& (actor->GetPosition() == EPosition::kSleep))   // command триггер не будет срабатывать если игрок спит
 			{
 				SendMsgToChar("Сделать это в ваших снах?\r\n", actor);
 				return 1;
 			}
 // в идеале бы в триггере бой проверять а не хардкодом, ленивые скотины....
-			if (GET_POS(actor) == EPosition::kFight && t->arglist[0] != '*') {
+			if (actor->GetPosition() == EPosition::kFight && t->arglist[0] != '*') {
 				SendMsgToChar("Вы не можете это сделать в бою.\r\n", actor); //command триггер не будет работать в бою
 				return 1;
 			}
 
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 			skip_spaces(&argument);
-			add_var_cntx(&GET_TRIG_VARS(t), "arg", argument, 0);
+			add_var_cntx(t->var_list, "arg", argument, 0);
 			skip_spaces(&cmd);
-			add_var_cntx(&GET_TRIG_VARS(t), "cmd", cmd, 0);
+			add_var_cntx(t->var_list, "cmd", cmd, 0);
 
 			return script_driver(room, t, WLD_TRIGGER, TRIG_NEW);
 		}
@@ -1329,9 +1325,9 @@ int command_wtrigger(CharData *actor, char *cmd, const char *argument) {
 }
 
 void kill_pc_wtrigger(CharData *killer, CharData *victim) {
-	if (!killer || !victim || !CheckSript(world[IN_ROOM(killer)], WTRIG_KILL_PC) || GET_INVIS_LEV(killer))
+	if (!killer || !victim || !CheckSript(world[killer->in_room], WTRIG_KILL_PC) || GET_INVIS_LEV(killer))
 		return;
-	auto room = world[IN_ROOM(victim)];
+	auto room = world[victim->in_room];
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (!TRIGGER_CHECK(t, WTRIG_KILL_PC)) {
 			continue;
@@ -1346,10 +1342,10 @@ void kill_pc_wtrigger(CharData *killer, CharData *victim) {
 void speech_wtrigger(CharData *actor, char *str) {
 	char buf[kMaxInputLength];
 
-	if (!actor || !CheckSript(world[IN_ROOM(actor)], WTRIG_SPEECH) || GET_INVIS_LEV(actor))
+	if (!actor || !CheckSript(world[actor->in_room], WTRIG_SPEECH) || GET_INVIS_LEV(actor))
 		return;
 
-	auto room = world[IN_ROOM(actor)];
+	auto room = world[actor->in_room];
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (!TRIGGER_CHECK(t, WTRIG_SPEECH)) {
 			continue;
@@ -1364,7 +1360,7 @@ void speech_wtrigger(CharData *actor, char *str) {
 
 		if (compare_cmd(GET_TRIG_NARG(t), t->arglist.c_str(), str)) {
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "speech", str, 0);
+			add_var_cntx(t->var_list, "speech", str, 0);
 			script_driver(room, t, WLD_TRIGGER, TRIG_NEW);
 
 			break;
@@ -1376,12 +1372,12 @@ int drop_wtrigger(ObjData *obj, CharData *actor) {
 	char buf[kMaxInputLength];
 
 	if (!actor
-		|| !CheckSript(world[IN_ROOM(actor)], WTRIG_DROP)
+		|| !CheckSript(world[actor->in_room], WTRIG_DROP)
 		|| GET_INVIS_LEV(actor)) {
 		return 1;
 	}
 
-	auto room = world[IN_ROOM(actor)];
+	auto room = world[actor->in_room];
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (TRIGGER_CHECK(t, WTRIG_DROP)
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
@@ -1406,7 +1402,7 @@ int pick_wtrigger(RoomData *room, CharData *actor, int dir) {
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (TRIGGER_CHECK(t, WTRIG_PICK)
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
-			add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[dir], 0);
+			add_var_cntx(t->var_list, "direction", dirs[dir], 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 
 			return script_driver(room, t, WLD_TRIGGER, TRIG_NEW);
@@ -1427,8 +1423,8 @@ int open_wtrigger(RoomData *room, CharData *actor, int dir, int unlock) {
 
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (TRIGGER_CHECK(t, open_mode) && (number(1, 100) <= GET_TRIG_NARG(t))) {
-			add_var_cntx(&GET_TRIG_VARS(t), "mode", unlock ? "1" : "0", 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[dir], 0);
+			add_var_cntx(t->var_list, "mode", unlock ? "1" : "0", 0);
+			add_var_cntx(t->var_list, "direction", dirs[dir], 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 
 			return script_driver(room, t, WLD_TRIGGER, TRIG_NEW);
@@ -1450,8 +1446,8 @@ int close_wtrigger(RoomData *room, CharData *actor, int dir, int lock) {
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (TRIGGER_CHECK(t, close_mode)
 			&& (number(1, 100) <= GET_TRIG_NARG(t))) {
-			add_var_cntx(&GET_TRIG_VARS(t), "mode", lock ? "1" : "0", 0);
-			add_var_cntx(&GET_TRIG_VARS(t), "direction", dirs[dir], 0);
+			add_var_cntx(t->var_list, "mode", lock ? "1" : "0", 0);
+			add_var_cntx(t->var_list, "direction", dirs[dir], 0);
 			ADD_UID_CHAR_VAR(buf, t, actor, "actor", 0);
 
 			return script_driver(room, t, WLD_TRIGGER, TRIG_NEW);
@@ -1471,9 +1467,9 @@ int timechange_wtrigger(RoomData *room, const int time, const int time_day) {
 	for (auto t : SCRIPT(room)->trig_list) {
 		if (TRIGGER_CHECK(t, WTRIG_TIMECHANGE)) {
 			snprintf(buf, kMaxInputLength, "%d", time);
-			add_var_cntx(&GET_TRIG_VARS(t), "time", buf, 0);
+			add_var_cntx(t->var_list, "time", buf, 0);
 			snprintf(buf, kMaxInputLength, "%d", time_day);
-			add_var_cntx(&GET_TRIG_VARS(t), "timeday", buf, 0);
+			add_var_cntx(t->var_list, "timeday", buf, 0);
 			script_driver(room, t, WLD_TRIGGER, TRIG_NEW);
 			break;;
 		}

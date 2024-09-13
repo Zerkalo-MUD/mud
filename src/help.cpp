@@ -5,8 +5,6 @@
 #include "help.h"
 
 #include <third_party_libs/fmt/include/fmt/format.h>
-#include <boost/algorithm/string.hpp>
-#include <boost/range/algorithm/remove_if.hpp>
 
 #include "obj_prototypes.h"
 #include "modify.h"
@@ -348,7 +346,7 @@ std::string print_fullset_stats(const set_info &set) {
 
 	// первый проход - родные статы предметов + инит проф в clss_list
 	for (auto k = set.begin(), kend = set.end(); k != kend; ++k) {
-		const int rnum = real_object(k->first);
+		const int rnum = GetObjRnum(k->first);
 		if (rnum < 0) {
 			continue;
 		}
@@ -391,7 +389,7 @@ void process() {
 		for (const auto & k : it.second) {
 			out << "---------------------------------------------------------------------------\r\n";
 			// k->first = int_obj_vnum, k->second = qty_to_camap_map
-			const int rnum = real_object(k.first);
+			const int rnum = GetObjRnum(k.first);
 			if (rnum < 0) {
 				log("SYSERROR: wrong obj vnum: %d (%s %s %d)", k.first, __FILE__, __func__, __LINE__);
 				continue;
@@ -412,13 +410,11 @@ void process() {
 		std::string set_name = "актив";
 		if (it.second.get_alias().empty()) {
 			set_name += it.second.get_name();
-			set_name.erase(boost::remove_if(set_name, boost::is_any_of(" ,.")), set_name.end());
-			HelpSystem::add_static(set_name, out.str(), 0, true);
+			HelpSystem::add_static(utils::EraseAllAny(set_name, " ,."), out.str(), 0, true);
 		} else {
 			std::string alias = it.second.get_alias();
 			for (auto & k : utils::Split(alias, ',')) {
-				k.erase(boost::remove_if(k, boost::is_any_of(" ,.")), k.end());
-				HelpSystem::add_static(set_name + "сет" + k, out.str(), 0, true);
+				HelpSystem::add_static(set_name + "сет" + utils::EraseAllAny(k, " ,."), out.str(), 0, true);
 			}
 		}
 	}
@@ -552,7 +548,7 @@ void init_zone_all() {
 	std::stringstream out;
 
 	for (std::size_t rnum = 0, i = 1; rnum < zone_table.size(); ++rnum) {
-		if (zone_table[rnum].location) {
+		if (!zone_table[rnum].location.empty()) {
 			out << fmt::format("  {:<2} - {}. Расположена: {}. Группа: {}. Примерный уровень: {}.\r\n",
 					i, zone_table[rnum].name, zone_table[rnum].location,
 					zone_table[rnum].group, zone_table[rnum].level);
@@ -1300,7 +1296,7 @@ void check_update_dynamic() {
 void reload(Flags flag) {
 	switch (flag) {
 		case STATIC: static_help.clear();
-			world_loader.index_boot(DB_BOOT_HLP);
+			world_loader.BootIndex(DB_BOOT_HLP);
 			init_group_zones();
 			init_zone_all();
 			ClassRecipiesHelp();
@@ -1481,9 +1477,6 @@ void do_help(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (!ch->desc) {
 		return;
 	}
-
-//	skip_spaces(&argument);
-
 	// печатаем экран справки если нет аргументов
 	if (!*argument) {
 		page_string(ch->desc, help, 0);

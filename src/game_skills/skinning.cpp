@@ -1,4 +1,4 @@
-
+#include "game_mechanics/dead_load.h"
 #include "entities/char_data.h"
 #include "structs/global_objects.h"
 #include "handler.h"
@@ -251,8 +251,7 @@ ObjData *create_skin(CharData *mob, CharData *ch) {
 	}
 
 	skin->set_val(3, int(GetRealLevel(mob) / 11)); // установим уровень шкуры, топовая 44+
-	skin->set_parent(GET_MOB_VNUM(mob));
-	trans_obj_name(skin.get(), mob); // переносим падежи
+	dead_load::ResolveTagsInObjName(skin.get(), mob); // переносим падежи
 	for (i = 1; i <= GET_OBJ_VAL(skin, 3); i++) // топовая шкура до 4х афектов
 	{
 		if ((k == 1) && (number(1, 100) >= 35)) {
@@ -327,7 +326,7 @@ void DoSkinning(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		return;
 	}
 
-	const auto mob = (mob_proto + real_mobile(mobn));
+	const auto mob = (mob_proto + GetMobRnum(mobn));
 	mob->set_normal_morph();
 
 	if (!IS_IMMORTAL(ch)
@@ -351,7 +350,7 @@ void DoSkinning(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	TrainSkill(ch, ESkill::kSkinning, percent <= prob, mob);
 
 	ObjData::shared_ptr tobj;
-	if (GET_SKILL(ch, ESkill::kSkinning) > 150 && number(1, 200) == 1) // артефакт
+	if (ch->GetSkill(ESkill::kSkinning) > 150 && number(1, 200) == 1) // артефакт
 	{
 		tobj = world_objects.create_from_prototype_by_vnum(meat_mapping.get_artefact_key());
 	} else {
@@ -368,7 +367,7 @@ void DoSkinning(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		act("Вы умело освежевали $o3.",
 			false, ch, obj, nullptr, kToChar);
 
-		dl_load_obj(obj, mob, ch, DL_SKIN);
+		dead_load::LoadObjFromDeadLoad(obj, mob, ch, dead_load::kSkin);
 
 		std::vector<ObjData *> entrails;
 		entrails.push_back(tobj.get());

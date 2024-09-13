@@ -71,7 +71,7 @@ ObjData *get_obj_in_list(char *name, ObjData *list);
 ObjData *GetObjByRnumInContent(int obj_rnum, ObjData *list);
 ObjData *GetObjByVnumInContent(int vnum, ObjData *list);
 
-ObjData *get_obj(char *name, int vnum = 0);
+//ObjData *get_obj(const char *name, int vnum = 0);
 ObjData *SearchObjByRnum(ObjRnum rnum);
 
 bool CheckObjDecay(ObjData *object);
@@ -85,7 +85,7 @@ void ExtractObjFromWorld(ObjData *obj, bool showlog = true);
 
 // ******* characters ********* //
 
-CharData *SearchCharInRoomByName(char *name, RoomRnum room);
+CharData *SearchCharInRoomByName(const char *name, RoomRnum room);
 //CharData *get_char(char *name);
 
 void RemoveCharFromRoom(CharData *ch);
@@ -177,15 +177,6 @@ void Crash_crashsave(CharData *ch);
 void Crash_idlesave(CharData *ch);
 
 bool stop_follower(CharData *ch, int mode);
-
-// townportal //
-char *find_portal_by_vnum(int vnum);
-int level_portal_by_vnum(int vnum);
-int find_portal_by_word(char *wrd);
-void add_portal_to_char(CharData *ch, int vnum);
-int has_char_portal(CharData *ch, int vnum);
-void check_portals(CharData *ch);
-struct Portal *get_portal(int vnum, char *wrd);
 
 // charm //
 

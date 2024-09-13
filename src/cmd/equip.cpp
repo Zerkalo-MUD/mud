@@ -250,11 +250,9 @@ void perform_wear(CharData *ch, ObjData *obj, int equip_pos) {
 		SendMsgToChar("У вас заняты руки.\r\n", ch);
 		return;
 	}
-	if (   // не может одеть колчан если одет не лук
-		(equip_pos == EEquipPos::kQuiver &&
-			!(GET_EQ(ch, EEquipPos::kBoths) &&
-				(((GET_OBJ_TYPE(GET_EQ(ch, EEquipPos::kBoths))) == EObjType::kWeapon)
-					&& (static_cast<ESkill>GET_OBJ_SKILL(GET_EQ(ch, EEquipPos::kBoths)) == ESkill::kBows))))) {
+	if ((equip_pos == EEquipPos::kQuiver && !(GET_EQ(ch, EEquipPos::kBoths) // не может одеть колчан если одет не лук
+				&& (GET_OBJ_TYPE(GET_EQ(ch, EEquipPos::kBoths)) == EObjType::kWeapon)
+				&& (static_cast<ESkill>(GET_EQ(ch, EEquipPos::kBoths)->get_spec_param()) == ESkill::kBows)))) {
 		SendMsgToChar("А стрелять чем будете?\r\n", ch);
 		return;
 	}
@@ -288,7 +286,7 @@ void do_wear(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (ch->IsNpc()
 		&& AFF_FLAGGED(ch, EAffect::kCharmed)
 		&& (!NPC_FLAGGED(ch, ENpcFlag::kArmoring)
-			|| MOB_FLAGGED(ch, EMobFlag::kResurrected))) {
+			|| ch->IsFlagged(EMobFlag::kResurrected))) {
 		return;
 	}
 
@@ -304,7 +302,7 @@ void do_wear(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	}
 	if (dotmode == kFindAll) {
 		for (obj = ch->carrying; obj && !AFF_FLAGGED(ch, EAffect::kHold) &&
-			GET_POS(ch) > EPosition::kSleep; obj = next_obj) {
+			ch->GetPosition() > EPosition::kSleep; obj = next_obj) {
 			next_obj = obj->get_next_content();
 			if (CAN_SEE_OBJ(ch, obj)
 				&& (equip_pos = find_eq_pos(ch, obj, nullptr)) >= 0) {
@@ -324,7 +322,7 @@ void do_wear(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			sprintf(buf, "У вас нет ничего похожего на '%s'.\r\n", arg1);
 			SendMsgToChar(buf, ch);
 		} else
-			while (obj && !AFF_FLAGGED(ch, EAffect::kHold) && GET_POS(ch) > EPosition::kSleep) {
+			while (obj && !AFF_FLAGGED(ch, EAffect::kHold) && ch->GetPosition() > EPosition::kSleep) {
 				next_obj = get_obj_in_list_vis(ch, arg1, obj->get_next_content());
 				if ((equip_pos = find_eq_pos(ch, obj, nullptr)) >= 0) {
 					perform_wear(ch, obj, equip_pos);
@@ -351,7 +349,7 @@ void do_wield(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	int wear;
 
 	if (ch->IsNpc() && (AFF_FLAGGED(ch, EAffect::kCharmed)
-		&& (!NPC_FLAGGED(ch, ENpcFlag::kWielding) || MOB_FLAGGED(ch, EMobFlag::kResurrected))))
+		&& (!NPC_FLAGGED(ch, ENpcFlag::kWielding) || ch->IsFlagged(EMobFlag::kResurrected))))
 		return;
 
 	if (ch->is_morphed()) {
@@ -373,7 +371,7 @@ void do_wield(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			SendMsgToChar("Это не оружие.\r\n", ch);
 		} else if (ch->IsNpc()
 			&& AFF_FLAGGED(ch, EAffect::kCharmed)
-			&& MOB_FLAGGED(ch, EMobFlag::kCorpse)) {
+			&& ch->IsFlagged(EMobFlag::kCorpse)) {
 			SendMsgToChar("Ожившие трупы не могут вооружаться.\r\n", ch);
 		} else {
 			one_argument(argument, arg);
@@ -451,8 +449,8 @@ void do_grab(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			}
 
 			if (GET_OBJ_TYPE(obj) == EObjType::kWeapon) {
-				if (static_cast<ESkill>GET_OBJ_SKILL(obj) == ESkill::kTwohands
-					|| static_cast<ESkill>GET_OBJ_SKILL(obj) == ESkill::kBows) {
+				if (static_cast<ESkill>(obj->get_spec_param()) == ESkill::kTwohands
+					|| static_cast<ESkill>(obj->get_spec_param()) == ESkill::kBows) {
 					SendMsgToChar("Данный тип оружия держать невозможно.", ch);
 					return;
 				}
@@ -460,7 +458,7 @@ void do_grab(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 			if (ch->IsNpc()
 				&& AFF_FLAGGED(ch, EAffect::kCharmed)
-				&& MOB_FLAGGED(ch, EMobFlag::kCorpse)) {
+				&& ch->IsFlagged(EMobFlag::kCorpse)) {
 				SendMsgToChar("Ожившие трупы не могут вооружаться.\r\n", ch);
 				return;
 			}

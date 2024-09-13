@@ -189,7 +189,7 @@ bool parse_nedit_menu(CharData *ch, char *arg) {
 	switch (LOWER(*buf1)) {
 		case '1':
 			if (a_isdigit(*buf2) && sscanf(buf2, "%d", &num)) {
-				if (real_object(num) < 0) {
+				if (GetObjRnum(num) < 0) {
 					SendMsgToChar(ch, "Такого объекта не существует.\r\n");
 					return false;
 				}
@@ -203,7 +203,7 @@ bool parse_nedit_menu(CharData *ch, char *arg) {
 				return false;
 			}
 			ch->desc->named_obj->uid = num;
-			ch->desc->named_obj->mail = str_dup(player_table[get_ptable_by_unique(num)].mail);
+			ch->desc->named_obj->mail = str_dup(player_table[GetPtableByUnique(num)].mail);
 			break;
 
 		case '3':
@@ -296,8 +296,8 @@ void nedit_menu(CharData *ch) {
 	std::ostringstream out;
 
 	out << CCIGRN(ch, C_SPR) << "1" << CCNRM(ch, C_SPR) << ") Vnum: " << ch->desc->cur_vnum << " Название: "
-		<< (real_object(ch->desc->cur_vnum)
-			? obj_proto[real_object(ch->desc->cur_vnum)]->get_short_description().c_str() : "&Rнеизвестно&n") << "\r\n";
+		<< (GetObjRnum(ch->desc->cur_vnum)
+			? obj_proto[GetObjRnum(ch->desc->cur_vnum)]->get_short_description().c_str() : "&Rнеизвестно&n") << "\r\n";
 	out << CCIGRN(ch, C_SPR) << "2" << CCNRM(ch, C_SPR) << ") Владелец: "
 		<< GetNameByUnique(ch->desc->named_obj->uid, 0) << " e-mail: &S" << ch->desc->named_obj->mail << "&s\r\n";
 	out << CCIGRN(ch, C_SPR) << "3" << CCNRM(ch, C_SPR) << ") Доступно клану: "
@@ -342,7 +342,7 @@ void do_named(CharData *ch, char *argument, int cmd, int subcmd) {
 			uid = GetUniqueByName(buf);
 			//*buf = '\0';
 			if (uid > 0) {
-				strncpy(buf, player_table[get_ptable_by_unique(uid)].mail, sizeof(buf));
+				strncpy(buf, player_table[GetPtableByUnique(uid)].mail, sizeof(buf));
 			}
 		}
 	}
@@ -354,7 +354,7 @@ void do_named(CharData *ch, char *argument, int cmd, int subcmd) {
 				out += " Пока что пусто.\r\n";
 			} else {
 				for (StuffListType::iterator it = stuff_list.begin(), iend = stuff_list.end(); it != iend; ++it) {
-					if ((r_num = real_object(it->first)) < 0) {
+					if ((r_num = GetObjRnum(it->first)) < 0) {
 						if ((*buf && strstr(it->second->mail.c_str(), buf))
 							|| (uid != -1
 								&& uid == it->second->uid)
@@ -383,9 +383,9 @@ void do_named(CharData *ch, char *argument, int cmd, int subcmd) {
 							sprintf(buf1, "%6d) %s",
 									obj_proto[r_num]->get_vnum(),
 									colored_name(obj_proto[r_num]->get_short_description().c_str(), -32));
-							if (IS_GRGOD(ch) || PRF_FLAGGED(ch, EPrf::kCoderinfo)) {
+							if (IS_GRGOD(ch) || ch->IsFlagged(EPrf::kCoderinfo)) {
 								snprintf(buf2, kMaxStringLength, "%s Игра:%d Пост:%d Владелец:%-16s e-mail:&S%s&s\r\n", buf1,
-										 obj_proto.CountInWorld(r_num), obj_proto.stored(r_num),
+										 obj_proto.total_online(r_num), obj_proto.stored(r_num),
 										 GetNameByUnique(it->second->uid, false).c_str(), it->second->mail.c_str());
 							} else {
 								snprintf(buf2, kMaxStringLength, "%s\r\n", buf1);
@@ -407,7 +407,7 @@ void do_named(CharData *ch, char *argument, int cmd, int subcmd) {
 			break;
 		case SCMD_NAMED_EDIT: int found = 0;
 			if ((first > 0 && first < 0x7fffffff) || uid != -1 || *buf) {
-				if (first > 0 && first < 0x7fffffff && real_object(first) < 0) {
+				if (first > 0 && first < 0x7fffffff && GetObjRnum(first) < 0) {
 					SendMsgToChar(ch, "Такого объекта не существует.\r\n");
 					return;
 				}
@@ -419,7 +419,7 @@ void do_named(CharData *ch, char *argument, int cmd, int subcmd) {
 					++it) {
 					if ((uid == -1 && it->first == first) || it->second->uid == uid
 						|| !str_cmp(it->second->mail.c_str(), buf)) {
-						if (real_object(it->first) < 0) {
+						if (GetObjRnum(it->first) < 0) {
 							if (!have_missed_items) {
 								out += "&RВнимание!!!&n\r\nНесуществующие объекты в списке именых вещей:\r\n";
 								have_missed_items = true;
@@ -492,18 +492,18 @@ void receive_items(CharData *ch, CharData *mailman) {
 	snprintf(buf1, kMaxStringLength, "не найден именной предмет");
 	for (StuffListType::const_iterator it = stuff_list.begin(), iend = stuff_list.end(); it != iend; ++it) {
 		if ((it->second->uid == GET_UNIQUE(ch)) || (!strcmp(GET_EMAIL(ch), it->second->mail.c_str()))) {
-			if ((r_num = real_object(it->first)) < 0) {
+			if ((r_num = GetObjRnum(it->first)) < 0) {
 				SendMsgToChar("Странно, но такого объекта не существует.\r\n", ch);
 				snprintf(buf1, kMaxStringLength, "объект не существует!!!");
 				continue;
 			}
-			if ((GET_OBJ_MIW(obj_proto[r_num]) > obj_proto.actual_count(r_num))    //Проверка на макс в мире
+			if ((GetObjMIW(r_num) > obj_proto.actual_count(r_num))    //Проверка на макс в мире
 				|| (obj_proto.actual_count(r_num) < 1))//Пока что если в мире нету то тоже загрузить
 			{
 				found++;
 				snprintf(buf1, kMaxStringLength, "выдаем именной предмет %s Max:%d > Current:%d",
 						 obj_proto[r_num]->get_short_description().c_str(),
-						 GET_OBJ_MIW(obj_proto[r_num]),
+						 GetObjMIW(r_num),
 						 obj_proto.actual_count(r_num));
 				const auto obj = world_objects.create_from_prototype_by_rnum(r_num);
 				obj->set_extra_flag(EObjFlag::kNamed);
@@ -516,7 +516,7 @@ void receive_items(CharData *ch, CharData *mailman) {
 			} else {
 				snprintf(buf1, kMaxStringLength, "не выдаем именной предмет %s Max:%d <= Current:%d",
 						 obj_proto[r_num]->get_short_description().c_str(),
-						 GET_OBJ_MIW(obj_proto[r_num]),
+						 GetObjMIW(r_num),
 						 obj_proto.actual_count(r_num));
 				in_world++;
 			}
@@ -554,7 +554,7 @@ void load() {
 				continue;
 			}
 
-			if (real_object(vnum) < 0) {
+			if (GetObjRnum(vnum) < 0) {
 				snprintf(buf, kMaxStringLength,
 						 "NamedStuff: предмет vnum=%ld не существует.", vnum);
 				mudlog(buf, NRM, kLvlBuilder, SYSLOG, true);

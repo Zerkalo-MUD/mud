@@ -22,7 +22,7 @@
 
 #include <sstream>
 
-extern void add_karma(CharData *ch, const char *punish, const char *reason);
+extern void AddKarma(CharData *ch, const char *punish, const char *reason);
 extern void check_max_hp(CharData *ch);
 
 namespace Glory {
@@ -304,7 +304,7 @@ void add_glory(long uid, int amount) {
 		glory_list[uid] = temp_node;
 	}
 	save_glory();
-	DescriptorData *d = DescByUID(uid);
+	DescriptorData *d = DescriptorByUid(uid);
 	if (d)
 		SendMsgToChar(d->character.get(), "Вы заслужили %d %s славы.\r\n",
 					  amount, GetDeclensionInNumber(amount, EWhat::kPoint));
@@ -826,7 +826,7 @@ void do_spend_glory(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 // * Удаление статов у чара, если он онлайн.
 void remove_stat_online(long uid, int stat, int glory) {
-	DescriptorData *d = DescByUID(uid);
+	DescriptorData *d = DescriptorByUid(uid);
 	if (d) {
 		switch (stat) {
 			case G_STR: d->character->inc_str(-glory);
@@ -872,7 +872,7 @@ void timers_update() {
 		}
 
 		if (removed) {
-			DescriptorData *d = DescByUID(it.first);
+			DescriptorData *d = DescriptorByUid(it.first);
 			if (d) {
 				SendMsgToChar("Вы долго не совершали достойных деяний и слава вас покинула...\r\n",
 							 d->character.get());
@@ -985,14 +985,14 @@ void transfer_stats(CharData *ch, CharData *god, const std::string& name, char *
 		return;
 	}
 
-	DescriptorData *d_vict = DescByUID(vict_uid);
+	DescriptorData *d_vict = DescriptorByUid(vict_uid);
 	CharData::shared_ptr vict;
 	if (d_vict) {
 		vict = d_vict->character;
 	} else {
 		// принимающий оффлайн
 		CharData::shared_ptr t_vict(new Player); // TODO: переделать на стек
-		if (load_char(name.c_str(), t_vict.get()) < 0) {
+		if (LoadPlayerCharacter(name.c_str(), t_vict.get(), ELoadCharFlags::kFindId) < 0) {
 			SendMsgToChar(god, "Некорректное имя персонажа (%s), принимающего славу.\r\n", name.c_str());
 			return;
 		}
@@ -1029,7 +1029,7 @@ void transfer_stats(CharData *ch, CharData *god, const std::string& name, char *
 			 vict_it->second->spend_glory - was_stats);
 	imm_log("%s", buf);
 	mudlog(buf, DEF, kLvlImmortal, SYSLOG, true);
-	add_karma(ch, buf, reason);
+	AddKarma(ch, buf, reason);
 	GloryMisc::add_log(GloryMisc::TRANSFER_GLORY, 0, buf, std::string(reason), vict.get());
 
 	// если принимающий чар онлайн - сетим сразу ему статы
@@ -1058,14 +1058,14 @@ void transfer_stats(CharData *ch, CharData *god, const std::string& name, char *
 			}
 		}
 	}
-	add_karma(vict.get(), buf, reason);
+	AddKarma(vict.get(), buf, reason);
 	vict->save_char();
 
 	// удаляем запись чара, с которого перекидывали
 	glory_list.erase(it);
 	// и выставляем ему новые статы (он то полюбому уже загружен канеш,
 	// но тут стройная картина через дескриптор везде) и если он был оффлайн - обнулится при входе
-	DescriptorData *k = DescByUID(GET_UNIQUE(ch));
+	DescriptorData *k = DescriptorByUid(GET_UNIQUE(ch));
 	if (k) {
 		GloryMisc::recalculate_stats(k->character.get());
 	}
@@ -1139,7 +1139,7 @@ void remove_freeze(long uid) {
 void check_freeze(CharData *ch) {
 	auto it = glory_list.find(GET_UNIQUE(ch));
 	if (it != glory_list.end())
-		it->second->freeze = PLR_FLAGGED(ch, EPlrFlag::kFrozen) ? true : false;
+		it->second->freeze = ch->IsFlagged(EPlrFlag::kFrozen) ? true : false;
 }
 
 void set_stats(CharData *ch) {

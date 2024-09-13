@@ -96,14 +96,14 @@ void doBring(CharData *ch, CharData *boss, unsigned int pos, char *bank) {
 			return;
 		}
 
-		if ((rnum = real_mobile(it->first)) < 0) {
+		if ((rnum = GetMobRnum(it->first)) < 0) {
 			sprintf(buf, "С персонажем стряслось что то, не могу его найти.");
 			tell_to_char(boss, ch, buf);
 			sprintf(buf1, "[ERROR] MERC::doBring, не найден моб, vnum: %d", it->first);
 			mudlog(buf1, LogMode::CMP, 1, EOutputStream::SYSLOG, 1);
 			return;
 		}
-		mob = read_mobile(rnum, REAL);
+		mob = ReadMobile(rnum, kReal);
 		PlaceCharToRoom(mob, ch->in_room);
 		if (IS_SPELL_SET(ch, ESpell::kCharm, ESpellType::kKnow)) {
 			act("$n окрикнул$g своих парней и скрыл$u из виду.",

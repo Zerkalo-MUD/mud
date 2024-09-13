@@ -20,6 +20,7 @@
 #include "administration/name_adviser.h"
 #include "obj_save.h"
 #include "entities/obj_data.h"
+#include "entities/player_i.h"
 #include "structs/descriptor_data.h"
 #include "structs/structs.h"
 
@@ -30,50 +31,48 @@
 struct RoomData;    // forward declaration to avoid inclusion of room.hpp and any dependencies of that header.
 class CharData;    // forward declaration to avoid inclusion of char.hpp and any dependencies of that header.
 
-// room manage functions
-void room_copy(RoomData *dst, RoomData *src);
-void room_free(RoomData *room);
-
 // public procedures in db.cpp
-void tag_argument(char *argument, char *tag);
-void boot_db();
-void zone_update();
-bool can_be_reset(ZoneRnum zone);
-RoomRnum real_room(RoomVnum vnum);
-long get_id_by_name(char *name);
-//long get_id_by_uid(long uid);
-int get_uid_by_id(int id);
-long cmp_ptable_by_name(char *name, int len);
-const char *get_name_by_id(long id);
-const char *get_name_by_unique(int unique);
-int get_level_by_unique(long unique);
-long get_lastlogon_by_unique(long unique);
-long get_ptable_by_unique(long unique);
+RoomRnum GetRoomRnum(RoomVnum vnum);
+ZoneRnum GetZoneRnum(ZoneVnum zvn);
+MobRnum GetMobRnum(MobVnum vnum);
+ObjRnum GetObjRnum(ObjVnum vnum);
+void ExtractTagFromArgument(char *argument, char *tag);
+void BootMudDataBase();
+void ZoneUpdate();
+bool CanBeReset(ZoneRnum zone);
+long GetPlayerIdByName(char *name);
+int GetPlayerUidByName(int id);
+long CmpPtableByName(char *name, int len);
+const char *GetNameById(long id);
+const char *GetPlayerNameByUnique(int unique);
+int GetLevelByUnique(long unique);
+long GetLastlogonByUnique(long unique);
+long GetPtableByUnique(long unique);
 int GetZoneRooms(int, int *, int *);
 void ZoneTrafficSave();
-
-int load_char(const char *name, CharData *char_element, bool reboot = false, bool find_id = true);
-CharData *read_mobile(MobVnum nr, int type);
-MobRnum real_mobile(MobVnum vnum);
-int vnum_mobile(char *searchname, CharData *ch);
-void ClearCharTalents(CharData *ch);
-int correct_unique(int unique);
-bool check_unlimited_timer(const CObjectPrototype *obj);
+void ResetZone(ZoneRnum zone);
+void LoadSheduledReboot();
+void initIngredientsMagic();
+void InitZoneTypes();
+int AllocateBufferForFile(const char *name, char **destination_buf);
+int LoadPlayerCharacter(const char *name, CharData *char_element, int load_flags);
+CharData *ReadMobile(MobVnum nr, int type);
+int IsCorrectUnique(int unique);
 void SaveGlobalUID();
-void flush_player_index();
-bool is_empty(ZoneRnum zone_nr, bool debug = false);
+void FlushPlayerIndex();
+bool IsZoneEmpty(ZoneRnum zone_nr, bool debug = false);
 
-#define REAL          0
-#define VIRTUAL       (1 << 0)
+const int kReal		= 0;
+const int kVirtual	= 1 << 0;
 
-CObjectPrototype::shared_ptr get_object_prototype(ObjVnum nr, int type = VIRTUAL);
-
-int vnum_object(char *searchname, CharData *ch);
-int vnum_flag(char *searchname, CharData *ch);
-int vnum_room(char *searchname, CharData *ch);
-int vnum_obj_trig(char *searchname, CharData *ch);
+CObjectPrototype::shared_ptr GetObjectPrototype(ObjVnum nr, int type = kVirtual);
 
 // structure for the reset commands
+struct combat_list_element {
+	CharData *ch;
+	bool deleted;
+};
+
 struct reset_com {
 	/**
 	 *  Commands:
@@ -98,72 +97,12 @@ struct reset_com {
 	char *sarg2;        // string argument
 };
 
-struct TreasureCase {
-	ObjVnum vnum;
-	int drop_chance;
-	std::vector<ObjVnum> vnum_objs; // внумы шмоток, которые выпадают из кейса
-};
-
 // для экстраффектов в random_obj
 struct ExtraAffects {
 	int number; // номер экстрааафетка
 	int min_val; // минимальное значение
 	int max_val; // максимальное значение
 	int chance; // вероятность того, что данный экстраффект будет на шмотке
-};
-
-struct QuestBodrichRewards {
-	int level;
-	int vnum;
-	int money;
-	int exp;
-};
-
-class QuestBodrich {
- public:
-	QuestBodrich();
-
- private:
-	void load_mobs();
-	void load_objs();
-	void load_rewards();
-
-	// здесь храним предметы для каждого класса
-	std::map<int, std::vector<int>> objs;
-	// здесь храним мобов
-	std::map<int, std::vector<int>> mobs;
-	// а здесь награды
-	std::map<int, std::vector<QuestBodrichRewards>> rewards;
-};
-
-struct City {
-	std::string name; // имя города
-	std::vector<int> vnums; // номера зон, которые принадлежат городу
-	int rent_vnum; // внум ренты города
-};
-
-class RandomObj {
- public:
-	// внум объекта
-	int vnum;
-	// массив, в котором показывается, кому шмотка недоступна + шанс, что эта "недоступность" при выпадении предмета будет на нем
-	std::map<std::string, int> not_wear;
-	// минимальный и максимальный вес
-	int min_weight;
-	int max_weight;
-	// минимальная и максимальная цена за предмет
-	int min_price;
-	int max_price;
-	// прочность
-	int min_stability;
-	int max_stability;
-	// value0, value1, value2, value3
-	int value0_min, value1_min, value2_min, value3_min;
-	int value0_max, value1_max, value2_max, value3_max;
-	// список аффектов и их шанс упасть на шмотку
-	std::map<std::string, int> affects;
-	// список экстраффектов и их шанс упасть на шмотку
-	std::vector<ExtraAffects> extraffect;
 };
 
 // for queueing zones for update
@@ -178,9 +117,9 @@ struct reset_q_type {
 	struct reset_q_element *tail;
 };
 
-const int OBJECT_SAVE_ACTIVITY = 300;
-const int PLAYER_SAVE_ACTIVITY = 305;
-const int MAX_SAVED_ITEMS = 1000;
+const int kObjectSaveActivity = 300;
+const int kPlayerSaveActivity = 305;
+const int kMaxSavedItems = 1000;
 
 class PlayerIndexElement {
  public:
@@ -207,30 +146,10 @@ class PlayerIndexElement {
 	const char *m_name;
 };
 
-//Polud тестовый класс для хранения параметров различных рас мобов
-struct ingredient {
-	int imtype;
-	std::string imname;
-	std::array<int, kMaxMobLevel + 1> prob; // вероятность загрузки для каждого уровня моба
-};
-
-class MobRace {
- public:
-	MobRace();
-	~MobRace();
-	std::string race_name;
-	std::vector<ingredient> ingrlist;
-};
-
-typedef std::shared_ptr<MobRace> MobRacePtr;
-typedef std::map<int, MobRacePtr> MobRaceListType;
-
-//-Polud
-
 extern RoomRnum top_of_world;
-extern std::unordered_map<long, CharData *> mob_by_uid;
+extern std::unordered_map<long, CharData *> chardata_by_uid;
 
-void add_trig_index_entry(int nr, Trigger *proto);
+void AddTrigIndexEntry(int nr, Trigger *trig);
 extern IndexData **trig_index;
 
 #ifndef __CONFIG_C__
@@ -245,7 +164,7 @@ extern const int sunrise[][2];
 extern const int Reverse[];
 
 // external vars
-extern CharData *combat_list;
+//extern std::list<CharData *> combat_list;
 
 #include <vector>
 #include <deque>
@@ -266,16 +185,11 @@ inline ObjVnum GET_OBJ_VNUM(const CObjectPrototype *obj) { return obj->get_vnum(
 extern CharData *mob_proto;
 extern const char *MENU;
 
-extern struct Portal *portals_list;
 extern TimeInfoData time_info;
 
-extern int convert_drinkcon_skill(CObjectPrototype *obj, bool proto);
+extern int ConvertDrinkconSkillField(CObjectPrototype *obj, bool proto);
 
-int dl_parse(OnDeadLoadList **dl_list, char *line);
-int dl_load_obj(ObjData *corpse, CharData *ch, CharData *chr, int DL_LOAD_TYPE);
-int trans_obj_name(ObjData *obj, CharData *ch);
-void dl_list_copy(OnDeadLoadList **pdst, OnDeadLoadList *src);
-void paste_mobiles();
+void PasteMobiles();
 
 extern RoomRnum r_helled_start_room;
 extern RoomRnum r_mortal_start_room;
@@ -283,8 +197,8 @@ extern RoomRnum r_immort_start_room;
 extern RoomRnum r_named_start_room;
 extern RoomRnum r_unreg_start_room;
 
-long get_ptable_by_name(const char *name);
-void free_alias(struct alias_data *a);
+long GetPlayerTablePosByName(const char *name);
+void FreeAlias(struct alias_data *a);
 
 class PlayersIndex : public std::vector<PlayerIndexElement> {
  public:
@@ -296,13 +210,13 @@ class PlayersIndex : public std::vector<PlayerIndexElement> {
 
 	~PlayersIndex();
 
-	std::size_t append(const PlayerIndexElement &element);
-	bool player_exists(const int id) const { return m_id_to_index.find(id) != m_id_to_index.end(); }
-	bool player_exists(const char *name) const { return NOT_FOUND != get_by_name(name); }
-	std::size_t get_by_name(const char *name) const;
-	void set_name(std::size_t index, const char *name);
+	std::size_t Append(const PlayerIndexElement &element);
+	bool IsPlayerExists(const int id) const { return m_id_to_index.find(id) != m_id_to_index.end(); }
+	bool IsPlayerExists(const char *name) const { return NOT_FOUND != GetRnumByName(name); }
+	std::size_t GetRnumByName(const char *name) const;
+	void SetName(std::size_t index, const char *name);
 
-	NameAdviser &name_adviser() { return m_name_adviser; }
+	NameAdviser &GetNameAdviser() { return m_name_adviser; }
 
  private:
 	class hasher {
@@ -317,9 +231,8 @@ class PlayersIndex : public std::vector<PlayerIndexElement> {
 
 	using id_to_index_t = std::unordered_map<int, std::size_t>;
 	using name_to_index_t = std::unordered_map<std::string, std::size_t, hasher, equal_to>;
-	using free_names_t = std::deque<std::string>;
 
-	void add_name_to_index(const char *name, std::size_t index);
+	void AddNameToIndex(const char *name, std::size_t index);
 
 	id_to_index_t m_id_to_index;
 	name_to_index_t m_name_to_index;
@@ -331,46 +244,32 @@ extern PlayersIndex &player_table;
 
 extern long top_idnum;
 
-bool player_exists(long id);
+bool IsPlayerExists(long id);
 
 inline SaveInfo *SAVEINFO(const size_t number) {
 	return player_table[number].timer;
 }
 
-inline void clear_saveinfo(const size_t number) {
+inline void ClearSaveinfo(const size_t number) {
 	delete player_table[number].timer;
 	player_table[number].timer = nullptr;
 }
 
-void recreate_saveinfo(size_t number);
-
-void set_god_skills(CharData *ch);
-void check_room_flags(int rnum);
-
-namespace OfftopSystem {
-void init();
-void set_flag(CharData *ch);
-} // namespace OfftopSystem
-
-void delete_char(const char *name);
-
-void set_test_data(CharData *mob);
-
-void set_zone_mob_level();
-
-//bool can_snoop(CharacterData *imm, CharacterData *vict);
-
-//extern insert_wanted_gem iwg;
+void RecreateSaveinfo(size_t number);
+void SetGodSkills(CharData *ch);
+void CheckRoomForIncompatibleFlags(int rnum);
+void SetTestData(CharData *mob);
+void SetZoneMobLevel();
 
 class GameLoader {
  public:
-	GameLoader();
+	GameLoader() = default;
 
-	void boot_world();
-	void index_boot(EBootType mode);
+	static void BootWorld();
+	static void BootIndex(EBootType mode);
 
  private:
-	static void prepare_global_structures(EBootType mode, const int rec_count);
+	static void PrepareGlobalStructures(const EBootType mode, const int rec_count);
 };
 
 extern GameLoader world_loader;

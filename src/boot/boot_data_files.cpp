@@ -2,6 +2,7 @@
 
 #include "obj_prototypes.h"
 #include "dg_script/dg_olc.h"
+#include "game_mechanics/dead_load.h"
 #include "boards/boards.h"
 #include "communication/social.h"
 #include "description.h"
@@ -14,15 +15,15 @@
 extern int scheck;                        // TODO: get rid of this line
 CharData *mob_proto;                    // TODO: get rid of this global variable
 
-extern void extract_trigger(Trigger *trig);
+extern void ExtractTrigger(Trigger *trig);
 
 class DataFile : public BaseDataFile {
  protected:
 	DataFile(const std::string &file_name) : m_file(nullptr), m_file_name(file_name) {}
-	virtual bool open() override;
-	virtual void close() override;
-	const std::string &file_name() const { return m_file_name; }
-	const auto &file() const { return m_file; }
+	bool open() override;
+	void close() override;
+	[[nodiscard]] const std::string &file_name() const { return m_file_name; }
+	[[nodiscard]] const auto &file() const { return m_file; }
 	void get_one_line(char *buf);
 
  private:
@@ -206,7 +207,7 @@ void DiscreteFile::dg_read_trigger(void *proto, int type, int proto_vnum) {
 		return;
 	}
 
-	rnum = real_trigger(vnum);
+	rnum = GetTriggerRnum(vnum);
 	if (rnum < 0) {
 		sprintf(line, "SYSERR: Trigger vnum #%d asked for but non-existant!", vnum);
 		log("%s", line);
@@ -223,12 +224,12 @@ void DiscreteFile::dg_read_trigger(void *proto, int type, int proto_vnum) {
 			if (rnum >= 0) {
 				const auto trigger_instance = read_trigger(rnum);
 				if (add_trigger(SCRIPT(room).get(), trigger_instance, -1)) {
-					add_trig_to_owner(-1, vnum, room->room_vn);
+					add_trig_to_owner(-1, vnum, room->vnum);
 				} else {
-					extract_trigger(trigger_instance);
+					ExtractTrigger(trigger_instance);
 				}
 			} else {
-				sprintf(line, "SYSERR: non-existant trigger #%d assigned to room #%d", vnum, room->room_vn);
+				sprintf(line, "SYSERR: non-existant trigger #%d assigned to room #%d", vnum, room->vnum);
 				log("%s", line);
 			}
 			break;
@@ -277,8 +278,16 @@ void TriggersFile::read_entry(const int nr) {
 
 void TriggersFile::parse_trigger(int vnum) {
 	int t, add_flag, k;
+	static int count = 0;
 
 	char line[256], flags[256];
+
+	ZoneRnum zrn = GetZoneRnum(vnum / 100);
+
+	if (zone_table[zrn].RnumTrigsLocation.first == -1) {
+		zone_table[zrn].RnumTrigsLocation.first = count;
+	}
+	zone_table[zrn].RnumTrigsLocation.second = count;
 
 	sprintf(buf2, "trig vnum %d", vnum);
 	std::string name(fread_string());
@@ -313,7 +322,7 @@ void TriggersFile::parse_trigger(int vnum) {
 		std::size_t pos_end = cmds.find_first_of("\r\n", pos);
 		std::string line = cmds.substr(pos, (pos_end == std::string::npos) ? pos_end : pos_end - pos);
 		// exclude empty lines, but always include the last one to make sure the list is not empty
-		if (!line.empty() || pos_end == std::string::npos) {
+		if (!line.empty()) {
 			utils::TrimRight(line);
 			ptr->reset(new cmdlist_element());
 			indent_trigger(line, &indlev);
@@ -350,7 +359,8 @@ void TriggersFile::parse_trigger(int vnum) {
 		Boards::dg_script_text += tmp + std::string("\r\n");
 	}
 
-	add_trig_index_entry(vnum, trig);
+	AddTrigIndexEntry(vnum, trig);
+	count++;
 }
 
 class WorldFile : public DiscreteFile {
@@ -377,7 +387,7 @@ void WorldFile::read_entry(const int nr) {
 }
 
 void WorldFile::parse_room(int virtual_nr) {
-	static int room_realnum = kFirstRoom;
+	int room_realnum = ++top_of_world;
 	static ZoneRnum zone = 0;
 
 	int t[10], i;
@@ -388,26 +398,27 @@ void WorldFile::parse_room(int virtual_nr) {
 		log("SYSERR: Room #%d is below zone %d.", virtual_nr, zone);
 		exit(1);
 	}
-	if (zone == 0 && zone_table[zone].FirstRoomVnum == 0)
-		zone_table[zone].FirstRoomVnum = 100;
+//	if (zone == 0 && zone_table[zone].RnumRoomsLocation.first == -1) {
+//		zone_table[zone].RnumRoomsLocation.first = 1;
+//	}
 	while (virtual_nr > zone_table[zone].top) {
 		if (++zone >= static_cast<ZoneRnum>(zone_table.size())) {
 			log("SYSERR: Room %d is outside of any zone.", virtual_nr);
 			exit(1);
 		}
 	}
-	if (zone_table[zone].FirstRoomVnum == 0)
-		zone_table[zone].FirstRoomVnum = virtual_nr;
-	zone_table[zone].LastRoomVnum = virtual_nr;
-
 	// Создаем новую комнату
 	world.push_back(new RoomData);
 	world[room_realnum]->zone_rn = zone;
-	world[room_realnum]->room_vn = virtual_nr;
+	world[room_realnum]->vnum = virtual_nr;
 	std::string tmpstr = fread_string();
 	tmpstr[0] = UPPER(tmpstr[0]);
 	world[room_realnum]->set_name(tmpstr);
-
+//	if (zone_table[zone].RnumRoomsLocation.first == -1) {
+//		zone_table[zone].RnumRoomsLocation.first = room_realnum;
+//	}
+//	zone_table[zone].RnumRoomsLocation.second = room_realnum;
+	
 	std::string desc = fread_string();
 	utils::TrimRightIf(desc, " _");
 	desc.shrink_to_fit();
@@ -426,16 +437,7 @@ void WorldFile::parse_room(int virtual_nr) {
 	world[room_realnum]->flags_from_string(flags);
 	world[room_realnum]->sector_type = t[2];
 
-	check_room_flags(room_realnum);
-
-	// Обнуляем флаги от аффектов и сами аффекты на комнате.
-	world[room_realnum]->affected_by.clear();
-	// Обнуляем базовые параметры (пока нет их загрузки)
-	memset(&world[room_realnum]->base_property, 0, sizeof(RoomState));
-
-	// Обнуляем добавочные параметры комнаты
-	memset(&world[room_realnum]->add_property, 0, sizeof(RoomState));
-
+	CheckRoomForIncompatibleFlags(room_realnum);
 	world[room_realnum]->func = nullptr;
 	world[room_realnum]->contents = nullptr;
 	world[room_realnum]->track = nullptr;
@@ -493,7 +495,6 @@ void WorldFile::parse_room(int virtual_nr) {
 							break;
 					}
 				} while (letter != 0);
-				top_of_world = room_realnum++;
 				return;
 
 			default: log("%s", buf);
@@ -503,7 +504,7 @@ void WorldFile::parse_room(int virtual_nr) {
 }
 
 void WorldFile::setup_dir(int room, unsigned dir) {
-	if (dir >= world[room]->dir_option.size()) {
+	if (dir >= world[room]->dir_option_proto.size()) {
 		log("SYSERROR : dir=%d (%s:%d)", dir, __FILE__, __LINE__);
 		return;
 	}
@@ -513,39 +514,38 @@ void WorldFile::setup_dir(int room, unsigned dir) {
 
 	sprintf(buf2, "room #%d, direction D%u", GET_ROOM_VNUM(room), dir);
 
-	world[room]->dir_option[dir].reset(new ExitData());
-	world[room]->dir_option[dir]->general_description = fread_string();
+	world[room]->dir_option_proto[dir].reset(new ExitData());
+	world[room]->dir_option_proto[dir]->general_description = fread_string();
 
 	// парс строки алиаса двери на имя; вининельный падеж, если он есть
-	world[room]->dir_option[dir]->set_keywords(fread_string());
+	world[room]->dir_option_proto[dir]->set_keywords(fread_string());
 
 	if (!get_line(file(), line)) {
 		log("SYSERR: Format error, %s", line);
 		exit(1);
 	}
 	int result = sscanf(line, " %d %d %d %d", t, t + 1, t + 2, t + 3);
-	if (result == 3)//Polud видимо "старый" формат (20.10.2010), прочитаем в старом
-	{
+	if (result == 3) {
 		if (t[0] & 1)
-			world[room]->dir_option[dir]->exit_info = EExitFlag::kHasDoor;
+			world[room]->dir_option_proto[dir]->exit_info = EExitFlag::kHasDoor;
 		else if (t[0] & 2)
-			world[room]->dir_option[dir]->exit_info = EExitFlag::kHasDoor | EExitFlag::kPickroof;
+			world[room]->dir_option_proto[dir]->exit_info = EExitFlag::kHasDoor | EExitFlag::kPickroof;
 		else
-			world[room]->dir_option[dir]->exit_info = 0;
+			world[room]->dir_option_proto[dir]->exit_info = 0;
 		if (t[0] & 4)
-			world[room]->dir_option[dir]->exit_info |= EExitFlag::kHidden;
+			world[room]->dir_option_proto[dir]->exit_info |= EExitFlag::kHidden;
 
-		world[room]->dir_option[dir]->lock_complexity = 0;
+		world[room]->dir_option_proto[dir]->lock_complexity = 0;
 	} else if (result == 4) {
-		world[room]->dir_option[dir]->exit_info = t[0];
-		world[room]->dir_option[dir]->lock_complexity = t[3];
+		world[room]->dir_option_proto[dir]->exit_info = t[0];
+		world[room]->dir_option_proto[dir]->lock_complexity = t[3];
 	} else {
 		log("SYSERR: Format error, %s", buf2);
 		exit(1);
 	}
 
-	world[room]->dir_option[dir]->key = t[1];
-	world[room]->dir_option[dir]->to_room(t[2]);
+	world[room]->dir_option_proto[dir]->key = t[1];
+	world[room]->dir_option_proto[dir]->to_room(t[2]);
 }
 
 bool WorldFile::load() {
@@ -636,9 +636,9 @@ void ObjectFile::parse_object(const int nr) {
 		exit(1);
 	}
 
-	int skill = 0;
-	asciiflag_conv(f0, &skill);
-	tobj->set_skill(skill);
+	int sparam = 0;
+	asciiflag_conv(f0, &sparam);
+	tobj->set_spec_param(sparam);
 
 	tobj->set_maximum_durability(t[1]);
 	tobj->set_current_durability(MIN(t[1], t[2]));
@@ -996,16 +996,14 @@ void MobileFile::parse_mobile(const int nr) {
 	char line[256], letter;
 	char f1[128], f2[128];
 	mob_index[i].vnum = nr;
-//	mob_online_by_vnum[nr] = 0; все равно конструктор 0 сделает
-//	mob_index[i].total_online = 0;
-//	mob_index[i].stored = 0;
 	mob_index[i].func = nullptr;
 	mob_index[i].set_idx = -1;
-
-	sprintf(buf2, "mob vnum %d", nr);
-
+	if (zone_table[GetZoneRnum(nr / 100)].RnumMobsLocation.first == -1) {
+		zone_table[GetZoneRnum(nr / 100)].RnumMobsLocation.first = i;
+	}
+	zone_table[GetZoneRnum(nr / 100)].RnumMobsLocation.second = i;
+//snprintf(tmpstr, BUFFER_SIZE, "ZONE_MOB zone %d first %d last %d", zone_table[zone].vnum, zone_table[zone].RnumMobsLocation.first, zone_table[zone].RnumMobsLocation.second);
 	mob_proto[i].player_specials = player_special_data::s_for_mobiles;
-
 	// **** String data
 	mob_proto[i].SetCharAliases(fread_string());
 	mob_proto[i].set_npc_name(fread_string());
@@ -1033,8 +1031,8 @@ void MobileFile::parse_mobile(const int nr) {
 			"...expecting line of form '# # # {S | E}'\n%s", nr, line);
 		exit(1);
 	}
-	MOB_FLAGS(&mob_proto[i]).from_string(f1);
-	MOB_FLAGS(&mob_proto[i]).set(EMobFlag::kNpc);
+	mob_proto[i].SetFlagsFromString(f1);
+	mob_proto[i].char_specials.saved.act.set(EMobFlag::kNpc); //нужен нормальный критерий что это моб
 	AFF_FLAGS(&mob_proto[i]).from_string(f2);
 	GET_ALIGNMENT(mob_proto + i) = t[2];
 	switch (UPPER(letter)) {
@@ -1065,7 +1063,7 @@ void MobileFile::parse_mobile(const int nr) {
 				break;
 
 			case 'L': get_line(file(), line);
-				dl_parse(&mob_proto[i].dl_list, line + 1);
+				dead_load::ParseDeadLoadLine(&mob_proto[i].dl_list, line + 1);
 				break;
 
 			case 'T': dg_read_trigger(&mob_proto[i], MOB_TRIGGER, nr);
@@ -1088,7 +1086,7 @@ void MobileFile::parse_mobile(const int nr) {
 	mob_proto[i].set_rnum(i);
 	mob_proto[i].desc = nullptr;
 	if ((mob_proto + 1)->GetLevel() == 0)
-		set_test_data(mob_proto + i);
+		SetTestData(mob_proto + i);
 
 	top_of_mobt = i++;
 }
@@ -1162,7 +1160,7 @@ void MobileFile::parse_simple_mob(int i, int nr) {
 			exit(1);
 	}
 
-	mob_proto[i].char_specials.position = static_cast<EPosition>(t[0]);
+	mob_proto[i].SetPosition(static_cast<EPosition>(t[0]));
 	mob_proto[i].mob_specials.default_pos = static_cast<EPosition>(t[1]);
 	mob_proto[i].set_sex(static_cast<EGender>(t[2]));
 
@@ -1252,7 +1250,7 @@ void MobileFile::interpret_espec(const char *keyword, const char *value, int i, 
 /*		заготовка парса резистов у моба при загрузке мада, чтоб в след раз не придумывать
 		if (GET_RESIST(mob_proto + i, 4) > 49 && !mob_proto[i].get_role(MOB_ROLE_BOSS)) // жизнь и не боссы
 		{
-			if (zone_table[world[IN_ROOM(&mob_proto[i])]->zone].group < 3) // в зонах 0-2 группы
+			if (zone_table[world[&mob_proto[i]->in_room]->zone].group < 3) // в зонах 0-2 группы
 				log("RESIST LIVE num: %d Vnum: %d Level: %d Name: %s", GET_RESIST(mob_proto + i, 4), mob_index[i].vnum, GetRealLevel(&mob_proto[i]), GET_PAD(&mob_proto[i], 0));
 		}
 */
@@ -1436,7 +1434,7 @@ void MobileFile::interpret_espec(const char *keyword, const char *value, int i, 
 		if (value && *value) {
 			std::string str(value);
 			CharData::role_t tmp(str);
-			tmp.resize(mob_proto[i].get_role().size());
+//			tmp.resize(mob_proto[i].get_role().size());
 			mob_proto[i].set_role(tmp);
 		}
 	}
@@ -1481,13 +1479,15 @@ bool ZoneFile::load_zone() {
 	zone.reset_idle = false;
 	zone.used = false;
 	zone.activity = 0;
-	zone.comment = nullptr;
-	zone.location = nullptr;
-	zone.description = nullptr;
-	zone.author = nullptr;
 	zone.group = false;
 	zone.count_reset = 0;
 	zone.traffic = 0;
+	zone.RnumTrigsLocation.first = -1;
+	zone.RnumTrigsLocation.second = -1;
+	zone.RnumMobsLocation.first = -1;
+	zone.RnumMobsLocation.second = -1;
+	zone.RnumRoomsLocation.first = -1;
+	zone.RnumRoomsLocation.second = -1;
 	get_line(file(), buf);
 
 	auto result = false;
@@ -1571,7 +1571,7 @@ bool ZoneFile::load_regular_zone() {
 	{
 		*ptr = '\0';
 	}
-	zone.name = str_dup(buf);
+	zone.name = buf;
 
 	log("Читаем zon файл: %s", full_file_name().c_str());
 	while (*buf != 'S' && !feof(file())) {
@@ -1582,27 +1582,27 @@ bool ZoneFile::load_regular_zone() {
 		}
 
 		if (*buf == '^') {
-			std::string comment(buf);
+			std::string comment = buf;
 			utils::TrimIf(comment, "^~");
-			zone.comment = str_dup(comment.c_str());
+			zone.comment = comment;
 		}
 
 		if (*buf == '&') {
-			std::string location(buf);
+			std::string location = buf;
 			utils::TrimIf(location, "&~");
-			zone.location = str_dup(location.c_str());
+			zone.location = location;
 		}
 
 		if (*buf == '!') {
-			std::string autor(buf);
+			std::string autor = buf;
 			utils::TrimIf(autor, "!~");
-			zone.author = str_dup(autor.c_str());
+			zone.author = autor;
 		}
 
 		if (*buf == '$') {
-			std::string description(buf);
+			std::string description = buf ;
 			utils::TrimIf(description, "$~");
-			zone.description = str_dup(description.c_str());
+			zone.description = description;
 		}
 	}
 
@@ -1610,17 +1610,13 @@ bool ZoneFile::load_regular_zone() {
 		log("SYSERR: ERROR!!! not # in file %s", full_file_name().c_str());
 		exit(1);
 	}
-
-	{
-		auto group = 0;
-		const auto count = sscanf(buf, "#%d %d %d", &zone.level, &zone.type, &group);
-		if (count < 2) {
-			log("SYSERR: ошибка чтения z.level, z.type, z.group: %s", buf);
-			exit(1);
-		}
-		zone.group = (group == 0) ? 1 : group; //группы в 0 рыл не бывает
+	auto group = 0;
+	const auto count = sscanf(buf, "#%d %d %d %d", &zone.level, &zone.type, &group, &zone.entrance);
+	if (count < 2) {
+		log("SYSERR: ошибка чтения z.level, z.type, z.group, z.entrance: %s", buf);
+		exit(1);
 	}
-
+	zone.group = (group == 0) ? 1 : group; //группы в 0 рыл не бывает
 	line_num += get_line(file(), buf);
 
 	char t1[80];

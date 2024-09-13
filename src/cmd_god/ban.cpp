@@ -12,14 +12,13 @@
 #include "structs/global_objects.h"
 
 #include <third_party_libs/fmt/include/fmt/format.h>
-#include <boost/tokenizer.hpp>
 
 extern DescriptorData *descriptor_list;
 
 void do_ban(CharData *ch, char *argument, int cmd, int subcmd);
 void do_unban(CharData *ch, char *argument, int cmd, int subcmd);
 int Valid_Name(char *newname);
-void Read_Invalid_List(void);
+void ReadCharacterInvalidNamesList(void);
 
 void do_ban(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (!*argument) {
@@ -171,7 +170,7 @@ int Valid_Name(char *newname) {
 	return (Is_Valid_Name(newname) && Is_Valid_Dc(newname));
 }
 
-void Read_Invalid_List(void) {
+void ReadCharacterInvalidNamesList(void) {
 	FILE *fp;
 	char temp[256];
 
@@ -427,22 +426,15 @@ void do_proxy(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-const char *const
-	BanList::ban_filename = "etc/badsites";
-//const char * const BanList::ban_filename        = "badsites";
-//const char * const BanList::proxy_ban_filename  = "badproxy";
-const char *const
-	BanList::proxy_ban_filename = "etc/badproxy";
-const char *const
-	BanList::proxy_ban_filename_tmp = "etc/badproxy2";
-const char *BanList::ban_types[] =
-	{
-		"no",
-		"new",
-		"select",
-		"all",
-		"ERROR"
-	};
+const char *const BanList::ban_filename = "etc/badsites";
+const char *const BanList::proxy_ban_filename = "etc/badproxy";
+const char *BanList::ban_types[] = {
+	"no",
+	"new",
+	"select",
+	"all",
+	"ERROR"
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 bool BanList::ban_compare(BanNodePtr nodePtr, int mode, const void *op2) {
@@ -504,17 +496,8 @@ bool BanList::proxy_ban_sort_func(const ProxyBanNodePtr &lft, const ProxyBanNode
 BanList::BanList() :
 	current_sort_algorithm(0),
 	current_proxy_sort_algorithm(0) {
-
-	//Do not fail if ban fiels weren't found, this is not critical at all
-	/*
-	if (!(reload_ban() && reload_proxy_ban(RELOAD_MODE_MAIN)))
-	{
-		log("Failed to initialize ban structures.\r\n");
-		exit(0);
-	}
-	*/
 	reload_ban();
-	reload_proxy_ban(RELOAD_MODE_MAIN);
+	reload_proxy_ban();
 	sort_ip(SORT_BY_NAME);
 	sort_proxy(SORT_BY_NAME);
 	purge_obsolete();
@@ -647,87 +630,49 @@ bool BanList::add_proxy_ban(std::string BannedIp, std::string BannerName) {
 }
 
 bool BanList::reload_ban(void) {
-	typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
 	FILE *loaded;
 	Ban_List.clear();
 	if ((loaded = fopen(ban_filename, "r"))) {
 		std::string str_to_parse;
-		boost::char_separator<char> sep(" ");
-
-		DiskIo::read_line(loaded, str_to_parse, 1);
-		tokenizer tokens(str_to_parse, sep);
-
-		tokenizer::iterator tok_iter = tokens.begin();
-		// process header
-		if (tok_iter != tokens.end()) {
-			if (++tok_iter == tokens.end()) {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
-			}
-		}
 
 		while (!feof(loaded)) {
-			BanNodePtr ptr(new struct BanNode);
-			tok_iter = tokens.begin();
-			// find ban_type
-			if (tok_iter != tokens.end()) {
-				for (int i = BAN_NO; i <= BAN_ALL; i++)
-					if (!strcmp((*tok_iter).c_str(), ban_types[i]))
-						ptr->BanType = i;
-			} else {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
+			DiskIo::read_line(loaded, str_to_parse, 1);
+			std::vector<std::string> ban_tokens = utils::Split(str_to_parse);
+
+			if (ban_tokens.size() != 6) {
+				log("Ban list %s error, line %s", ban_filename, str_to_parse.c_str());
 				continue;
 			}
+			BanNodePtr ptr(new struct BanNode);
+			auto tok_iter = ban_tokens.begin();
+
+			// type
+			for (int i = BAN_NO; i <= BAN_ALL; i++) {
+				if (!strcmp((*tok_iter).c_str(), ban_types[i])) {
+					ptr->BanType = i;
+				}
+			} 
 			// ip
-			if (++tok_iter != tokens.end()) {
-				ptr->BannedIp = (*tok_iter);
-				// removing port specification i.e. 129.1.1.1:8080; :8080 is removed
-				std::string::size_type at = ptr->BannedIp.find_first_of(":");
-				if (at != std::string::npos)
-					ptr->BannedIp.erase(at);
-			} else {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
-				continue;
+			++tok_iter;
+			ptr->BannedIp = (*tok_iter);
+			// removing port specification i.e. 129.1.1.1:8080; :8080 is removed
+			std::string::size_type at = ptr->BannedIp.find_first_of(":");
+			if (at != std::string::npos) {
+				ptr->BannedIp.erase(at);
 			}
 			//ban_date
-			if (++tok_iter != tokens.end()) {
-				ptr->BanDate = atol((*tok_iter).c_str());
-			} else {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
-				continue;
-			}
-
+			++tok_iter;
+			ptr->BanDate = atol((*tok_iter).c_str());
 			//banner_name
-			if (++tok_iter != tokens.end()) {
-				ptr->BannerName = (*tok_iter);
-			} else {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
-				continue;
-			}
-
+			++tok_iter;
+			ptr->BannerName = (*tok_iter);
 			//ban_length
-			if (++tok_iter != tokens.end()) {
-				ptr->UnbanDate = atol((*tok_iter).c_str());
-			} else {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
-				continue;
-			}
+			++tok_iter;
+			ptr->UnbanDate = atol((*tok_iter).c_str());
 			//ban_reason
-			if (++tok_iter != tokens.end()) {
-				ptr->BanReason = (*tok_iter);
-			} else {
-				DiskIo::read_line(loaded, str_to_parse, 1);
-				tokens.assign(str_to_parse);
-				continue;
-			}
+			++tok_iter;
+			ptr->BanReason = (*tok_iter);
 			Ban_List.push_front(ptr);
-			DiskIo::read_line(loaded, str_to_parse, 1);
-			tokens.assign(str_to_parse);
 		}
 		fclose(loaded);
 		return true;
@@ -736,70 +681,39 @@ bool BanList::reload_ban(void) {
 	return false;
 }
 
-bool BanList::reload_proxy_ban(int mode)
-//mode:
-//0 - load normal file
-//1 - load temp file & merge with normal then kill it
-{
-	typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
+bool BanList::reload_proxy_ban() {
 	FILE *loaded;
 
-	if (mode == RELOAD_MODE_MAIN) {
-		Proxy_Ban_List.clear();
-		loaded = fopen(proxy_ban_filename, "r");
-	} else if (mode == RELOAD_MODE_TMPFILE)
-		loaded = fopen(proxy_ban_filename_tmp, "r");
-	else
-		return false;
-
+	loaded = fopen(proxy_ban_filename, "r");
 	if (loaded) {
 		std::string str_to_parse;
-		boost::char_separator<char> sep(" ");
-		tokenizer::iterator tok_iter;
-		tokenizer tokens(str_to_parse, sep);
 
 		while (DiskIo::read_line(loaded, str_to_parse, 1)) {
-			tokens.assign(str_to_parse);
-			tok_iter = tokens.begin();
-			ProxyBanNodePtr ptr(new struct ProxyBanNode);
-			ptr->BannerName = "Undefined";
-			if (tok_iter != tokens.end()) {
-				ptr->BannedIp = (*tok_iter);
-				// removing port specification i.e. 129.1.1.1:8080; :8080 is removed
-				std::string::size_type at = ptr->BannedIp.find_first_of(":");
-				if (at != std::string::npos)
-					ptr->BannedIp.erase(at);
-			} else
+			std::vector<std::string> ban_tokens = utils::Split(str_to_parse);
+
+			if (ban_tokens.size() != 2) {
+				log("Proxy ban list %s error, line %s", proxy_ban_filename, str_to_parse.c_str());
 				continue;
-			if (++tok_iter != tokens.end())
-				ptr->BannerName = (*tok_iter);
-//skip dupe
-			if (mode == RELOAD_MODE_TMPFILE) {
-				std::list<ProxyBanNodePtr>::iterator i =
-					std::find_if(Proxy_Ban_List.begin(), Proxy_Ban_List.end(), [&](const ProxyBanNodePtr p) {
-						return this->proxy_ban_compare(p, BAN_IP_COMPARE, &ptr->BannedIp);
-					});
-				if (i != Proxy_Ban_List.end())
-					continue;
 			}
+			auto tok_iter = ban_tokens.begin();
+			ProxyBanNodePtr ptr(new struct ProxyBanNode);
+
+			ptr->BannerName = "Undefined";
+			ptr->BannedIp = (*tok_iter);
+			// removing port specification i.e. 129.1.1.1:8080; :8080 is removed
+			std::string::size_type at = ptr->BannedIp.find_first_of(":");
+			if (at != std::string::npos) {
+				ptr->BannedIp.erase(at);
+			} 
+			++tok_iter;
+			ptr->BannerName = (*tok_iter);
 			Proxy_Ban_List.push_front(ptr);
-			if (mode == RELOAD_MODE_TMPFILE) {
-				disconnectBannedIp(ptr->BannedIp);
-				log("(GC) IP: %s banned by reload_proxy_ban.", ptr->BannedIp.c_str());
-				imm_log("IP: %s banned by reload_proxy_ban.", ptr->BannedIp.c_str());
-			}
+			disconnectBannedIp(ptr->BannedIp);
 		}
 		fclose(loaded);
-		if (mode == RELOAD_MODE_TMPFILE) {
-			save_proxy();
-			remove(proxy_ban_filename_tmp);
-		}
 		return true;
 	}
-
-	if (mode == RELOAD_MODE_MAIN) {
-		log("SYSERR: Unable to open proxybanfile");
-	}
+	log("SYSERR: Unable to open proxybanfile");
 	return false;
 }
 
@@ -917,18 +831,17 @@ void BanList::ShowBannedProxy(int sort_mode, CharData *ch) {
 		return;
 	}
 	sort_proxy(sort_mode);
-	char format[kMaxInputLength];
+	char format[kMaxInputLength], *listbuf = 0;
 	strcpy(format, "%-25.25s  %-16.16s\r\n");
 	sprintf(buf, format, "Banned Site Name", "Banned By");
 	SendMsgToChar(buf, ch);
 	sprintf(buf, format, "---------------------------------", "---------------------------------");
-
-	SendMsgToChar(buf, ch);
-
+	listbuf = str_add(listbuf, buf);
 	for (std::list<ProxyBanNodePtr>::iterator i = Proxy_Ban_List.begin(); i != Proxy_Ban_List.end(); i++) {
 		sprintf(buf, format, (*i)->BannedIp.c_str(), (*i)->BannerName.c_str());
-		SendMsgToChar(buf, ch);
+		listbuf = str_add(listbuf, buf);
 	}
+	page_string(ch->desc, listbuf, 1);
 }
 
 int BanList::is_banned(std::string ip) {
@@ -1094,13 +1007,13 @@ EmailListType email_list;
 // файл для соъхранения/лоада
 const char *REGISTERED_EMAIL_FILE = LIB_PLRSTUFF"registered-email.lst";
 // т.к. список потенциально может быть довольно большим, то сейвить бум только в случае изменений в add и remove
-bool need_save = 0;
+bool need_save = false;
 
 } // namespace RegisterSystem
 
 // * Добавления мыла в список + проставления флага EPlrFlag::REGISTERED, registered_email не выставляется
 void RegisterSystem::add(CharData *ch, const char *text, const char *reason) {
-	PLR_FLAGS(ch).set(EPlrFlag::kRegistred);
+	ch->SetFlag(EPlrFlag::kRegistred);
 	if (!text || !reason) return;
 	std::stringstream out;
 	out << GET_NAME(ch) << " -> " << text << " [" << reason << "]";
@@ -1116,7 +1029,7 @@ void RegisterSystem::add(CharData *ch, const char *text, const char *reason) {
 * В течении секунды персонаж помещается в комнату незареганных игроков, если он не один с данного ип
 */
 void RegisterSystem::remove(CharData *ch) {
-	PLR_FLAGS(ch).unset(EPlrFlag::kRegistred);
+	ch->UnsetFlag(EPlrFlag::kRegistred);
 	EmailListType::iterator it = email_list.find(GET_EMAIL(ch));
 	if (it != email_list.end()) {
 		email_list.erase(it);
@@ -1131,7 +1044,7 @@ void RegisterSystem::remove(CharData *ch) {
 * \return 0 - нет, 1 - да
 */
 bool RegisterSystem::is_registered(CharData *ch) {
-	if (PLR_FLAGGED(ch, EPlrFlag::kRegistred) || (ch->desc && ch->desc->registered_email))
+	if (ch->IsFlagged(EPlrFlag::kRegistred) || (ch->desc && ch->desc->registered_email))
 		return 1;
 	return 0;
 }

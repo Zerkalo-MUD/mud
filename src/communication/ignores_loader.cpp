@@ -2,7 +2,6 @@
 
 #include "entities/char_data.h"
 
-#include <boost/algorithm/string.hpp>
 class IgnoreParser {
  public:
 	IgnoreParser(const char *line, const CharData *character) : m_pos(line), m_character(character) {}
@@ -19,7 +18,7 @@ class IgnoreParser {
 };
 
 ignore_data::shared_ptr IgnoreParser::parse() {
-	boost::erase_all(this->m_pos, " ");
+	utils::EraseAll(this->m_pos, " ");
 
 	const auto result = parse_ignore(m_pos);
 	if (!result) {
@@ -44,7 +43,7 @@ ignore_data::shared_ptr IgnoreParser::parse_ignore(std::string buffer) {
 void IgnoresLoader::load_from_string(const char *line) {
 	IgnoreParser parser(line, m_character);
 	const auto ignore = parser.parse();
-	if (!player_exists(ignore->id)) {
+	if (!IsPlayerExists(ignore->id)) {
 		ignore->id = 0;
 	}
 	m_character->add_ignore(ignore);

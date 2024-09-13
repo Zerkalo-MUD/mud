@@ -6,7 +6,7 @@
 
 namespace msdp {
 void RoomReporter::get(Variable::shared_ptr &response) {
-	const auto rnum = IN_ROOM(descriptor()->character);
+	const auto rnum = descriptor()->character->in_room;
 	const auto vnum = GET_ROOM_VNUM(rnum);
 	const auto from_rnum = descriptor()->character->get_from_room();
 	if ((from_rnum == vnum) || (kNowhere == vnum)) {
@@ -49,8 +49,8 @@ void RoomReporter::get(Variable::shared_ptr &response) {
 
 	// output might be more than input up to 4 times (in case of utf-8) plus NULL terminator.
 	std::shared_ptr<char>
-		zone_name(new char[4 * strlen(zone_table[world[rnum]->zone_rn].name)], std::default_delete<char[]>());
-	descriptor()->string_to_client_encoding(zone_table[world[rnum]->zone_rn].name, zone_name.get());
+		zone_name(new char[4 * zone_table[world[rnum]->zone_rn].name.size()], std::default_delete<char[]>());
+	descriptor()->string_to_client_encoding(zone_table[world[rnum]->zone_rn].name.c_str(), zone_name.get());
 
 	room_descriptor->add(std::make_shared<Variable>("VNUM", std::make_shared<StringValue>(std::to_string(vnum))));
 	room_descriptor->add(std::make_shared<Variable>("NAME", std::make_shared<StringValue>(room_name.get())));
@@ -81,12 +81,12 @@ void RoomReporter::get(Variable::shared_ptr &response) {
 
 bool RoomReporter::blockReport() const {
 	bool nomapper = true;
-	const auto blind = (PRF_FLAGGED(descriptor()->character, EPrf::kBlindMode)) //В режиме слепого игрока карта недоступна
+	const auto blind = (descriptor()->character->IsFlagged(EPrf::kBlindMode)) //В режиме слепого игрока карта недоступна
 		|| (AFF_FLAGGED((descriptor()->character), EAffect::kBlind));  //Слепому карта не поможет!
-	const auto cannot_see_in_dark = (is_dark(IN_ROOM(descriptor()->character)) && !CAN_SEE_IN_DARK(descriptor()->character));
+	const auto cannot_see_in_dark = (is_dark(descriptor()->character->in_room) && !CAN_SEE_IN_DARK(descriptor()->character));
 	if (descriptor()->character->in_room != kNowhere)
 		nomapper = ROOM_FLAGGED(descriptor()->character->in_room, ERoomFlag::kMoMapper);
-	const auto scriptwriter = PLR_FLAGGED(descriptor()->character, EPlrFlag::kScriptWriter); // скриптеру не шлем
+	const auto scriptwriter = descriptor()->character->IsFlagged(EPlrFlag::kScriptWriter); // скриптеру не шлем
 
 	return blind || cannot_see_in_dark || scriptwriter || nomapper;
 }
@@ -158,9 +158,9 @@ void GroupReporter::append_char(const std::shared_ptr<ArrayValue> &group,
 								const CharData *ch,
 								const CharData *character,
 								const bool leader) {
-	if (PRF_FLAGGED(ch, EPrf::kNoClones)
+	if (ch->IsFlagged(EPrf::kNoClones)
 		&& character->IsNpc()
-		&& (MOB_FLAGGED(character, EMobFlag::kClone)
+		&& (character->IsFlagged(EMobFlag::kClone)
 			|| GET_MOB_VNUM(character) == kMobKeeper)) {
 		return;
 	}
@@ -178,7 +178,7 @@ void GroupReporter::append_char(const std::shared_ptr<ArrayValue> &group,
 		std::to_string(posi_value(GET_MOVE(character), GET_REAL_MAX_MOVE(character)) * 10);// *10 to show percents
 	member->add(std::make_shared<Variable>("MOVE", std::make_shared<StringValue>(move_percents)));
 
-	const bool same_room = ch->in_room == IN_ROOM(character);
+	const bool same_room = ch->in_room == character->in_room;
 	member->add(std::make_shared<Variable>("IS_HERE", std::make_shared<StringValue>(same_room ? "1" : "0")));
 
 	const int memory = get_mem(character);
@@ -223,7 +223,7 @@ void GroupReporter::append_char(const std::shared_ptr<ArrayValue> &group,
 	member->add(std::make_shared<Variable>("ROLE", std::make_shared<StringValue>(leader_value)));
 
 	char position[kMaxInputLength];
-	sprinttype(static_cast<int>(GET_POS(character)), position_types, position);
+	sprinttype(static_cast<int>(character->GetPosition()), position_types, position);
 	descriptor()->string_to_client_encoding(position, buffer);
 	member->add(std::make_shared<Variable>("POSITION", std::make_shared<StringValue>(buffer)));
 
@@ -274,8 +274,8 @@ void GroupReporter::get(Variable::shared_ptr &response) {
 	for (auto f = master->followers; f; f = f->next) {
 		if (!AFF_FLAGGED(f->follower, EAffect::kGroup)
 			&& !(AFF_FLAGGED(f->follower, EAffect::kCharmed)
-				|| MOB_FLAGGED(f->follower, EMobFlag::kTutelar)
-				|| MOB_FLAGGED(f->follower, EMobFlag::kMentalShadow))) {
+				|| f->follower->IsFlagged(EMobFlag::kTutelar)
+				|| f->follower->IsFlagged(EMobFlag::kMentalShadow))) {
 			continue;
 		}
 
@@ -288,8 +288,8 @@ void GroupReporter::get(Variable::shared_ptr &response) {
 
 		for (auto ff = f->follower->followers; ff; ff = ff->next) {
 			if (!(AFF_FLAGGED(ff->follower, EAffect::kCharmed)
-				|| MOB_FLAGGED(ff->follower, EMobFlag::kTutelar)
-				|| MOB_FLAGGED(ff->follower, EMobFlag::kMentalShadow))) {
+				|| ff->follower->IsFlagged(EMobFlag::kTutelar)
+				|| ff->follower->IsFlagged(EMobFlag::kMentalShadow))) {
 				continue;
 			}
 

@@ -28,7 +28,6 @@
 #include "game_skills/skills.h"
 #include "communication/parcel.h"
 #include "liquid.h"
-#include "name_list.h"
 #include "corpse.h"
 #include "game_economics/shop_ext.h"
 #include "constants.h"
@@ -38,6 +37,7 @@
 #include "game_skills/skills_info.h"
 #include "game_magic/spells_info.h"
 #include "structs/global_objects.h"
+#include "game_mechanics/dungeons.h"
 #include <sys/stat.h>
 
 #include <array>
@@ -174,13 +174,12 @@ void olc_update_object(int robj_num, ObjData *obj, ObjData *olc_obj) {
 	}
 	// меняем на значения из шмоток в текущем мире
 	obj->clear_proto_script();
-	obj->set_uid(tmp.get_uid());
+	obj->set_unique_id(tmp.get_unique_id());
 	obj->set_id(tmp.get_id()); // аук работает не по рнум а по id объекта, поэтому вернем и его
 	obj->set_in_room(tmp.get_in_room());
 	obj->set_rnum(robj_num);
 	obj->set_owner(tmp.get_owner());
 	obj->set_crafter_uid(tmp.get_crafter_uid());
-	obj->set_parent(tmp.get_parent());
 	obj->set_carried_by(tmp.get_carried_by());
 	obj->set_worn_by(tmp.get_worn_by());
 	obj->set_worn_on(tmp.get_worn_on());
@@ -269,15 +268,15 @@ void oedit_save_internally(DescriptorData *d) {
 		// Копирую новый прототип в массив
 		// Использовать функцию oedit_object_copy() нельзя,
 		// т.к. будут изменены указатели на данные прототипа
-		obj_proto.set(robj_num, OLC_OBJ(d));    // old prototype will be deleted automatically
+		obj_proto.set_rnum(robj_num, OLC_OBJ(d));    // old prototype will be deleted automatically
 		// OLC_OBJ(d) удалять не нужно, т.к. он перенесен в массив
 		// прототипов
 	} else {
 		// It's a new object, we must build new tables to contain it.
 		log("[OEdit] Save mem an disk new %d(%zd/%zd)", OLC_NUM(d), 1 + obj_proto.size(), sizeof(ObjData));
-
 		const size_t index = obj_proto.add(OLC_OBJ(d), OLC_NUM(d));
-		obj_proto.zone(index, get_zone_rnum_by_obj_vnum(OLC_NUM(d)));
+		const ZoneRnum zrn = get_zone_rnum_by_obj_vnum(OLC_NUM(d));
+		obj_proto.zone(index, zrn);
 	}
 
 //	olc_add_to_save_list(zone_table[OLC_ZNUM(d)].vnum, OLC_SAVE_OBJ);
@@ -289,6 +288,12 @@ void oedit_save_internally(DescriptorData *d) {
 void oedit_save_to_disk(ZoneRnum zone_num) {
 	int counter, counter2, realcounter;
 	FILE *fp;
+
+	if (zone_table[zone_num].vnum >= dungeons::kZoneStartDungeons) {
+			sprintf(buf, "Отказ сохранения зоны %d на диск.", zone_table[zone_num].vnum);
+			mudlog(buf, CMP, kLvlGreatGod, SYSLOG, true);
+			return;
+	}
 	sprintf(buf, "%s/%d.new", OBJ_PREFIX, zone_table[zone_num].vnum);
 	if (!(fp = fopen(buf, "w+"))) {
 		mudlog("SYSERR: OLC: Cannot open objects file!", BRF, kLvlBuilder, SYSLOG, true);
@@ -296,7 +301,7 @@ void oedit_save_to_disk(ZoneRnum zone_num) {
 	}
 	// * Start running through all objects in this zone.
 	for (counter = zone_table[zone_num].vnum * 100; counter <= zone_table[zone_num].top; counter++) {
-		if ((realcounter = real_object(counter)) >= 0) {
+		if ((realcounter = GetObjRnum(counter)) >= 0) {
 			const auto &obj = obj_proto[realcounter];
 			if (!obj->get_action_description().empty()) {
 				strcpy(buf1, obj->get_action_description().c_str());
@@ -305,11 +310,11 @@ void oedit_save_to_disk(ZoneRnum zone_num) {
 				*buf1 = '\0';
 			}
 			*buf2 = '\0';
-			GET_OBJ_AFFECTS(obj).tascii(4, buf2);
-			GET_OBJ_ANTI(obj).tascii(4, buf2);
-			GET_OBJ_NO(obj).tascii(4, buf2);
+			GET_OBJ_AFFECTS(obj).tascii(FlagData::kPlanesNumber, buf2);
+			GET_OBJ_ANTI(obj).tascii(FlagData::kPlanesNumber, buf2);
+			GET_OBJ_NO(obj).tascii(FlagData::kPlanesNumber, buf2);
 			sprintf(buf2 + strlen(buf2), "\n%d ", GET_OBJ_TYPE(obj));
-			GET_OBJ_EXTRA(obj).tascii(4, buf2);
+			GET_OBJ_EXTRA(obj).tascii(FlagData::kPlanesNumber, buf2);
 			const auto wear_flags = GET_OBJ_WEAR(obj);
 			tascii(&wear_flags, 1, buf2);
 			strcat(buf2, "\n");
@@ -339,7 +344,7 @@ void oedit_save_to_disk(ZoneRnum zone_num) {
 					!obj->get_PName(5).empty() ? obj->get_PName(5).c_str() : "о чем-то",
 					!obj->get_description().empty() ? obj->get_description().c_str() : "undefined",
 					buf1,
-					GET_OBJ_SKILL(obj), GET_OBJ_MAX(obj), GET_OBJ_CUR(obj),
+					obj->get_spec_param(), GET_OBJ_MAX(obj), GET_OBJ_CUR(obj),
 					GET_OBJ_MATER(obj), to_underlying(GET_OBJ_SEX(obj)),
 					obj->get_timer(), to_underlying(GET_OBJ_SPELL(obj)),
 					GET_OBJ_LEVEL(obj), buf2, GET_OBJ_VAL(obj, 0),
@@ -349,8 +354,8 @@ void oedit_save_to_disk(ZoneRnum zone_num) {
 
 			script_save_to_disk(fp, obj.get(), OBJ_TRIGGER);
 
-			if (GET_OBJ_MIW(obj)) {
-				fprintf(fp, "M %d\n", GET_OBJ_MIW(obj));
+			if (obj->get_max_in_world()) {
+				fprintf(fp, "M %d\n", obj->get_max_in_world());
 			}
 
 			if (obj->get_minimum_remorts() != 0) {
@@ -1037,7 +1042,7 @@ void oedit_disp_ingradient_menu(DescriptorData *d) {
 				ingradient_bits[counter], !(++columns % 2) ? "\r\n" : "");
 		SendMsgToChar(buf, d->character.get());
 	}
-	sprintbit(GET_OBJ_SKILL(OLC_OBJ(d)), ingradient_bits, buf1);
+	sprintbit(OLC_OBJ(d)->get_spec_param(), ingradient_bits, buf1);
 	snprintf(buf, kMaxStringLength, "\r\nТип ингредиента : %s%s%s\r\n" "Дополните тип (0 - выход) : ", cyn, buf1, nrm);
 	SendMsgToChar(buf, d->character.get());
 }
@@ -1052,7 +1057,7 @@ void oedit_disp_magic_container_menu(DescriptorData *d) {
 				magic_container_bits[counter], !(++columns % 2) ? "\r\n" : "");
 		SendMsgToChar(buf, d->character.get());
 	}
-	sprintbit(GET_OBJ_SKILL(OLC_OBJ(d)), magic_container_bits, buf1);
+	sprintbit(OLC_OBJ(d)->get_spec_param(), magic_container_bits, buf1);
 	snprintf(buf, kMaxStringLength, "\r\nТип контейнера : %s%s%s\r\n" "Дополните тип (0 - выход) : ", cyn, buf1, nrm);
 	SendMsgToChar(buf, d->character.get());
 }
@@ -1133,7 +1138,7 @@ void oedit_disp_skills_menu(DescriptorData *d) {
 	sprintf(buf,
 			"%sТренируемое умение : %s%d%s\r\n"
 			"Выберите умение (0 - выход) : ",
-			(columns % 2 == 1 ? "\r\n" : ""), cyn, GET_OBJ_SKILL(OLC_OBJ(d)), nrm);
+			(columns % 2 == 1 ? "\r\n" : ""), cyn, OLC_OBJ(d)->get_spec_param(), nrm);
 	SendMsgToChar(buf, d->character.get());
 }
 
@@ -1144,7 +1149,7 @@ std::string print_values2_menu(ObjData *obj) {
 	}
 
 	char buf_[kMaxInputLength];    
-	snprintf(buf_, sizeof(buf_), "Спец. параметры: %d", GET_OBJ_SKILL(obj));
+	snprintf(buf_, sizeof(buf_), "Спец. параметры: %d", obj->get_spec_param());
 	return buf_;
 }
 
@@ -1232,12 +1237,13 @@ void oedit_disp_menu(DescriptorData *d) {
 			 GET_OBJ_VAL(obj, 3), grn, nrm, grn, buf2, grn, nrm, grn, nrm, grn,
 			 nrm, cyn, !obj->get_proto_script().empty() ? "Присутствуют" : "Отсутствуют",
 			 grn, nrm, cyn, genders[gender],
-			 grn, nrm, cyn, GET_OBJ_MIW(obj),
+			 grn, nrm, cyn, obj->get_max_in_world(),
 			 grn, nrm,
 			 grn, nrm, cyn, obj->get_minimum_remorts(),
 			 grn, nrm,
 			 grn, nrm);
 	SendMsgToChar(buf, d->character.get());
+
 	OLC_MODE(d) = OEDIT_MAIN_MENU;
 }
 
@@ -1344,6 +1350,7 @@ void oedit_disp_clone_menu(DescriptorData *d) {
 void oedit_parse(DescriptorData *d, char *arg) {
 	int number{};
 	int max_val, min_val, plane, bit;
+	bool need_break = false;
 	ESkill skill_id{};
 
 	switch (OLC_MODE(d)) {
@@ -1642,7 +1649,7 @@ void oedit_parse(DescriptorData *d, char *arg) {
 				sprintf(buf, "%s  меняет тип предмета для %d!!!", GET_NAME(d->character), OLC_NUM(d));
 				mudlog(buf, BRF, kLvlGod, SYSLOG, true);
 				if (number != EObjType::kWeapon && number != EObjType::kIngredient) {
-					OLC_OBJ(d)->set_skill(0);
+					OLC_OBJ(d)->set_spec_param(0);
 				}
 			}
 			break;
@@ -1782,7 +1789,7 @@ void oedit_parse(DescriptorData *d, char *arg) {
 					default: oedit_disp_skills_menu(d);
 						return;
 				}
-			OLC_OBJ(d)->set_skill(number);
+			OLC_OBJ(d)->set_spec_param(number);
 			oedit_disp_skills_menu(d);
 			return;
 			break;
@@ -1811,6 +1818,10 @@ void oedit_parse(DescriptorData *d, char *arg) {
 			switch (GET_OBJ_TYPE(OLC_OBJ(d))) {
 				case EObjType::kScroll:
 				case EObjType::kPotion: {
+					if (number == 0) {
+						need_break = true;
+						break;
+					}
 					auto spell_id = static_cast<ESpell>(number);
 					if (spell_id < ESpell::kFirst || spell_id > ESpell::kLast) {
 						oedit_disp_val2_menu(d);
@@ -1893,16 +1904,23 @@ void oedit_parse(DescriptorData *d, char *arg) {
 					}
 				default: break;
 			}
+			if (need_break)
+				break;
 			OLC_OBJ(d)->set_val(1, number);
 			OLC_VAL(d) = 1;
 			oedit_disp_val3_menu(d);
 			return;
 
 		case OEDIT_VALUE_3: number = atoi(arg);
-			// * Quick'n'easy error checking.
+						// * Quick'n'easy error checking.
 			switch (GET_OBJ_TYPE(OLC_OBJ(d))) {
 				case EObjType::kScroll:
-				case EObjType::kPotion: min_val = -1;
+				case EObjType::kPotion: 
+					if (number == 0) {
+						need_break = true;
+						break;
+					}
+					min_val = -1;
 					max_val = to_underlying(ESpell::kLast);
 					break;
 
@@ -1927,36 +1945,44 @@ void oedit_parse(DescriptorData *d, char *arg) {
 				default: min_val = -999999;
 					max_val = 999999;
 			}
+			if (need_break)
+				break;
 			OLC_OBJ(d)->set_val(2, MAX(min_val, MIN(number, max_val)));
 			OLC_VAL(d) = 1;
 			oedit_disp_val4_menu(d);
 			return;
 
-		case OEDIT_VALUE_4: number = atoi(arg);
+		case OEDIT_VALUE_4:
+			number = atoi(arg);
+			min_val = -999999;
+			max_val = 999999;
 			switch (GET_OBJ_TYPE(OLC_OBJ(d))) {
 				case EObjType::kScroll:
-				case EObjType::kPotion: min_val = -1;
+				case EObjType::kPotion:
+					if (number == 0) {
+						break;
+					}
+					min_val = 1;
 					max_val = to_underlying(ESpell::kLast);
 					break;
-
 				case EObjType::kWand:
-				case EObjType::kStaff: min_val = 1;
+				case EObjType::kStaff: 
+					min_val = 1;
 					max_val = to_underlying(ESpell::kLast);
 					break;
-
-				case EObjType::kWeapon: min_val = 0;
+				case EObjType::kWeapon: 
+					min_val = 0;
 					max_val = NUM_ATTACK_TYPES - 1;
 					break;
-				case EObjType::kMagicIngredient: min_val = 0;
+				case EObjType::kMagicIngredient: 
+					min_val = 0;
 					max_val = 2;
 					break;
-
-				case EObjType::kCraftMaterial: min_val = 0;
+				case EObjType::kCraftMaterial: 
+					min_val = 0;
 					max_val = 100;
 					break;
-
-				default: min_val = -999999;
-					max_val = 999999;
+				default:
 					break;
 			}
 			OLC_OBJ(d)->set_val(3, MAX(min_val, MIN(number, max_val)));
@@ -2139,7 +2165,7 @@ void oedit_parse(DescriptorData *d, char *arg) {
 			break;
 		case OEDIT_CLONE_WITH_TRIGGERS: {
 			number = atoi(arg);
-			const int rnum_object = real_object((OLC_OBJ(d)->get_vnum()));
+			const int rnum_object = GetObjRnum((OLC_OBJ(d)->get_vnum()));
 			if (!OLC_OBJ(d)->clone_olc_object_from_prototype(number)) {
 				SendMsgToChar("Нет объекта с таким внумом. Повторите ввод : ", d->character.get());
 				return;
@@ -2152,7 +2178,7 @@ void oedit_parse(DescriptorData *d, char *arg) {
 			number = atoi(arg);
 
 			auto proto_script_old = OLC_OBJ(d)->get_proto_script();
-			const int rnum_object = real_object((OLC_OBJ(d)->get_vnum()));
+			const int rnum_object = GetObjRnum((OLC_OBJ(d)->get_vnum()));
 
 			if (!OLC_OBJ(d)->clone_olc_object_from_prototype(number)) {
 				SendMsgToChar("Нет объекта с таким внумом. Повторите ввод: :", d->character.get());

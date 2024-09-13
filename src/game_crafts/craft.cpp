@@ -14,10 +14,6 @@
 #include "db.h"
 #include "third_party_libs/pugixml/pugixml.h"
 
-//#include <boost/algorithm/string/detail/util.hpp>
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/classification.hpp>
-
 #include <filesystem>
 
 namespace craft {
@@ -79,7 +75,7 @@ bool Cases::load_from_node(const pugi::xml_node *node) {
 
 void Cases::load_from_object(const CObjectPrototype::shared_ptr &object) {
 	const std::string &aliases = object->get_aliases();
-	boost::algorithm::split(m_aliases, aliases, boost::algorithm::is_any_of(" "), boost::token_compress_on);
+	m_aliases = utils::Split(aliases);
 	for (size_t n = 0; n < CASES_COUNT; ++n) {
 		m_cases[n] = object->get_PName(n);
 	}
@@ -610,8 +606,8 @@ bool CObject::save_to_node(pugi::xml_node *node) const {
 			switch (get_type()) {
 				case EObjType::kIngredient: {
 					int flag = 1;
-					while (flag <= get_skill()) {
-						if (IS_SET(get_skill(), flag)) {
+					while (flag <= get_spec_param()) {
+						if (IS_SET(get_spec_param(), flag)) {
 							item_parameters.push_back(NAME_BY_ITEM(static_cast<EIngredientFlag>(flag)));
 						}
 						flag <<= 1;
@@ -619,7 +615,7 @@ bool CObject::save_to_node(pugi::xml_node *node) const {
 				}
 					break;
 
-				case EObjType::kWeapon: item_parameters.push_back(NAME_BY_ITEM(static_cast<ESkill>(get_skill())));
+				case EObjType::kWeapon: item_parameters.push_back(NAME_BY_ITEM(static_cast<ESkill>(get_spec_param())));
 					break;
 
 				default: break;
@@ -730,7 +726,7 @@ bool CObject::load_item_parameters(const pugi::xml_node *node) {
 				const char *flag = flags.child_value();
 				try {
 					const auto value = ITEM_BY_NAME<EIngredientFlag>(flag);
-					set_skill(get_skill() | to_underlying(value));
+					set_spec_param(get_spec_param() | to_underlying(value));
 					logger("Setting ingredient flag '%s' for object with VNUM %d.\n",
 						   NAME_BY_ITEM(value).c_str(), get_vnum());
 				}
@@ -746,7 +742,7 @@ bool CObject::load_item_parameters(const pugi::xml_node *node) {
 		case EObjType::kWeapon: {
 			const char *skill_value = node->child_value("parameter");
 			try {
-				set_skill(to_underlying(ITEM_BY_NAME<ESkill>(skill_value)));
+				set_spec_param(to_underlying(ITEM_BY_NAME<ESkill>(skill_value)));
 			}
 			catch (const std::out_of_range &) {
 				logger("WARNING: Failed to set skill value '%s' for object with VNUM %d. Object will be skipped.\n",
@@ -1525,7 +1521,7 @@ void CCraftModel::report_vnum_error(const ObjVnum vnum, const EAddVNumResult add
 }
 
 bool CCraftModel::export_object(const ObjVnum vnum, const char *filename) {
-	const auto rnum = obj_proto.rnum(vnum);
+	const auto rnum = obj_proto.get_rnum(vnum);
 	if (-1 == rnum) {
 		logger("WARNING: Failed to export prototype with VNUM %d", vnum);
 		return false;

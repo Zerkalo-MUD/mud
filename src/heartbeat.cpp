@@ -1,12 +1,8 @@
 //#include "heartbeat.h"
 
-#include <boost/algorithm/string.hpp>
-
 #include "game_economics/auction.h"
 #include "game_mechanics/deathtrap.h"
 #include "communication/parcel.h"
-//#include "game_fight/pk.h"
-//#include "game_mechanics/celebrates.h"
 #include "game_fight/fight.h"
 #include "help.h"
 #include "game_mechanics/bonus.h"
@@ -27,8 +23,6 @@
 #include "game_fight/mobact.h"
 #include "dg_script/dg_event.h"
 #include "corpse.h"
-//#include "cmd_god/shutdown_parameters.h"
-//#include "utils/utils_time.h"
 #include "structs/global_objects.h"
 
 #if defined WITH_SCRIPTING
@@ -81,37 +75,6 @@ void record_usage() {
 
 // pulse steps
 namespace {
-void process_speedwalks() {
-	for (auto &sw : GlobalObjects::speedwalks()) {
-		if (sw.wait > sw.route[sw.cur_state].wait) {
-			for (CharData *ch : sw.mobs) {
-				if (ch && !ch->purged()) {
-					std::string direction = sw.route[sw.cur_state].direction;
-					int dir = 1;
-					if (boost::starts_with(direction, "север"))
-						dir = SCMD_NORTH;
-					if (boost::starts_with(direction, "восток"))
-						dir = SCMD_EAST;
-					if (boost::starts_with(direction, "юг"))
-						dir = SCMD_SOUTH;
-					if (boost::starts_with(direction, "запад"))
-						dir = SCMD_WEST;
-					if (boost::starts_with(direction, "вверх"))
-						dir = SCMD_UP;
-					if (boost::starts_with(direction, "вниз"))
-						dir = SCMD_DOWN;
-					perform_move(ch, dir - 1, 0, true, nullptr);
-				}
-			}
-			sw.wait = 0;
-			sw.cur_state =
-				(sw.cur_state >= static_cast<decltype(sw.cur_state)>(sw.route.size()) - 1) ? 0 : sw.cur_state + 1;
-		} else {
-			sw.wait += 1;
-		}
-	}
-}
-
 class SimpleCall : public AbstractPulseAction {
  public:
 	using call_t = std::function<void()>;
@@ -135,8 +98,8 @@ class InspectCall : public AbstractPulseAction {
 };
 
 void InspectCall::perform(int, int missed_pulses) {
-	if (0 == missed_pulses && !MUD::inspect_list().empty()) {
-		Inspecting();
+	if (0 == missed_pulses) {
+		MUD::InspectRequests().Inspecting();
 	}
 }
 
@@ -161,11 +124,11 @@ void CheckScheduledRebootCall::perform(int, int) {
 	const auto boot_time = GlobalObjects::shutdown_parameters().get_boot_time();
 	const auto uptime_minutes = ((time(nullptr) - boot_time) / 60);
 
-	if (uptime_minutes >= (shutdown_parameters.get_reboot_uptime() - 30)
+	if (uptime_minutes >= (shutdown_parameters.get_reboot_uptime() - 60)
 		&& shutdown_parameters.get_shutdown_timeout() == 0) {
-		//reboot after 30 minutes minimum. Auto reboot cannot run earlier.
-		SendMsgToAll("АВТОМАТИЧЕСКАЯ ПЕРЕЗАГРУЗКА ЧЕРЕЗ 30 МИНУТ.\r\n");
-		shutdown_parameters.reboot(1800);
+		//reboot after 60 minutes minimum. Auto reboot cannot run earlier.
+		SendMsgToAll("АВТОМАТИЧЕСКАЯ ПЕРЕЗАГРУЗКА ЧЕРЕЗ 60 МИНУТ.\r\n");
+		shutdown_parameters.reboot(3600);
 	}
 }
 
@@ -202,8 +165,8 @@ class CrashFracSaveCall : public AbstractPulseAction {
 
 void CrashFracSaveCall::perform(int pulse_number, int) {
 	if (FRAC_SAVE && AUTO_SAVE) {
-		Crash_frac_save_all((pulse_number / kPassesPerSec) % PLAYER_SAVE_ACTIVITY);
-		Crash_frac_rent_time((pulse_number / kPassesPerSec) % OBJECT_SAVE_ACTIVITY);
+		Crash_frac_save_all((pulse_number / kPassesPerSec) % kPlayerSaveActivity);
+		Crash_frac_rent_time((pulse_number / kPassesPerSec) % kObjectSaveActivity);
 	}
 }
 
@@ -306,10 +269,6 @@ class SpellUsageCall : public AbstractPulseAction {
 
 Heartbeat::steps_t &pulse_steps() {
 	static Heartbeat::steps_t pulse_steps_storage = {
-		Heartbeat::PulseStep("Speed walks processing",
-							 kPassesPerSec,
-							 0,
-							 std::make_shared<SimpleCall>(process_speedwalks)),
 		Heartbeat::PulseStep("Global drop: tables reloading",
 							 kPassesPerSec * 120 * 60,
 							 0,
@@ -369,8 +328,8 @@ Heartbeat::steps_t &pulse_steps() {
 		Heartbeat::PulseStep("Paste mobiles",
 							 kTimeKoeff * kSecsPerMudHour * kPassesPerSec,
 							 kPassesPerSec - 1,
-							 std::make_shared<SimpleCall>(paste_mobiles)),
-		Heartbeat::PulseStep("Zone update", kPulseZone, 5, std::make_shared<SimpleCall>(zone_update)),
+							 std::make_shared<SimpleCall>(PasteMobiles)),
+		Heartbeat::PulseStep("Zone update", kPulseZone, 5, std::make_shared<SimpleCall>(ZoneUpdate)),
 		Heartbeat::PulseStep("Money drop stat: print log",
 							 60 * 60 * kPassesPerSec,
 							 45,
@@ -415,15 +374,15 @@ Heartbeat::steps_t &pulse_steps() {
 							 60 * kChestUpdatePeriod * kPassesPerSec,
 							 40,
 							 std::make_shared<SimpleCall>(Clan::ClanSave)),
-		Heartbeat::PulseStep("Celebrates: sanitize",
-							 Celebrates::CLEAN_PERIOD * 60 * kPassesPerSec,
+		Heartbeat::PulseStep("Celebrates: Sanitize",
+							 celebrates::kCleanPeriod * 60 * kPassesPerSec,
 							 39,
-							 std::make_shared<SimpleCall>(Celebrates::sanitize)),
+							 std::make_shared<SimpleCall>(celebrates::Sanitize)),
 		Heartbeat::PulseStep("Record usage", 5 * 60 * kPassesPerSec, 37, std::make_shared<SimpleCall>(record_usage)),
 		Heartbeat::PulseStep("Reload proxy ban",
 							 5 * 60 * kPassesPerSec,
 							 36,
-							 std::make_shared<SimpleCall>([]() { ban->reload_proxy_ban(ban->RELOAD_MODE_TMPFILE); })),
+							 std::make_shared<SimpleCall>([]() { ban->reload_proxy_ban(); })),
 		Heartbeat::PulseStep("God work invoice",
 							 5 * 60 * kPassesPerSec,
 							 35,
@@ -511,7 +470,7 @@ Heartbeat::steps_t &pulse_steps() {
 		Heartbeat::PulseStep("Players index flushing",
 							 kSecsPerMudHour * kPassesPerSec,
 							 1,
-							 std::make_shared<SimpleCall>(flush_player_index)),
+							 std::make_shared<SimpleCall>(FlushPlayerIndex)),
 		Heartbeat::PulseStep("Point updating",
 							 kSecsPerMudHour * kPassesPerSec,
 							 kPassesPerSec - 5,

@@ -20,19 +20,20 @@
 #include "utils/id_converter.h"
 //#include "entities/zone.h"
 #include "structs/global_objects.h"
+#include "game_mechanics/stable_objs.h"
 
 extern const char *dirs[];
 extern int up_obj_where(ObjData *obj);
 extern int reloc_target;
 
-CharData *get_char_by_obj(ObjData *obj, char *name);
-ObjData *get_obj_by_obj(ObjData *obj, char *name);
+CharData *get_char_by_obj(ObjData *obj, const char *name);
+ObjData *get_obj_by_obj(ObjData *obj, const char *name);
 void sub_write(char *arg, CharData *ch, byte find_invis, int targets);
 void die(CharData *ch, CharData *killer);
 void obj_command_interpreter(ObjData *obj, char *argument, Trigger *trig);
 void send_to_zone(char *messg, int zone_rnum);
 
-RoomData *get_room(char *name);
+RoomData *get_room(const char *name);
 
 bool mob_script_command_interpreter(CharData *ch, char *argument, Trigger *trig);
 
@@ -48,12 +49,12 @@ struct obj_command_info {
 #define SCMD_OECHOAROUND   1
 
 // attaches object name and vnum to msg_set and sends it to script_log
-void obj_log(ObjData *obj, const char *msg, LogMode type = LogMode::OFF) {
+void obj_log(ObjData *obj, Trigger *trig, const char *msg, LogMode type = LogMode::OFF) {
 	char small_buf[kMaxInputLength + 100];
 
 	snprintf(small_buf, kMaxInputLength + 100,
 			"(Obj: '%s', VNum: %d, trig: %d): %s [строка: %d]", obj->get_short_description().c_str(), GET_OBJ_VNUM(obj),
-			last_trig_vnum, msg, last_trig_line_num);
+			trig_index[(trig)->get_rnum()]->vnum, msg, last_trig_line_num);
 	script_log(small_buf, type);
 }
 
@@ -62,9 +63,9 @@ int obj_room(ObjData *obj) {
 	if (obj->get_in_room() != kNowhere) {
 		return obj->get_in_room();
 	} else if (obj->get_carried_by()) {
-		return IN_ROOM(obj->get_carried_by());
+		return obj->get_carried_by()->in_room;
 	} else if (obj->get_worn_by()) {
-		return IN_ROOM(obj->get_worn_by());
+		return obj->get_worn_by()->in_room;
 	} else if (obj->get_in_obj()) {
 		return obj_room(obj->get_in_obj());
 	} else {
@@ -73,7 +74,7 @@ int obj_room(ObjData *obj) {
 }
 
 // returns the real room number, or kNowhere if not found or invalid
-int find_obj_target_room(ObjData *obj, char *rawroomstr) {
+int find_obj_target_room(ObjData *obj, Trigger *trig, char *rawroomstr) {
 	char roomstr[kMaxInputLength];
 	RoomRnum location = kNowhere;
 
@@ -81,23 +82,23 @@ int find_obj_target_room(ObjData *obj, char *rawroomstr) {
 
 	if (!*roomstr) {
 		sprintf(buf, "Undefined oteleport room: %s", rawroomstr);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return kNowhere;
 	}
 
 	auto tmp = atoi(roomstr);
 	if (tmp > 0) {
-		location = real_room(tmp);
+		location = GetRoomRnum(tmp);
 	} else {
 		sprintf(buf, "Undefined oteleport room: %s", roomstr);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return kNowhere;
 	}
 
 	return location;
 }
 
-void do_oportal(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_oportal(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	int target, howlong, curroom, nr;
 	char arg1[kMaxInputLength], arg2[kMaxInputLength];
 
@@ -105,41 +106,35 @@ void do_oportal(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	skip_spaces(&argument);
 
 	if (!*arg1 || !*arg2) {
-		obj_log(obj, "oportal: called with too few args");
+		obj_log(obj, trig, "oportal: called with too few args");
 		return;
 	}
 
 	howlong = atoi(arg2);
 	nr = atoi(arg1);
-	target = real_room(nr);
+	target = GetRoomRnum(nr);
 
 	if (target == kNowhere) {
-		obj_log(obj, "oportal: target is an invalid room");
+		obj_log(obj, trig, "oportal: target is an invalid room");
 		return;
 	}
 
 	/* Ставим пентаграмму из текущей комнаты в комнату target с
 	   длительностью howlong */
-	curroom = real_room(get_room_where_obj(obj));
-	world[curroom]->portal_room = target;
-	world[curroom]->portal_time = howlong;
-	world[curroom]->pkPenterUnique = 0;
-	AddPortalTimer(nullptr, world[curroom], howlong * 30 - 1);
-//	sprintf(buf, "Ставим врата из %d в %d длит %d\r\n", currom, target, howlong );
-//	mudlog(buf, DEF, std::max(kLevelImmortal, GET_INVIS_LEV(ch)), SYSLOG, true);
-	OneWayPortal::add(world[target], world[curroom]);
+	curroom = GetRoomRnum(get_room_where_obj(obj));
+	one_way_portal::ReplacePortalTimer(nullptr, curroom, target, howlong * 30 - 1);
 	act("Лазурная пентаграмма возникла в воздухе.",
 		false, world[curroom]->first_character(), 0, 0, kToChar);
 	act("Лазурная пентаграмма возникла в воздухе.",
 		false, world[curroom]->first_character(), 0, 0, kToRoom);
 }
 // Object commands
-void do_oecho(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_oecho(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	skip_spaces(&argument);
 
 	int room;
 	if (!*argument) {
-		obj_log(obj, "oecho called with no args");
+		obj_log(obj, trig, "oecho called with no args");
 	} else if ((room = obj_room(obj)) != kNowhere) {
 		if (!world[room]->people.empty()) {
 			sub_write(argument, world[room]->first_character(), true, kToRoom | kToChar);
@@ -151,22 +146,23 @@ void do_oat(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *
 	char roomstr[kMaxInputLength];
 	RoomRnum location = kNowhere;
 	if (!*argument) {
-		obj_log(obj, "oat: bad argument");
+		obj_log(obj, trig, "oat: bad argument");
 		return;
 	}
 	one_argument(argument, roomstr);
 	auto tmp = atoi(roomstr);
 	if (tmp > 0) {
-		location = real_room(tmp);
+		location = GetRoomRnum(tmp);
 	} else {
 		sprintf(buf, "oat: invalid location '%d'", tmp);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 	argument = one_argument(argument, roomstr);
 	auto tmp_obj = world_objects.create_from_prototype_by_vnum(obj->get_vnum());
 	tmp_obj->set_in_room(location);
 	obj_command_interpreter(tmp_obj.get(), argument, trig);
+	obj_proto.dec_number(tmp_obj->get_rnum());
 	world_objects.remove(tmp_obj);
 }
 
@@ -177,19 +173,19 @@ void do_oforce(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigge
 	line = one_argument(argument, arg1);
 
 	if (!*arg1 || !*line) {
-		obj_log(obj, "oforce called with too few args");
+		obj_log(obj, trig, "oforce called with too few args");
 
 		return;
 	}
 
 	if (!str_cmp(arg1, "all")
 		|| !str_cmp(arg1, "все")) {
-		obj_log(obj, "ERROR: \'oforce all\' command disabled.");
+		obj_log(obj, trig, "ERROR: \'oforce all\' command disabled.");
 		return;
 
 		/*if ((room = obj_room(obj)) == kNowhere)
 		{
-			obj_log(obj, "oforce called by object in kNowhere");
+			obj_log(obj, trig, "oforce called by object in kNowhere");
 		}
 		else
 		{
@@ -214,7 +210,7 @@ void do_oforce(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigge
 
 			if (ch->IsNpc()) {
 				if (mob_script_command_interpreter(ch, line, trig)) {
-					obj_log(obj, "Mob trigger commands in oforce. Please rewrite trigger.");
+					obj_log(obj, trig, "Mob trigger commands in oforce. Please rewrite trigger.");
 					return;
 				}
 
@@ -223,28 +219,28 @@ void do_oforce(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigge
 				command_interpreter(ch, line);
 			}
 			else
-				obj_log(obj, "oforce: попытка принудить бессмертного.");
+				obj_log(obj, trig, "oforce: попытка принудить бессмертного.");
 		} else {
-			obj_log(obj, "oforce: no target found");
+			obj_log(obj, trig, "oforce: no target found");
 		}
 	}
 }
 
-void do_osend(ObjData *obj, char *argument, int/* cmd*/, int subcmd, Trigger *) {
+void do_osend(ObjData *obj, char *argument, int/* cmd*/, int subcmd, Trigger *trig) {
 	char buf[kMaxInputLength], *msg;
 	CharData *ch;
 
 	msg = any_one_arg(argument, buf);
 
 	if (!*buf) {
-		obj_log(obj, "osend called with no args");
+		obj_log(obj, trig, "osend called with no args");
 		return;
 	}
 
 	skip_spaces(&msg);
 
 	if (!*msg) {
-		obj_log(obj, "osend called without a message");
+		obj_log(obj, trig, "osend called without a message");
 		return;
 	}
 	if ((ch = get_char_by_obj(obj, buf))) {
@@ -255,43 +251,43 @@ void do_osend(ObjData *obj, char *argument, int/* cmd*/, int subcmd, Trigger *) 
 	} else {
 		if (*buf != UID_CHAR && *buf != UID_CHAR_ALL) {
 			sprintf(buf1, "no target (%s) found for osend", buf);
-			obj_log(obj, buf1);
+			obj_log(obj, trig, buf1);
 		}
 	}
 }
 
 // increases the target's exp
-void do_oexp(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_oexp(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch;
 	char name[kMaxInputLength], amount[kMaxInputLength];
 
 	two_arguments(argument, name, amount);
 
 	if (!*name || !*amount) {
-		obj_log(obj, "oexp: too few arguments");
+		obj_log(obj, trig, "oexp: too few arguments");
 		return;
 	}
 
 	if ((ch = get_char_by_obj(obj, name))) {
 		EndowExpToChar(ch, atoi(amount));
 		sprintf(buf, "oexp: victim (%s) получил опыт %d", GET_NAME(ch), atoi(amount));
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 	} else {
-		obj_log(obj, "oexp: target not found");
+		obj_log(obj, trig, "oexp: target not found");
 		return;
 	}
 }
 
 // set the object's timer value
-void do_otimer(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_otimer(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	char arg[kMaxInputLength];
 
 	one_argument(argument, arg);
 
 	if (!*arg)
-		obj_log(obj, "otimer: missing argument");
+		obj_log(obj, trig, "otimer: missing argument");
 	else if (!a_isdigit(*arg))
-		obj_log(obj, "otimer: bad argument");
+		obj_log(obj, trig, "otimer: bad argument");
 	else {
 		obj->set_timer(atoi(arg));
 	}
@@ -300,7 +296,7 @@ void do_otimer(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigge
 // transform into a different object
 // note: this shouldn't be used with containers unless both objects
 // are containers!
-void do_otransform(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_otransform(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	char arg[kMaxInputLength];
 	CharData *wearer = nullptr;
 	int pos = -1;
@@ -308,13 +304,13 @@ void do_otransform(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	one_argument(argument, arg);
 
 	if (!*arg) {
-		obj_log(obj, "otransform: missing argument");
+		obj_log(obj, trig, "otransform: missing argument");
 	} else if (!a_isdigit(*arg)) {
-		obj_log(obj, "otransform: bad argument");
+		obj_log(obj, trig, "otransform: bad argument");
 	} else {
 		const auto o = world_objects.create_from_prototype_by_vnum(atoi(arg));
 		if (o == nullptr) {
-			obj_log(obj, "otransform: bad object vnum");
+			obj_log(obj, trig, "otransform: bad object vnum");
 			return;
 		}
 		// Описание работы функции см. в mtransform()
@@ -339,7 +335,7 @@ void do_otransform(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 }
 
 // purge all objects an npcs in room, or specified object or mob
-void do_opurge(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_opurge(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	char arg[kMaxInputLength];
 	CharData *ch;
 	ObjData *o;
@@ -355,12 +351,12 @@ void do_opurge(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigge
 			log("Purge obj #%d by %s (opurge)", GET_OBJ_VNUM(o), arg);
 			ExtractObjFromWorld(o, false);
 		} else
-			obj_log(obj, "opurge: bad argument");
+			obj_log(obj, trig, "opurge: bad argument");
 		return;
 	}
 
 	if (!ch->IsNpc()) {
-		obj_log(obj, "opurge: purging a PC");
+		obj_log(obj, trig, "opurge: purging a PC");
 		return;
 	}
 
@@ -371,7 +367,7 @@ void do_opurge(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigge
 	ExtractCharFromWorld(ch, false);
 }
 
-void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch, *lastchar = nullptr;
 	bool onhorse = false;
 	int target, rm;
@@ -381,17 +377,19 @@ void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	skip_spaces(&argument);
 
 	if (!*arg1 || !*arg2) {
-		obj_log(obj, "oteleport called with too few args");
+		obj_log(obj, trig, "oteleport called with too few args");
 		return;
 	}
 
-	target = find_obj_target_room(obj, arg2);
+	target = find_obj_target_room(obj, trig, arg2);
 
-	if (target == kNowhere)
-		obj_log(obj, "oteleport target is an invalid room");
+	if (target == kNowhere) {
+		obj_log(obj, trig, "oteleport target is an invalid room");
+		return;
+	}
 	rm = obj_room(obj);
 	if (rm == kNowhere) {
-		obj_log(obj, "oteleport called in kNowhere");
+		obj_log(obj, trig, "oteleport called in kNowhere");
 		return;
 	}
 	if (!str_cmp(arg1, "all") || !str_cmp(arg1, "все")) {
@@ -401,7 +399,7 @@ void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 			const auto ch = *ch_i;
 			++next_ch;
 			if (ch->in_room == kNowhere) {
-				obj_log(obj, "oteleport transports from kNowhere");
+				obj_log(obj, trig, "oteleport transports from kNowhere");
 				return;
 			}
 			RemoveCharFromRoom(ch);
@@ -422,14 +420,14 @@ void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 			const auto ch = *ch_i;
 			++next_ch;
 			if (ch->in_room == kNowhere) {
-				obj_log(obj, "oteleport transports allchar from kNowhere");
+				obj_log(obj, trig, "oteleport transports allchar from kNowhere");
 				return;
 			}
 			if (ch->IsNpc() && !IS_CHARMICE(ch)) {
 				continue;
 			}
 			if (target == ch->in_room) {
-//				obj_log(obj, "oteleport allchar: target is itself");
+//				obj_log(obj, trig, "oteleport allchar: target is itself");
 				continue;
 			}
 
@@ -441,7 +439,7 @@ void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 				}
 			}
 			if (target == ch->in_room) {
-				obj_log(obj, "oteleport allchar: target is itself");
+				obj_log(obj, trig, "oteleport allchar: target is itself");
 			}
 			RemoveCharFromRoom(ch);
 			PlaceCharToRoom(ch, target);
@@ -458,11 +456,11 @@ void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 		}
 	} else {
 		if (!(ch = get_char_by_obj(obj, arg1))) {
-			obj_log(obj, "oteleport: no target found");
+			obj_log(obj, trig, "oteleport: no target found");
 			return;
 		}
 		if (target == ch->in_room) {
-//			obj_log(obj, "oteleport: target is itself");
+//			obj_log(obj, trig, "oteleport: target is itself");
 			return;
 		}
 		if (IS_CHARMICE(ch) && ch->in_room == ch->get_master()->in_room)
@@ -482,7 +480,7 @@ void do_oteleport(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 			}
 		}
 		if (target == ch->in_room) {
-			obj_log(obj, "oteleport: target is itself");
+			obj_log(obj, trig, "oteleport: target is itself");
 		}
 		RemoveCharFromRoom(ch);
 		PlaceCharToRoom(ch, target);
@@ -504,18 +502,18 @@ void do_dgoload(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	two_arguments(argument, arg1, arg2);
 
 	if (!*arg1 || !*arg2 || !is_number(arg2) || ((number = atoi(arg2)) < 0)) {
-		obj_log(obj, "oload: bad syntax");
+		obj_log(obj, trig, "oload: bad syntax");
 		return;
 	}
 
 	if ((room = obj_room(obj)) == kNowhere) {
-		obj_log(obj, "oload: object in kNowhere trying to load");
+		obj_log(obj, trig, "oload: object in kNowhere trying to load");
 		return;
 	}
 
 	if (utils::IsAbbr(arg1, "mob")) {
-		if ((mob = read_mobile(number, VIRTUAL)) == nullptr) {
-			obj_log(obj, "oload: bad mob vnum");
+		if ((mob = ReadMobile(number, kVirtual)) == nullptr) {
+			obj_log(obj, trig, "oload: bad mob vnum");
 			return;
 		}
 		uid_type = UID_CHAR;
@@ -525,14 +523,14 @@ void do_dgoload(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	} else if (utils::IsAbbr(arg1, "obj")) {
 		const auto object = world_objects.create_from_prototype_by_vnum(number);
 		if (!object) {
-			obj_log(obj, "oload: bad object vnum");
+			obj_log(obj, trig, "oload: bad object vnum");
 			return;
 		}
-		if (GET_OBJ_MIW(obj_proto[object->get_rnum()]) >= 0
-			&& obj_proto.actual_count(object->get_rnum()) > GET_OBJ_MIW(obj_proto[object->get_rnum()])) {
-			if (!check_unlimited_timer(obj_proto[object->get_rnum()].get())) {
+		if (GetObjMIW(object->get_rnum()) >= 0
+			&& obj_proto.actual_count(object->get_rnum()) > GetObjMIW(object->get_rnum())) {
+			if (!stable_objs::IsTimerUnlimited(obj_proto[object->get_rnum()].get())) {
 				sprintf(buf, "oload: Попытка загрузить предмет больше чем в MIW для #%d.", number);
-				obj_log(obj, buf);
+				obj_log(obj, trig, buf);
 //				extract_obj(object.get());
 //				return;
 			}
@@ -544,18 +542,18 @@ void do_dgoload(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 		PlaceObjToRoom(object.get(), room);
 		load_otrigger(object.get());
 	} else {
-		obj_log(obj, "oload: bad type");
+		obj_log(obj, trig, "oload: bad type");
 		return;
 	}
 	sprintf(uid, "%c%d", uid_type, idnum);
-	add_var_cntx(&GET_TRIG_VARS(trig), varname, uid, 0);
+	add_var_cntx(trig->var_list, varname, uid, 0);
 }
 
 void ApplyDamage(CharData* target, int damage) {
 	GET_HIT(target) -= damage;
 	update_pos(target);
 	char_dam_message(damage, target, target, 0);
-	if (GET_POS(target) == EPosition::kDead) {
+	if (target->GetPosition() == EPosition::kDead) {
 		if (!target->IsNpc()) {
 			sprintf(buf2, "%s killed by odamage at %s [%d]", GET_NAME(target),
 					target->in_room == kNowhere ? "NOWHERE" : world[target->in_room]->name, GET_ROOM_VNUM(target->in_room));
@@ -565,12 +563,12 @@ void ApplyDamage(CharData* target, int damage) {
 	}
 }
 
-void do_odamage(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_odamage(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	char name[kMaxInputLength], amount[kMaxInputLength], damage_type[kMaxInputLength];
 	three_arguments(argument, name, amount, damage_type);
 	if (!*name || !*amount || !a_isdigit(*amount)) {
 		sprintf(buf, "odamage: bad syntax, команда: %s", argument);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
@@ -579,7 +577,7 @@ void do_odamage(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	CharData *ch = get_char_by_obj(obj, name);
 	if (!ch) {
 		sprintf(buf, "odamage: target not found, команда: %s", argument);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 	if (world[ch->in_room]->zone_rn != world[up_obj_where(obj)]->zone_rn) {
@@ -608,7 +606,7 @@ void do_odamage(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 			try {
 				type = kDamageTypes.at(damage_type);
 			} catch (const std::out_of_range &) {
-				obj_log(obj, "odamage: incorrect damage type.");;
+				obj_log(obj, trig, "odamage: incorrect damage type.");;
 			}
 			die(ch, nullptr);
 		}
@@ -617,7 +615,7 @@ void do_odamage(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	}
 }
 
-void do_odoor(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_odoor(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	char target[kMaxInputLength], direction[kMaxInputLength];
 	char field[kMaxInputLength], *value;
 	RoomData *rm;
@@ -638,25 +636,25 @@ void do_odoor(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger
 
 	if (!*target || !*direction || !*field) {
 		sprintf(buf, "odoor called with too few args, команда: %s", argument);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
 	if ((rm = get_room(target)) == nullptr) {
 		sprintf(buf, "odoor: invalid target, команда: %s", argument);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
 	if ((dir = search_block(direction, dirs, false)) == -1) {
 		sprintf(buf, "odoor: invalid direction, команда: %s", argument);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
 	if ((fd = search_block(field, door_field, false)) == -1) {
 		sprintf(buf, "odoor: invalid field, команда: %s", argument);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
@@ -692,10 +690,10 @@ void do_odoor(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger
 				break;
 
 			case 5:    // room
-				if ((to_room = real_room(atoi(value))) != kNowhere) {
+				if ((to_room = GetRoomRnum(atoi(value))) != kNowhere) {
 					exit->to_room(to_room);
 				} else {
-					obj_log(obj, "odoor: invalid door target");
+					obj_log(obj, trig, "odoor: invalid door target");
 				}
 				break;
 
@@ -704,19 +702,19 @@ void do_odoor(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger
 				if (!(lock < 0 || lock > 255))
 					exit->lock_complexity = lock;
 				else
-					obj_log(obj, "odoor: invalid lock complexity");
+					obj_log(obj, trig, "odoor: invalid lock complexity");
 				break;
 		}
 	}
 }
 
-void do_osetval(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_osetval(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	char arg1[kMaxInputLength], arg2[kMaxInputLength];
 	int position, new_value;
 
 	two_arguments(argument, arg1, arg2);
 	if (!*arg1 || !*arg2 || !is_number(arg1) || !is_number(arg2)) {
-		obj_log(obj, "osetval: bad syntax");
+		obj_log(obj, trig, "osetval: bad syntax");
 		return;
 	}
 
@@ -725,11 +723,11 @@ void do_osetval(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigg
 	if (position >= 0 && position < ObjData::VALS_COUNT) {
 		obj->set_val(position, new_value);
 	} else {
-		obj_log(obj, "osetval: position out of bounds!");
+		obj_log(obj, trig, "osetval: position out of bounds!");
 	}
 }
 
-void do_ofeatturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_ofeatturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	int isFeat = 0;
 	CharData *ch;
 	char name[kMaxInputLength], featname[kMaxInputLength], amount[kMaxInputLength], *pos;
@@ -738,7 +736,7 @@ void do_ofeatturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	one_argument(two_arguments(argument, name, featname), amount);
 
 	if (!*name || !*featname || !*amount) {
-		obj_log(obj, "ofeatturn: too few arguments");
+		obj_log(obj, trig, "ofeatturn: too few arguments");
 		return;
 	}
 
@@ -752,7 +750,7 @@ void do_ofeatturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 		isFeat = 1;
 	else {
 		sprintf(buf, "ofeatturn: '%s' feat not found", featname);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
@@ -761,12 +759,12 @@ void do_ofeatturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	else if (!str_cmp(amount, "clear"))
 		featdiff = 0;
 	else {
-		obj_log(obj, "ofeatturn: unknown set variable");
+		obj_log(obj, trig, "ofeatturn: unknown set variable");
 		return;
 	}
 
 	if (!(ch = get_char_by_obj(obj, name))) {
-		obj_log(obj, "ofeatturn: target not found");
+		obj_log(obj, trig, "ofeatturn: target not found");
 		return;
 	}
 
@@ -774,7 +772,7 @@ void do_ofeatturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 		trg_featturn(ch, feat_id, featdiff, last_trig_vnum);
 }
 
-void do_oskillturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_oskillturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch;
 	char name[kMaxInputLength], skill_name[kMaxInputLength], amount[kMaxInputLength];
 	int recipenum = 0;
@@ -783,7 +781,7 @@ void do_oskillturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	one_argument(two_arguments(argument, name, skill_name), amount);
 
 	if (!*name || !*skill_name || !*amount) {
-		obj_log(obj, "oskillturn: too few arguments");
+		obj_log(obj, trig, "oskillturn: too few arguments");
 		return;
 	}
 
@@ -793,7 +791,7 @@ void do_oskillturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 		is_skill = true;
 	} else if ((recipenum = im_get_recipe_by_name(skill_name)) < 0) {
 		sprintf(buf, "oskillturn: %s skill not found", skill_name);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
@@ -802,12 +800,12 @@ void do_oskillturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	} else if (!str_cmp(amount, "clear")) {
 		skilldiff = 0;
 	} else {
-		obj_log(obj, "oskillturn: unknown set variable");
+		obj_log(obj, trig, "oskillturn: unknown set variable");
 		return;
 	}
 
 	if (!(ch = get_char_by_obj(obj, name))) {
-		obj_log(obj, "oskillturn: target not found");
+		obj_log(obj, trig, "oskillturn: target not found");
 		return;
 	}
 
@@ -816,14 +814,14 @@ void do_oskillturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 			trg_skillturn(ch, skill_id, skilldiff, last_trig_vnum);
 		} else {
 			sprintf(buf, "oskillturn: skill and character class mismatch");
-			obj_log(obj, buf);
+			obj_log(obj, trig, buf);
 		}
 	} else {
 		trg_recipeturn(ch, recipenum, skilldiff);
 	}
 }
 
-void do_oskilladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_oskilladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	bool isSkill = false;
 	CharData *ch;
 	char name[kMaxInputLength], skillname[kMaxInputLength], amount[kMaxInputLength];
@@ -833,7 +831,7 @@ void do_oskilladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	one_argument(two_arguments(argument, name, skillname), amount);
 
 	if (!*name || !*skillname || !*amount) {
-		obj_log(obj, "oskilladd: too few arguments");
+		obj_log(obj, trig, "oskilladd: too few arguments");
 		return;
 	}
 	auto skillnum = FixNameAndFindSkillId(skillname);
@@ -841,14 +839,14 @@ void do_oskilladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 		isSkill = true;
 	} else if ((recipenum = im_get_recipe_by_name(skillname)) < 0) {
 		sprintf(buf, "oskilladd: %s skill/recipe not found", skillname);
-		obj_log(obj, buf);
+		obj_log(obj, trig, buf);
 		return;
 	}
 
 	skilldiff = atoi(amount);
 
 	if (!(ch = get_char_by_obj(obj, name))) {
-		obj_log(obj, "oskilladd: target not found");
+		obj_log(obj, trig, "oskilladd: target not found");
 		return;
 	}
 
@@ -859,7 +857,7 @@ void do_oskilladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	}
 }
 
-void do_ospellturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_ospellturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch;
 	char name[kMaxInputLength], spellname[kMaxInputLength], amount[kMaxInputLength];
 	int spelldiff = 0;
@@ -867,13 +865,13 @@ void do_ospellturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	one_argument(two_arguments(argument, name, spellname), amount);
 
 	if (!*name || !*spellname || !*amount) {
-		obj_log(obj, "ospellturn: too few arguments");
+		obj_log(obj, trig, "ospellturn: too few arguments");
 		return;
 	}
 
 	auto spell_id = FixNameAndFindSpellId(spellname);
 	if (spell_id == ESpell::kUndefined) {
-		obj_log(obj, "ospellturn: spell not found");
+		obj_log(obj, trig, "ospellturn: spell not found");
 		return;
 	}
 
@@ -882,64 +880,64 @@ void do_ospellturn(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	else if (!str_cmp(amount, "clear"))
 		spelldiff = 0;
 	else {
-		obj_log(obj, "ospellturn: unknown set variable");
+		obj_log(obj, trig, "ospellturn: unknown set variable");
 		return;
 	}
 
 	if ((ch = get_char_by_obj(obj, name))) {
 		trg_spellturn(ch, spell_id, spelldiff, last_trig_vnum);
 	} else {
-		obj_log(obj, "ospellturn: target not found");
+		obj_log(obj, trig, "ospellturn: target not found");
 		return;
 	}
 }
 
-void do_ospellturntemp(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_ospellturntemp(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch;
 	char name[kMaxInputLength], spellname[kMaxInputLength], amount[kMaxInputLength];
 
 	one_argument(two_arguments(argument, name, spellname), amount);
 
 	if (!*name || !*spellname || !*amount) {
-		obj_log(obj, "ospellturntemp: too few arguments");
+		obj_log(obj, trig, "ospellturntemp: too few arguments");
 		return;
 	}
 
 	auto spell_id = FixNameAndFindSpellId(spellname);
 	if (spell_id == ESpell::kUndefined) {
-		obj_log(obj, "ospellturntemp: spell not found");
+		obj_log(obj, trig, "ospellturntemp: spell not found");
 		return;
 	}
 
 	auto spelltime = atoi(amount);
 
 	if (spelltime <= 0) {
-		obj_log(obj, "ospellturntemp: time is zero or negative");
+		obj_log(obj, trig, "ospellturntemp: time is zero or negative");
 		return;
 	}
 
 	if ((ch = get_char_by_obj(obj, name))) {
 		trg_spellturntemp(ch, spell_id, spelltime, last_trig_vnum);
 	} else {
-		obj_log(obj, "ospellturntemp: target not found");
+		obj_log(obj, trig, "ospellturntemp: target not found");
 		return;
 	}
 }
 
-void do_ospelladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_ospelladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch;
 	char name[kMaxInputLength], spellname[kMaxInputLength], amount[kMaxInputLength];
 
 	one_argument(two_arguments(argument, name, spellname), amount);
 
 	if (!*name || !*spellname || !*amount) {
-		obj_log(obj, "ospelladd: too few arguments");
+		obj_log(obj, trig, "ospelladd: too few arguments");
 		return;
 	}
 
 	auto spell_id = FixNameAndFindSpellId(spellname);
 	if (spell_id == ESpell::kUndefined) {
-		obj_log(obj, "ospelladd: spell not found");
+		obj_log(obj, trig, "ospelladd: spell not found");
 		return;
 	}
 
@@ -948,25 +946,25 @@ void do_ospelladd(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	if ((ch = get_char_by_obj(obj, name))) {
 		trg_spelladd(ch, spell_id, spelldiff, last_trig_vnum);
 	} else {
-		obj_log(obj, "ospelladd: target not found");
+		obj_log(obj, trig, "ospelladd: target not found");
 		return;
 	}
 }
 
-void do_ospellitem(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_ospellitem(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	CharData *ch;
 	char name[kMaxInputLength], spellname[kMaxInputLength], type[kMaxInputLength], turn[kMaxInputLength];
 
 	two_arguments(two_arguments(argument, name, spellname), type, turn);
 
 	if (!*name || !*spellname || !*type || !*turn) {
-		obj_log(obj, "ospellitem: too few arguments");
+		obj_log(obj, trig, "ospellitem: too few arguments");
 		return;
 	}
 
 	auto spell_id = FixNameAndFindSpellId(spellname);
 	if (spell_id == ESpell::kUndefined) {
-		obj_log(obj, "ospellitem: spell not found");
+		obj_log(obj, trig, "ospellitem: spell not found");
 		return;
 	}
 
@@ -982,7 +980,7 @@ void do_ospellitem(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	} else if (!str_cmp(type, "runes")) {
 		spell = ESpellType::kRunes;
 	} else {
-		obj_log(obj, "ospellitem: type spell not found");
+		obj_log(obj, trig, "ospellitem: type spell not found");
 		return;
 	}
 
@@ -992,19 +990,19 @@ void do_ospellitem(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tr
 	} else if (!str_cmp(turn, "clear")) {
 		spelldiff = 0;
 	} else {
-		obj_log(obj, "ospellitem: unknown set variable");
+		obj_log(obj, trig, "ospellitem: unknown set variable");
 		return;
 	}
 
 	if ((ch = get_char_by_obj(obj, name))) {
 		trg_spellitem(ch, spell_id, spelldiff, spell);
 	} else {
-		obj_log(obj, "ospellitem: target not found");
+		obj_log(obj, trig, "ospellitem: target not found");
 		return;
 	}
 }
 
-void do_ozoneecho(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *) {
+void do_ozoneecho(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
 	ZoneRnum zone;
 	char zone_name[kMaxInputLength], buf[kMaxInputLength], *msg;
 
@@ -1012,11 +1010,11 @@ void do_ozoneecho(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 	skip_spaces(&msg);
 
 	if (!*zone_name || !*msg)
-		obj_log(obj, "ozoneecho called with too few args");
-	else if ((zone = get_zone_rnum_by_room_vnum(atoi(zone_name))) < 0) {
+		obj_log(obj, trig, "ozoneecho called with too few args");
+	else if ((zone = get_zone_rnum_by_vnumum(atoi(zone_name))) < 0) {
 		std::stringstream str_log;
 		str_log << "ozoneecho called for nonexistant zone: " << zone_name;
-		obj_log(obj, str_log.str().c_str());
+		obj_log(obj, trig, str_log.str().c_str());
 	} else {
 		sprintf(buf, "%s\r\n", msg);
 		send_to_zone(buf, zone);
@@ -1024,7 +1022,10 @@ void do_ozoneecho(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Tri
 }
 // для команды oat
 void ObjDgCast(ObjData *obj, char *argument, int/* cmd*/, int/* subcmd*/, Trigger *trig) {
+	char *dg_arg = str_dup("DgCast ");
+	strcat(dg_arg, argument);
 	do_dg_cast(obj, trig, OBJ_TRIGGER, argument);
+	free(dg_arg);
 }
 
 const struct obj_command_info obj_cmd_info[] =
@@ -1103,7 +1104,7 @@ void obj_command_interpreter(ObjData *obj, char *argument, Trigger *trig) {
 
 	if (*obj_cmd_info[cmd].command == '\n') {
 		sprintf(buf2, "Unknown object cmd: '%s'", argument);
-		obj_log(obj, buf2, LGH);
+		obj_log(obj, trig, buf2, LGH);
 	} else {
 		const obj_command_info::handler_f &command = obj_cmd_info[cmd].command_pointer;
 		command(obj, line, cmd, obj_cmd_info[cmd].subcmd, trig);

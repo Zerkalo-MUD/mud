@@ -11,7 +11,6 @@
 #include "structs/global_objects.h"
 
 #include <third_party_libs/fmt/include/fmt/format.h>
-#include <boost/algorithm/string.hpp>
 
 namespace obj_sets {
 
@@ -192,7 +191,7 @@ void VerifySet(SetNode &set) {
 	}
 
 	for (auto i = set.obj_list.begin(); i != set.obj_list.end(); ++i) {
-		const int rnum = real_object(i->first);
+		const int rnum = GetObjRnum(i->first);
 		if (rnum < 0) {
 			err_log("Items set #%zu: empty obj proto (vnum=%d).", num, i->first);
 			set.enabled = false;
@@ -509,7 +508,7 @@ void save() {
 			if (!k.second.affects.empty()) {
 				pugi::xml_node xml_affects = xml_activ.append_child("affects");
 				*buf_ = '\0';
-				k.second.affects.tascii(4, buf_);
+				k.second.affects.tascii(FlagData::kPlanesNumber, buf_);
 				xml_affects.append_child(pugi::node_pcdata).set_value(buf_);
 			}
 			// set/activ/apply
@@ -697,7 +696,7 @@ std::string print_obj_list(const SetNode &set) {
 	bool left = true;
 
 	for (const auto & i : set.obj_list) {
-		const int rnum = real_object(i.first);
+		const int rnum = GetObjRnum(i.first);
 		if (rnum < 0
 			|| obj_proto[rnum]->get_short_description().empty()) {
 			continue;
@@ -852,7 +851,7 @@ std::string print_activ_enchant(const std::pair<int, ench_type> &ench) {
 	char buf_[128];
 
 	if (ench.first > 0) {
-		int rnum = real_object(ench.first);
+		int rnum = GetObjRnum(ench.first);
 		if (rnum < 0) return "";
 
 		if (ench.second.weight != 0) {
@@ -1018,8 +1017,7 @@ void init_xhelp() {
 			bool first = true;
 			std::string name = "актив";
 			std::vector<std::string> str_list;
-			boost::split(str_list, sets_list.at(i)->alias,
-						 boost::is_any_of(", "), boost::token_compress_on);
+			str_list = utils::SplitAny(sets_list.at(i)->alias, ", ");
 			for (auto & k : str_list) {
 				if (first) {
 					sets_list.at(i)->help = name + k;

@@ -36,8 +36,6 @@ enum {
 
 class Player : public CharData {
  public:
-	using cities_t = boost::dynamic_bitset<std::size_t>;
-
 	Player();
 
 	int get_pfilepos() const;
@@ -97,7 +95,7 @@ class Player : public CharData {
 	void dps_add_exp(int exp, bool battle = false);
 
 	void save_char();
-	int load_char_ascii(const char *name, bool reboot = 0, const bool find_id = true);
+	int load_char_ascii(const char *name, int load_flags) override;
 
 	bool get_disposable_flag(int num);
 	void set_disposable_flag(int num);
@@ -154,7 +152,7 @@ class Player : public CharData {
 	void set_hryvn(int value);
 	void sub_hryvn(int value);
 	void add_hryvn(int value);
-	void dquest(int id);
+	void dquest(int id) override;
 	void complete_quest(int id);
 	int get_nogata();
 	void set_nogata(int value);
@@ -178,7 +176,7 @@ class Player : public CharData {
 	bool arena_player = false;
 	// порядковый номер в файле плеер-листа (не особо нужен, но бывает удобно видеть по кто)
 	// TODO: вообще его можно пользовать вместо постоянного поиска по имени при сейвах чара и т.п. вещах, пользующих
-	// get_ptable_by_name или find_name (дублирование кода кстати) и всякие поиски по ид/уид, если уже имеем чар-дату
+	// GetPlayerTablePosByName или find_name (дублирование кода кстати) и всякие поиски по ид/уид, если уже имеем чар-дату
 	int pfilepos_;
 	// комната, в которой был чар до того, как его поместили в странную (linkdrop)
 	RoomRnum was_in_room_;
@@ -226,7 +224,7 @@ class Player : public CharData {
 	// сколько дней подряд выполнялись дейлики
 	int count_daily_quest;
 	// Отметка о том, в каких городах был наш чар
-	boost::dynamic_bitset<size_t> cities;
+	std::vector<bool> cities_visited_;
 	// здесь храним инфу о татуировках
 	//std::map<unsigned int, StigmaWear> stigmas;
 	// режим !бот

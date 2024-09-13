@@ -17,6 +17,7 @@
 #include "utils/logger.h"
 #include <optional>
 #include <feats.h>
+#include "dg_script/dg_event.h"
 
 struct RoomData;    // forward declaration to avoid inclusion of room.hpp and any dependencies of that header.
 
@@ -141,11 +142,9 @@ class cmdlist_element {
 };
 
 struct TriggerVar {
-	char *name;        // name of variable  //
-	char *value;        // value of variable //
+	std::string name;        // name of variable  //
+	std::string value;        // value of variable //
 	long context;        // 0: global context //
-
-	struct TriggerVar *next;
 };
 
 // structure for triggers //
@@ -158,13 +157,13 @@ class Trigger {
 	Trigger();
 	Trigger(const Trigger &from);
 	Trigger &operator=(const Trigger &right);
-	Trigger(const sh_int rnum, const char *name, const long trigger_type);
-	Trigger(const sh_int rnum, const char *name, const byte attach_type, const long trigger_type);
-	Trigger(const sh_int rnum, std::string &&name, const byte attach_type, const long trigger_type);
+	Trigger(int rnum, const char *name, long trigger_type);
+	Trigger(int rnum, const char *name, byte attach_type, long trigger_type);
+	Trigger(int rnum, std::string &&name, byte attach_type, long trigger_type);
 
-	virtual ~Trigger() {}    // make constructor virtual to be able to create a mock for this class
+	virtual ~Trigger() = default;    // make constructor virtual to be able to create a mock for this class
 
-	auto get_rnum() const { return nr; }
+	[[nodiscard]] auto get_rnum() const { return nr; }
 	void set_rnum(const sh_int _) { nr = _; }
 	void set_attach_type(const byte _) { attach_type = _; }
 	auto get_attach_type() const { return attach_type; }
@@ -172,7 +171,7 @@ class Trigger {
 	void set_name(const std::string &_) { name = _; }
 	auto get_trigger_type() const { return trigger_type; }
 	void set_trigger_type(const long _) { trigger_type = _; }
-	void clear_var_list();
+	void clear_var_list() {var_list.clear();}
 	cmdlist_ptr cmdlist;    // top of command list             //
 	cmdlist_element::shared_ptr wait_line;    // ptr to current line of trigger after wait  //
 	cmdlist_element::shared_ptr curr_line;    // ptr to current line of trigger //
@@ -182,13 +181,13 @@ class Trigger {
 	std::string arglist;        // argument list                   //
 	int depth;        // depth into nest ifs/whiles/etc  //
 	int loops;        // loop iteration counter          //
-	struct TriggerEvent *wait_event;    // event to pause the trigger      //
-	struct TriggerVar *var_list;    // list of local vars for trigger  //
+	TriggerEvent wait_event;    // event to pause the trigger      //
+	std::list<TriggerVar> var_list;    // list of local vars for trigger  //
 
  private:
 	void reset();
 
-	sh_int nr;            // trigger's rnum                  //
+	int nr;            // trigger's rnum                  //
 	byte attach_type;    // mob/obj/wld intentions          //
 	std::string name;    // name of trigger
 	long trigger_type;    // type of trigger (for bitvector) //
@@ -302,7 +301,7 @@ class Script {
 	int remove_trigger(char *name, Trigger *&trig_addr);
 	int remove_trigger(char *name);
 
-	void clear_global_vars();
+	void clear_global_vars() {global_vars.clear();}
 	void cleanup();
 
 	bool has_triggers() { return !trig_list.empty(); }
@@ -311,7 +310,7 @@ class Script {
 
 	long types;        // bitvector of trigger types //
 	TriggersList trig_list;    // list of triggers           //
-	struct TriggerVar *global_vars;    // list of global variables   //
+	std::list<TriggerVar> global_vars;    // list of global variables   //
 	long context;        // current context for statics //
 
  private:
@@ -387,7 +386,7 @@ void print_worlds_vars(CharData *ch, std::optional<long> context);
 
 void script_log(const char *msg,
 				LogMode type = LogMode::OFF);//type нужен чтоб не спамить мессаги тем у кого errlog не полный а краткий например
-void trig_log(Trigger *trig, const char *msg, LogMode type = LogMode::OFF);
+void trig_log(Trigger *trig, std::string msg, LogMode type = LogMode::OFF);
 
 using obj2triggers_t = std::unordered_map<ObjVnum, std::list<TrgVnum>>;
 extern obj2triggers_t &obj2triggers;
@@ -422,7 +421,7 @@ extern GlobalTriggersStorage &trigger_list;
 
 void dg_obj_trigger(char *line, ObjData *obj);
 void assign_triggers(void *i, int type);
-int real_trigger(int vnum);
+int GetTriggerRnum(int vnum);
 void extract_script_mem(struct script_memory *sc);
 
 Trigger *read_trigger(int nr);
@@ -432,9 +431,9 @@ RoomData *dg_room_of_obj(ObjData *obj);
 void do_dg_cast(void *go, Trigger *trig, int type, char *cmd);
 void do_dg_affect(void *go, Script *sc, Trigger *trig, int type, char *cmd);
 
-void add_var_cntx(struct TriggerVar **var_list, const char *name, const char *value, long id);
-struct TriggerVar *find_var_cntx(struct TriggerVar **var_list, const char *name, long id);
-int remove_var_cntx(struct TriggerVar **var_list, char *name, long id);
+void add_var_cntx(std::list<TriggerVar> &var_list, std::string name, std::string value, long id);
+TriggerVar find_var_cntx(std::list<TriggerVar>, std::string name, long id);
+int remove_var_cntx(std::list<TriggerVar> &var_list, std::string name, long id);
 
 // Macros for scripts //
 
@@ -450,10 +449,9 @@ int remove_var_cntx(struct TriggerVar **var_list, char *name, long id);
 #define GET_TRIG_DATA_TYPE(t)      ((t)->get_data_type())
 #define GET_TRIG_NARG(t)          ((t)->narg)
 #define GET_TRIG_ARG(t)           ((t)->arglist)
-#define GET_TRIG_VARS(t)      ((t)->var_list)
-#define GET_TRIG_WAIT(t)      ((t)->wait_event)
 #define GET_TRIG_DEPTH(t)         ((t)->depth)
 #define GET_TRIG_LOOPS(t)         ((t)->loops)
+#define GET_TRIG_WAIT(t)      ((t)->wait_event)
 
 // player id's: 0 to ROOM_ID_BASE - 1            //
 // room id's: ROOM_ID_BASE to MOBOBJ_ID_BASE - 1 //
@@ -490,7 +488,8 @@ void trg_spellturn(CharData *ch, ESpell spell_id, int spelldiff, int vnum);
 void trg_spellturntemp(CharData *ch, ESpell spell_id, int spelldiff, int vnum);
 void trg_spelladd(CharData *ch, ESpell spell_id, int spelldiff, int vnum);
 void trg_spellitem(CharData *ch, ESpell spell_id, int spelldiff, ESpellType spell_type);
-CharData *get_char(char *name);
+CharData *get_char(const char *name);
+ObjData *get_obj(const char *name, int vnum = 0);
 // external vars from db.cpp //
 extern int top_of_trigt;
 extern int last_trig_vnum;//последний триг в котором произошла ошибка

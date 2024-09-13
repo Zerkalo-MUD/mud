@@ -46,7 +46,6 @@
  * efficency of doing it the other way.
  *
  */
-
 long GetExpUntilNextLvl(CharData *ch, int level);
 
 // GAME PLAY OPTIONS
@@ -295,7 +294,7 @@ int max_exp_loss_pc(CharData *ch) {
 int calc_loadroom(const CharData *ch, int bplace_mode /*= BIRTH_PLACE_UNDEFINED*/) {
 	if (IS_IMMORTAL(ch)) {
 		return (immort_start_room);
-	} else if (PLR_FLAGGED(ch, EPlrFlag::kFrozen)) {
+	} else if (ch->IsFlagged(EPlrFlag::kFrozen)) {
 		return (frozen_start_room);
 	} else {
 		const int loadroom = Birthplaces::GetLoadRoom(bplace_mode);
@@ -466,7 +465,7 @@ void RuntimeConfiguration::setup_logs() {
 	mkdir("log/perslog", 0700);
 
 	for (int i = 0; i < 1 + LAST_LOG; ++i) {
-		EOutputStream stream = static_cast<EOutputStream>(i);
+		auto stream = static_cast<EOutputStream>(i);
 
 		constexpr int MAX_SRC_PATH_LENGTH = 4096;
 		char src_path[MAX_SRC_PATH_LENGTH];
@@ -673,10 +672,10 @@ const char *RuntimeConfiguration::CONFIGURATION_FILE_NAME = "lib/misc/configurat
 
 const RuntimeConfiguration::logs_t LOGS({
 											CLogInfo("syslog", "СИСТЕМНЫЙ"),
-											CLogInfo("errlog.txt", "ОШИБКИ МИРА"),
-											CLogInfo("imlog.txt", "ИНГРЕДИЕНТНАЯ МАГИЯ"),
-											CLogInfo("msdp.txt", "лог MSDP пакетов"),
-											CLogInfo("money.txt", "лог обращения денег")
+											CLogInfo("log/errlog.txt", "ОШИБКИ МИРА"),
+											CLogInfo("log/imlog.txt", "ИНГРЕДИЕНТНАЯ МАГИЯ"),
+											CLogInfo("log/msdp.txt", "лог MSDP пакетов"),
+											CLogInfo("log/money.txt", "лог обращения денег")
 										});
 
 constexpr std::size_t RuntimeConfiguration::OUTPUT_QUEUE_SIZE;

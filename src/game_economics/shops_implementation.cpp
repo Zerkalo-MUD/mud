@@ -16,7 +16,6 @@
 #include "entities/zone.h"
 #include "utils/objects_filter.h"
 
-#include <boost/algorithm/string.hpp>
 #include <third_party_libs/fmt/include/fmt/format.h>
 #include <sstream>
 
@@ -75,7 +74,7 @@ void GoodsStorage::ObjectUIDChangeObserver::notify(ObjData &object, const int ol
 	}
 
 	m_parent.m_objects_by_uid.erase(i);
-	m_parent.m_objects_by_uid.emplace(object.get_uid(), &object);
+	m_parent.m_objects_by_uid.emplace(object.get_unique_id(), &object);
 }
 
 void GoodsStorage::add(ObjData *object) {
@@ -86,25 +85,25 @@ void GoodsStorage::add(ObjData *object) {
 		return;
 	}
 
-	const auto uid_i = m_objects_by_uid.find(object->get_uid());
+	const auto uid_i = m_objects_by_uid.find(object->get_unique_id());
 	if (uid_i != m_objects_by_uid.end()) {
-		log("LOGIC ERROR: Try to add object at ptr %p with UID %d but such UID already presented for the object at address %p. "
+		log("LOGIC ERROR: Try to add object at ptr %p with UID %ld but such UID already presented for the object at address %p. "
 			"Won't do anything. VNUM of the addee object: %d; VNUM of the presented object: %d.",
-			object, object->get_uid(), uid_i->second, object->get_vnum(), uid_i->second->get_vnum());
+			object, object->get_unique_id(), uid_i->second, object->get_vnum(), uid_i->second->get_vnum());
 		return;
 	}
 
 	m_activities.emplace(object, static_cast<int>(time(nullptr)));
-	m_objects_by_uid.emplace(object->get_uid(), object);
-	object->subscribe_for_uid_change(m_object_uid_change_observer);
+	m_objects_by_uid.emplace(object->get_unique_id(), object);
+	object->subscribe_for_unique_id_change(m_object_uid_change_observer);
 }
 
 void GoodsStorage::remove(ObjData *object) {
 	std::stringstream error;
 
-	object->unsubscribe_from_uid_change(m_object_uid_change_observer);
+	object->unsubscribe_from_unique_id_change(m_object_uid_change_observer);
 
-	const auto uid = object->get_uid();
+	const auto uid = object->get_unique_id();
 	const auto object_by_uid_i = m_objects_by_uid.find(uid);
 	if (object_by_uid_i != m_objects_by_uid.end()) {
 		m_objects_by_uid.erase(object_by_uid_i);
@@ -139,7 +138,7 @@ ObjData *GoodsStorage::get_by_uid(const int uid) const {
 void GoodsStorage::clear() {
 	m_activities.clear();
 	for (const auto &uid_pair : m_objects_by_uid) {
-		uid_pair.second->unsubscribe_from_uid_change(m_object_uid_change_observer);
+		uid_pair.second->unsubscribe_from_unique_id_change(m_object_uid_change_observer);
 	}
 	m_objects_by_uid.clear();
 }
@@ -149,7 +148,7 @@ const std::string &ItemNode::get_item_name(int keeper_vnum, int pad /*= 0*/) con
 	if (desc_i != m_descs.end()) {
 		return desc_i->second.PNames[pad];
 	} else {
-		const auto rnum = obj_proto.rnum(m_vnum);
+		const auto rnum = obj_proto.get_rnum(m_vnum);
 		const static std::string wrong_vnum = "<unknown VNUM>";
 		if (-1 == rnum) {
 			return wrong_vnum;
@@ -290,7 +289,7 @@ void shop_node::process_buy(CharData *ch, CharData *keeper, char *argument) {
 		obj_from_proto = false;
 	}
 
-	auto proto = (tmp_obj ? tmp_obj : get_object_prototype(item->vnum()).get());
+	auto proto = (tmp_obj ? tmp_obj : GetObjectPrototype(item->vnum()).get());
 	if (!proto) {
 		log("SYSERROR : не удалось прочитать прототип (%s:%d)", __FILE__, __LINE__);
 		SendMsgToChar("Ошибочка вышла.\r\n", ch);
@@ -319,8 +318,8 @@ void shop_node::process_buy(CharData *ch, CharData *keeper, char *argument) {
 		return;
 	}
 
-	if ((IS_CARRYING_N(ch) + 1 > CAN_CARRY_N(ch))
-		|| ((IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(proto)) > CAN_CARRY_W(ch))) {
+	if ((ch->GetCarryingQuantity() + 1 > CAN_CARRY_N(ch))
+		|| ((ch->GetCarryingWeight() + GET_OBJ_WEIGHT(proto)) > CAN_CARRY_W(ch))) {
 		const auto &name = obj_from_proto
 						   ? item->get_item_name(GET_MOB_VNUM(keeper), 3).c_str()
 						   : tmp_obj->get_short_description().c_str();
@@ -339,13 +338,13 @@ void shop_node::process_buy(CharData *ch, CharData *keeper, char *argument) {
 	ObjData *obj = 0;
 	while (bought < item_count
 		&& check_money(ch, price, currency)
-		&& IS_CARRYING_N(ch) < CAN_CARRY_N(ch)
-		&& IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(proto) <= CAN_CARRY_W(ch)
+		&& ch->GetCarryingQuantity() < CAN_CARRY_N(ch)
+		&& ch->GetCarryingWeight() + GET_OBJ_WEIGHT(proto) <= CAN_CARRY_W(ch)
 		&& (bought < sell_count || sell_count == -1)) {
 		if (!item->empty()) {
 			obj = get_from_shelve(item_index);
 			if (obj != nullptr) {
-				item->remove_uid(obj->get_uid());
+				item->remove_uid(obj->get_unique_id());
 				if (item->empty()) {
 					m_items_list.remove(item_index);
 				}
@@ -414,9 +413,9 @@ void shop_node::process_buy(CharData *ch, CharData *keeper, char *argument) {
 		if (!check_money(ch, price, currency)) {
 			snprintf(buf, kMaxStringLength, "Мошенни%s, ты можешь оплатить только %d.",
 					 IS_MALE(ch) ? "к" : "ца", bought);
-		} else if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)) {
+		} else if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)) {
 			snprintf(buf, kMaxStringLength, "Ты сможешь унести только %d.", bought);
-		} else if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(proto) > CAN_CARRY_W(ch)) {
+		} else if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(proto) > CAN_CARRY_W(ch)) {
 			snprintf(buf, kMaxStringLength, "Ты сможешь поднять только %d.", bought);
 		} else if (bought > 0) {
 			snprintf(buf, kMaxStringLength, "Я продам тебе только %d.", bought);
@@ -480,7 +479,7 @@ void shop_node::print_shop_list(CharData *ch, const std::string &arg, int keeper
 		// чтобы не было в списках всяких "гриб @n1"
 		if (item->empty()) {
 			print_value = item->get_item_name(keeper_vnum);
-			const auto rnum = obj_proto.rnum(item->vnum());
+			const auto rnum = obj_proto.get_rnum(item->vnum());
 			if (GET_OBJ_TYPE(obj_proto[rnum]) == EObjType::kLiquidContainer) {
 				print_value += " с " + std::string(drinknames[GET_OBJ_VAL(obj_proto[rnum], 2)]);
 			}
@@ -544,7 +543,7 @@ void shop_node::filter_shop_list(CharData *ch, char *argument, int keeper_vnum) 
 		// чтобы не было в списках всяких "гриб @n1"
 		if (item->empty()) {
 			print_value = item->get_item_name(keeper_vnum);
-			const auto rnum = obj_proto.rnum(item->vnum());
+			const auto rnum = obj_proto.get_rnum(item->vnum());
 			if (GET_OBJ_TYPE(obj_proto[rnum]) == EObjType::kLiquidContainer) {
 				print_value += " с " + std::string(drinknames[GET_OBJ_VAL(obj_proto[rnum], 2)]);
 			}
@@ -554,6 +553,7 @@ void shop_node::filter_shop_list(CharData *ch, char *argument, int keeper_vnum) 
 						 num, numToShow, print_value, item->get_price());
 			} 
 			if (tmp_obj) {
+				obj_proto.dec_number(tmp_obj->get_rnum());
 				world_objects.remove(tmp_obj);
 			}
 		} else {
@@ -715,7 +715,7 @@ void shop_node::process_ident(CharData *ch, CharData *keeper, char *argument, co
 			item->replace_descs(tmp_obj, vnum);
 			ident_obj = tmp_obj;
 		} else {
-			const auto rnum = obj_proto.rnum(item->vnum());
+			const auto rnum = obj_proto.get_rnum(item->vnum());
 			const auto object = world_objects.create_raw_from_prototype_by_rnum(rnum);
 			ident_obj = tmp_obj = object.get();
 		}
@@ -858,7 +858,7 @@ unsigned shop_node::get_item_num(std::string &item_name, int keeper_vnum) const 
 		const auto &item = m_items_list.node(i);
 		if (item->empty()) {
 			name_value = utils::RemoveColors(item->get_item_name(keeper_vnum));
-			const auto rnum = obj_proto.rnum(item->vnum());
+			const auto rnum = obj_proto.get_rnum(item->vnum());
 			if (GET_OBJ_TYPE(obj_proto[rnum]) == EObjType::kLiquidContainer) {
 				name_value += " " + std::string(drinknames[GET_OBJ_VAL(obj_proto[rnum], 2)]);
 			}
@@ -887,7 +887,7 @@ int shop_node::can_sell_count(const int item_index) const {
 	if (!item->empty()) {
 		return static_cast<int>(item->size());
 	} else {
-		const auto rnum = obj_proto.rnum(item->vnum());
+		const auto rnum = obj_proto.get_rnum(item->vnum());
 		int numToSell = obj_proto[rnum]->get_max_in_world();
 		if (numToSell == 0) {
 			return numToSell;
@@ -917,16 +917,14 @@ void shop_node::put_item_to_shop(ObjData *obj) {
 
 				if (GET_OBJ_TYPE(obj) != EObjType::kMagicIngredient //а у них всех один рнум
 					|| obj->get_short_description() == tmp_obj->get_short_description()) {
-					item->add_uid(obj->get_uid());
+					item->add_uid(obj->get_unique_id());
 					put_to_storage(obj);
-
 					return;
 				}
 			}
 		}
 	}
-
-	add_item(obj->get_vnum(), obj->get_cost(), obj->get_uid());
+	add_item(obj->get_vnum(), obj->get_cost(), obj->get_unique_id());
 
 	put_to_storage(obj);
 }
@@ -1032,9 +1030,7 @@ void shop_node::do_shop_cmd(CharData *ch, CharData *keeper, ObjData *obj, std::s
 			return;
 		} else {
 			RemoveObjFromChar(obj);
-			tell_to_char(keeper,
-						 ch,
-						 ("Получи за " + std::string(GET_OBJ_PNAME(obj, 3)) + " " + price_to_show + ".").c_str());
+			tell_to_char(keeper, ch, ("Получи за " + std::string(GET_OBJ_PNAME(obj, 3)) + " " + price_to_show + ".").c_str());
 			ch->add_gold(buy_price);
 			put_item_to_shop(obj);
 		}

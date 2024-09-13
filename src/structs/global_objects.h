@@ -11,7 +11,6 @@
 #include "feats.h"
 #include "utils/logger.h"
 #include "heartbeat.h"
-#include "speedwalks.h"
 #include "cmd_god/shutdown_parameters.h"
 #include "cmd_god/inspect.h"
 #include "game_economics/shops_implementation.h"
@@ -22,6 +21,7 @@
 #include "entities/zone.h"
 #include "game_quests/daily_quest.h"
 #include "game_skills/skills_info.h"
+#include "game_skills/townportal.h"
 #include "strengthening.h"
 #include "boot/cfg_manager.h"
 
@@ -60,22 +60,22 @@ class GlobalObjects {
 	static ShopExt::ShopListType &Shops();
 	static Characters &characters();
 	static ShutdownParameters &shutdown_parameters();
-	static Speedwalks &speedwalks();
-	static InspReqListType &inspect_list();
+	static InspectRequestDeque &InspectRequests();
 	static SetAllInspReqListType &setall_inspect_list();
 	static BanList *&ban();
 	static Heartbeat &heartbeat();
 	static influxdb::Sender &stats_sender();
 	static OutputThread &output_thread();
 	static ZoneTable &zone_table();
+  	static RunestoneRoster &Runestones();
 
-	static Celebrates::CelebrateList &mono_celebrates();
-	static Celebrates::CelebrateList &poly_celebrates();
-	static Celebrates::CelebrateList &real_celebrates();
-	static Celebrates::CelebrateMobs &attached_mobs();
-	static Celebrates::CelebrateMobs &loaded_mobs();
-	static Celebrates::CelebrateObjs &attached_objs();
-	static Celebrates::CelebrateObjs &loaded_objs();
+	static celebrates::CelebrateList &mono_celebrates();
+	static celebrates::CelebrateList &poly_celebrates();
+	static celebrates::CelebrateList &real_celebrates();
+	static celebrates::CelebrateMobs &attached_mobs();
+	static celebrates::CelebrateMobs &loaded_mobs();
+	static celebrates::CelebrateObjs &attached_objs();
+	static celebrates::CelebrateObjs &loaded_objs();
 
 	static GlobalTriggersStorage &trigger_list();
 	static BloodyInfoMap &bloody_map();

@@ -227,7 +227,7 @@ void mredit_parse(DescriptorData *d, char *arg) {
 
 		case MREDIT_OBJ_PROTO:
 			i = atoi(sagr.c_str());
-			if (real_object(i) < 0) {
+			if (GetObjRnum(i) < 0) {
 				SendMsgToChar("Прототип выбранного вами объекта не существует.\r\n", d->character.get());
 			} else {
 				trec->obj_proto = i;
@@ -321,7 +321,7 @@ void mredit_parse(DescriptorData *d, char *arg) {
 				trec->parts[OLC_NUM(d)].proto = 0;
 				trec->parts[OLC_NUM(d)].min_weight = 0;
 				trec->parts[OLC_NUM(d)].min_power = 0;
-			} else if (real_object(i) < 0) {
+			} else if (GetObjRnum(i) < 0) {
 				SendMsgToChar("Прототип выбранного вами ингредиента не существует.\r\n", d->character.get());
 			} else {
 				trec->parts[OLC_NUM(d)].proto = i;
@@ -419,13 +419,13 @@ void mredit_disp_ingr_menu(DescriptorData *d) {
 	int index = OLC_NUM(d);
 	trec = OLC_MREC(d);
 	get_char_cols(d->character.get());
-	auto tobj = get_object_prototype(trec->obj_proto);
+	auto tobj = GetObjectPrototype(trec->obj_proto);
 	if (trec->obj_proto && tobj) {
 		objname = tobj->get_PName(0);
 	} else {
 		objname = "Нет";
 	}
-	tobj = get_object_prototype(trec->parts[index].proto);
+	tobj = GetObjectPrototype(trec->parts[index].proto);
 	if (trec->parts[index].proto && tobj) {
 		ingrname = tobj->get_PName(0);
 	} else {
@@ -458,7 +458,7 @@ void mredit_disp_menu(DescriptorData *d) {
 	string tmpstr, objname, skillname;
 	trec = OLC_MREC(d);
 	get_char_cols(d->character.get());
-	auto tobj = get_object_prototype(trec->obj_proto);
+	auto tobj = GetObjectPrototype(trec->obj_proto);
 	if (trec->obj_proto && tobj) {
 		objname = tobj->get_PName(0);
 	} else {
@@ -488,7 +488,7 @@ void mredit_disp_menu(DescriptorData *d) {
 			grn, nrm, yel, (trec->locked ? "Да" : "Нет"));
 	tmpstr = string(tmpbuf);
 	for (int i = 0; i < MAX_PARTS; i++) {
-		tobj = get_object_prototype(trec->parts[i].proto);
+		tobj = GetObjectPrototype(trec->parts[i].proto);
 		if (trec->parts[i].proto && tobj) {
 			objname = tobj->get_PName(0);
 		} else {
@@ -523,7 +523,7 @@ void do_list_make(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/
 		skill_name = "Нет";
 		obj_name = str_dup("Нет");
 		trec = make_recepts[i];
-		auto obj = get_object_prototype(trec->obj_proto);
+		auto obj = GetObjectPrototype(trec->obj_proto);
 		if (obj) {
 			obj_name = str_dup(obj->get_PName(0).substr(0, 39).c_str());
 			utils::RemoveColors(obj_name);
@@ -540,7 +540,7 @@ void do_list_make(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/
 		tmpstr += string(tmpbuf);
 		for (int j = 0; j < MAX_PARTS; j++) {
 			if (trec->parts[j].proto != 0) {
-				obj = get_object_prototype(trec->parts[j].proto);
+				obj = GetObjectPrototype(trec->parts[j].proto);
 				if (obj) {
 					obj_name = str_dup(obj->get_PName(0).substr(0, 34).c_str());
 					utils::RemoveColors(obj_name);
@@ -616,7 +616,7 @@ void do_make_item(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 	if (!*tmpbuf) {
 		// Выводим тут список предметов которые можем сделать.
 		for (size_t i = 0; i < canlist.size(); i++) {
-			auto tobj = get_object_prototype(canlist[i]->obj_proto);
+			auto tobj = GetObjectPrototype(canlist[i]->obj_proto);
 			if (!tobj)
 				return;
 			sprintf(tmpbuf, "%zd) %s\r\n", i + 1, tobj->get_PName(0).c_str());
@@ -806,11 +806,11 @@ void go_create_weapon(CharData *ch, ObjData *obj, int obj_type, ESkill skill) {
 				act(to_room, false, ch, tobj.get(), 0, kToRoom);
 			}
 
-			if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)) {
+			if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)) {
 				SendMsgToChar("Вы не сможете унести столько предметов.\r\n", ch);
 				PlaceObjToRoom(tobj.get(), ch->in_room);
 				CheckObjDecay(tobj.get());
-			} else if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(tobj) > CAN_CARRY_W(ch)) {
+			} else if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(tobj) > CAN_CARRY_W(ch)) {
 				SendMsgToChar("Вы не сможете унести такой вес.\r\n", ch);
 				PlaceObjToRoom(tobj.get(), ch->in_room);
 				CheckObjDecay(tobj.get());
@@ -958,7 +958,7 @@ void do_transform_weapon(CharData *ch, char *argument, int/* cmd*/, int subcmd) 
 				for (i = 0, found = true; i < MAX_PROTO; i++) {
 					if (created_item[obj_type].proto[i]
 						&& !proto[i]) {
-						rnum = real_object(created_item[obj_type].proto[i]);
+						rnum = GetObjRnum(created_item[obj_type].proto[i]);
 						if (rnum < 0) {
 							act("У вас нет необходимого ингредиента.", false, ch, 0, 0, kToChar);
 						} else {
@@ -997,7 +997,7 @@ void do_transform_weapon(CharData *ch, char *argument, int/* cmd*/, int subcmd) 
 			for (i = 0, found = true; i < MAX_PROTO; i++) {
 				if (created_item[obj_type].proto[i]
 					&& !proto[i]) {
-					rnum = real_object(created_item[obj_type].proto[i]);
+					rnum = GetObjRnum(created_item[obj_type].proto[i]);
 					if (rnum < 0) {
 						act("У вас нет необходимого ингредиента.", false, ch, 0, 0, kToChar);
 					} else {
@@ -1151,7 +1151,7 @@ MakeRecept *MakeReceptList::get_by_name(string &rname) {
 	}
 	int j = 0;
 	while (p != recepts.end()) {
-		auto tobj = get_object_prototype((*p)->obj_proto);
+		auto tobj = GetObjectPrototype((*p)->obj_proto);
 		if (!tobj) {
 			return 0;
 		}
@@ -1231,7 +1231,7 @@ int MakeRecept::can_make(CharData *ch) {
 		if (parts[i].proto == 0) {
 			break;
 		}
-		if (real_object(parts[i].proto) < 0)
+		if (GetObjRnum(parts[i].proto) < 0)
 			return (false);
 		//SendMsgToChar("Образец был невозвратимо утерян.\r\n",ch); //леший знает чего тут надо писать
 		if (!(ingrobj = get_obj_in_list_ingr(parts[i].proto, ch->carrying))) {
@@ -1597,7 +1597,7 @@ int MakeRecept::make(CharData *ch) {
 		SendMsgToChar("Вы слишком устали и вам ничего не хочется делать.\r\n", ch);
 		return (false);
 	}
-	auto tobj = get_object_prototype(obj_proto);
+	auto tobj = GetObjectPrototype(obj_proto);
 	if (!tobj) {
 		return 0;
 	}
@@ -1881,7 +1881,7 @@ int MakeRecept::make(CharData *ch) {
 			GET_HIT(ch) -= dam;
 			update_pos(ch);
 			char_dam_message(dam, ch, ch, 0);
-			if (GET_POS(ch) == EPosition::kDead) {
+			if (ch->GetPosition() == EPosition::kDead) {
 				// Убился веником.
 				if (!ch->IsNpc()) {
 					sprintf(tmpbuf, "%s killed by a crafting at %s",
@@ -2034,7 +2034,7 @@ int MakeRecept::make(CharData *ch) {
 		free(tagchar);
 	};
 	// простановка мортов при шитье
-	float total_weight = count_mort_requred(obj.get()) * 7 / 10;
+	auto total_weight = count_mort_requred(obj.get()) * 7 / 10;
 
 	if (total_weight > 35) {
 		obj->set_minimum_remorts(12);
@@ -2053,10 +2053,10 @@ int MakeRecept::make(CharData *ch) {
 	// Пишем производителя в поле.
 	obj->set_crafter_uid(GET_UNIQUE(ch));
 	// 9. Проверяем минимум 2
-	if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)) {
+	if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)) {
 		SendMsgToChar("Вы не сможете унести столько предметов.\r\n", ch);
 		PlaceObjToRoom(obj.get(), ch->in_room);
-	} else if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj) > CAN_CARRY_W(ch)) {
+	} else if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj) > CAN_CARRY_W(ch)) {
 		SendMsgToChar("Вы не сможете унести такой вес.\r\n", ch);
 		PlaceObjToRoom(obj.get(), ch->in_room);
 	} else {
@@ -2080,7 +2080,7 @@ int MakeRecept::load_from_str(string &rstr) {
 	obj_proto = atoi((rstr.substr(0, rstr.find(" "))).c_str());
 	rstr = rstr.substr(rstr.find(" ") + 1);
 
-	if (real_object(obj_proto) < 0) {
+	if (GetObjRnum(obj_proto) < 0) {
 		// Обнаружен несуществующий прототип объекта.
 		sprintf(tmpbuf, "MakeRecept::Unfound object proto %d", obj_proto);
 		mudlog(tmpbuf, LGH, kLvlImmortal, SYSLOG, true);
@@ -2096,7 +2096,7 @@ int MakeRecept::load_from_str(string &rstr) {
 		if (parts[i].proto == 0) {
 			break;
 		}
-		if (real_object(parts[i].proto) < 0) {
+		if (GetObjRnum(parts[i].proto) < 0) {
 			// Обнаружен несуществующий прототип компонента.
 			sprintf(tmpbuf, "MakeRecept::Unfound item part %d for %d", obj_proto, parts[i].proto);
 			mudlog(tmpbuf, LGH, kLvlImmortal, SYSLOG, true);

@@ -10,7 +10,6 @@
 #include "house.h"
 #include "game_economics/shops_implementation.h"
 
-#include <boost/algorithm/string.hpp>
 
 extern int do_social(CharData *ch, char *argument);    // implemented in the act.social.cpp
 extern void mort_show_obj_values(const ObjData *obj, CharData *ch, int fullness, bool enhansed_scroll);
@@ -150,7 +149,7 @@ void load(bool reload) {
 			shop->clear_store();
 
 			for (const auto &mob_vnum : shop->mob_vnums()) {
-				int mob_rnum = real_mobile(mob_vnum);
+				int mob_rnum = GetMobRnum(mob_vnum);
 				if (mob_rnum >= 0) {
 					mob_index[mob_rnum].func = nullptr;
 				}
@@ -243,7 +242,7 @@ void load(bool reload) {
 			tmp_shop->add_mob_vnum(mob_vnum);
 			// проверяем и сетим мобу спешиал
 			// даже если дальше магаз не залоадится - моб будет выдавать ошибку на магазинные спешиалы
-			auto mob_rnum = real_mobile(mob_vnum);
+			auto mob_rnum = GetMobRnum(mob_vnum);
 			if (mob_rnum >= 0) {
 				if (mob_index[mob_rnum].func
 					&& mob_index[mob_rnum].func != shop_ext) {
@@ -272,7 +271,7 @@ void load(bool reload) {
 			}
 
 			// проверяем шмотку
-			int item_rnum = real_object(item_vnum);
+			int item_rnum = GetObjRnum(item_vnum);
 			if (item_rnum < 0) {
 				snprintf(buf, kMaxStringLength, "...incorrect item_vnum=%d", item_vnum);
 				mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
@@ -292,7 +291,7 @@ void load(bool reload) {
 				if ((*it)->_id == itemSetId) {
 					for (unsigned i = 0; i < (*it)->item_list.size(); i++) {
 						// проверяем шмотку
-						int item_rnum = real_object((*it)->item_list[i].item_vnum);
+						int item_rnum = GetObjRnum((*it)->item_list[i].item_vnum);
 						if (item_rnum < 0) {
 							snprintf(buf,
 									 kMaxStringLength,
@@ -474,7 +473,7 @@ void town_shop_keepers() {
 			&& zone_list.find(world[ch->in_room]->zone_rn) == zone_list.end()) {
 			int rnum_start, rnum_end;
 			if (GetZoneRooms(world[ch->in_room]->zone_rn, &rnum_start, &rnum_end)) {
-				CharData *mob = read_mobile(1901, VIRTUAL);
+				CharData *mob = ReadMobile(1901, kVirtual);
 				if (mob) {
 					PlaceCharToRoom(mob, number(rnum_start, rnum_end));
 				}
@@ -528,11 +527,21 @@ void DoStoreShop(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 }
 
 void do_shops_list(CharData *ch) {
-	DictionaryPtr dic = DictionaryPtr(new Dictionary(SHOP));
+/*	DictionaryPtr dic = DictionaryPtr(new Dictionary(SHOP));
 	size_t n = dic->Size();
 	std::ostringstream out;
 	for (size_t i = 0; i < n; i++) {
 		out << std::to_string(i + 1) << " " << dic->GetNameByNID(i) << " " << dic->GetTIDByNID(i) + "\r\n";
+	}
+*/
+	std::ostringstream out;
+
+	for (const auto &shop : shop_list) {
+		out << shop->GetDictionaryName() << "\r\nvnum : ";
+		for (const auto &mob_vnum : shop->mob_vnums()) {
+			out << mob_vnum << " ";
+		}
+		out << "\r\n";
 	}
 	SendMsgToChar(out.str().c_str(), ch);
 }

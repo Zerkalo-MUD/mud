@@ -92,11 +92,11 @@ struct AttackHitType {
 #define MANUAL_SPELL(spellname)    spellname(level, caster, cvict, ovict);
 
 void SpellCreateWater(int/* level*/, CharData *ch, CharData *victim, ObjData *obj);
-void SpellRecall(int/* level*/, CharData *ch, CharData *victim, ObjData* /* obj*/);
-void SpellTeleport(int /* level */, CharData *ch, CharData */*victim*/, ObjData */*obj*/);
-void SpellSummon(int /*level*/, CharData *ch, CharData *victim, ObjData */*obj*/);
-void SpellRelocate(int/* level*/, CharData *ch, CharData *victim, ObjData* /* obj*/);
-void SpellPortal(int/* level*/, CharData *ch, CharData *victim, ObjData* /* obj*/);
+void SpellRecall(CharData *ch, CharData *victim);
+void SpellTeleport(CharData *ch, CharData */*victim*/);
+void SpellSummon(CharData *ch, CharData *victim);
+void SpellRelocate(CharData *ch, CharData *victim);
+void SpellPortal(CharData *ch, CharData *victim);
 void SpellLocateObject(int level, CharData *ch, CharData* /*victim*/, ObjData *obj);
 void SpellCharm(int/* level*/, CharData *ch, CharData *victim, ObjData* /* obj*/);
 void SpellInformation(int level, CharData *ch, CharData *victim, ObjData *obj);
@@ -111,10 +111,10 @@ void SpellSacrifice(int/* level*/, CharData *ch, CharData *victim, ObjData* /*ob
 void SpellForbidden(int level, CharData *ch, CharData *victim, ObjData *obj);
 void SpellHolystrike(int/* level*/, CharData *ch, CharData* /*victim*/, ObjData* /*obj*/);
 void SkillIdentify(int level, CharData *ch, CharData *victim, ObjData *obj);
-void SpellSummonAngel(int/* level*/, CharData *ch, CharData* /*victim*/, ObjData* /*obj*/);
 void SpellVampirism(int/* level*/, CharData* /*ch*/, CharData* /*victim*/, ObjData* /*obj*/);
-void SpellMentalShadow(int/* level*/, CharData *ch, CharData* /*victim*/, ObjData* /*obj*/);
-
+void SpellMentalShadow(CharData *ch);
+void SpellSummonAngel(CharData *ch);
+void RemovePortalGate(RoomRnum rnum);
 // basic magic calling functions
 
 ESpell FixNameAndFindSpellId(char *name);
@@ -127,13 +127,12 @@ bool CanGetSpell(CharData *ch, ESpell spell_id);
 bool CanGetSpell(const CharData *ch, ESpell spell_id, int req_lvl);
 int CalcMinSpellLvl(const CharData *ch, ESpell spell_id, int req_lvl);
 int CalcMinSpellLvl(const CharData *ch, ESpell spell_id);
+int CalcMinRuneSpellLvl(const CharData *ch, ESpell spell_id);
 ESkill GetMagicSkillId(ESpell spell_id);
 int CheckRecipeValues(CharData *ch, ESpell spell_id, ESpellType spell_type, int showrecipe);
 int CheckRecipeItems(CharData *ch, ESpell spell_id, ESpellType spell_type, int extract, CharData *tch = nullptr);
 
-//Polud статистика использования заклинаний
 typedef std::map<ESpell, int> SpellCountType;
-
 namespace SpellUsage {
 	extern bool is_active;
 	extern time_t start;
@@ -141,7 +140,6 @@ namespace SpellUsage {
 	void save();
 	void clear();
 };
-//-Polud
 
 //#define CALC_SUCCESS(modi, perc)         ((modi)-100+(perc))
 

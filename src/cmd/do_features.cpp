@@ -1,6 +1,6 @@
 #include "color.h"
 #include "handler.h"
-#include "entities/player_races.h"
+#include "game_mechanics/player_races.h"
 #include "structs/global_objects.h"
 
 int feat_slot_lvl(int remort, int slot_for_remort, int slot) {
@@ -51,7 +51,7 @@ void DisplayFeats(CharData *ch, CharData *vict, bool all_feats) {
 	for (i = 1; i < max_slot; i++) {
 		if (all_feats) {
 			// на каком уровне будет слот i?
-			j = feat_slot_lvl(GET_REMORT(ch), MUD::Class(ch->GetClass()).GetRemortsNumForFeatSlot(), i);
+			j = feat_slot_lvl(ch->get_remort(), MUD::Class(ch->GetClass()).GetRemortsNumForFeatSlot(), i);
 			sprintf(names[i], "\r\nКруг %-2d (%-2d уровень):\r\n", i + 1, j);
 		} else {
 			*names[i] = '\0';
@@ -156,7 +156,7 @@ void DisplayFeats(CharData *ch, CharData *vict, bool all_feats) {
 				case EFeat::kDoubleThrower:
 				case EFeat::kTripleThrower:
 				case EFeat::kSerratedBlade:
-					if (PRF_FLAGGED(ch, GetPrfWithFeatNumber(feat.GetId()))) {
+					if (ch->IsFlagged(GetPrfWithFeatNumber(feat.GetId()))) {
 						sprintf(buf, "[-%s*%s-] ", CCIGRN(vict, C_NRM), CCNRM(vict, C_NRM));
 					} else {
 						sprintf(buf, "[-:-] ");

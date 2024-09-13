@@ -16,7 +16,7 @@ class Padding {
 		m_padding(padding) {
 	}
 
-	const auto length() const { return m_length; }
+	auto length() const { return m_length; }
 	std::ostream &output(std::ostream &os) const;
 
  protected:
@@ -54,12 +54,12 @@ class AbstractStringWriter {
 
 class DelegatedStringWriter : public AbstractStringWriter {
  public:
-	DelegatedStringWriter(char *&managed) : m_delegated_string_(managed) {}
-	virtual const char *get_string() const override { return m_delegated_string_; }
-	virtual void set_string(const char *string) override;
-	virtual void append_string(const char *string) override;
-	virtual size_t length() const override { return m_delegated_string_ ? strlen(m_delegated_string_) : 0; }
-	virtual void clear() override;
+	explicit DelegatedStringWriter(char *&managed) : m_delegated_string_(managed) {}
+	[[nodiscard]] const char *get_string() const final { return m_delegated_string_; }
+	void set_string(const char *string) final;
+	void append_string(const char *string) final;
+	[[nodiscard]] size_t length() const final { return m_delegated_string_ ? strlen(m_delegated_string_) : 0; }
+	void clear() override;
 
  private:
 	char *&m_delegated_string_;
@@ -67,15 +67,15 @@ class DelegatedStringWriter : public AbstractStringWriter {
 
 class AbstractStdStringWriter : public AbstractStringWriter {
  public:
-	virtual const char *get_string() const override { return string().c_str(); }
-	virtual void set_string(const char *string) override { this->string() = string; }
-	virtual void append_string(const char *string) override { this->string() += string; }
-	virtual size_t length() const override { return string().length(); }
-	virtual void clear() override { string().clear(); }
+	[[nodiscard]] const char *get_string() const override { return string().c_str(); }
+	void set_string(const char *string) override { this->string() = string; }
+	void append_string(const char *string) override { this->string() += string; }
+	[[nodiscard]] size_t length() const override { return string().length(); }
+	void clear() override { string().clear(); }
 
  private:
 	virtual std::string &string() = 0;
-	virtual const std::string &string() const = 0;
+	[[nodiscard]] virtual const std::string &string() const = 0;
 };
 
 class StdStringWriter : public AbstractStdStringWriter {
@@ -120,6 +120,15 @@ void ConvertToLow(char *text);
  */
 std::vector<std::string> Split(const std::string s, char delimiter = ' ');
 
+/**
+ * Разделить строку на элементы по разделителю и записать в вектор tokens.
+ * аналог 	boost::split(option_list, options, boost::is_any_of(", "), boost::token_compress_on);
+ * @param tokens - приемный вектор.
+ * @param s - разделяемая строка.
+ * @param any - символы-разделители, пример ",- "
+ */
+std::vector<std::string> SplitAny(const std::string s, std::string any);
+
 // аналог one_argument для string
 // s - разделяемая строка
 // возвращает первое слово, в remains остаток, если нет пробелов то строки пустые
@@ -142,6 +151,7 @@ void TrimRight(std::string &s);
  * Обрезать пробелы справа и слева.
  */
 void Trim(std::string &s);
+void Trim(char *s);
 
 /**
  * Обрезать пробелы слева, вернуть копию.
@@ -227,6 +237,15 @@ std::string SubstStrToLow(std::string s);
  */
 std::string SubstStrToUpper(std::string s);
 
+
+/**
+ * Заменить первое вхождения указанной подстроки на другую строку.
+ * @param s - исходная строка.
+ * @param toSearch - искомая подстрока.
+ * @param replacer - строка-заменитель.
+ */
+void ReplaceFirst(std::string &s, const std::string &toSearch, const std::string &replacer);
+
 /**
  * Заменить вхождения указанной подстроки на другую строку.
  * @param s - исходная строка.
@@ -241,6 +260,16 @@ void ReplaceAll(std::string &s, const std::string &toSearch, const std::string &
  * @param toSearch - искомая подстрока.
  */
 void EraseAll(std::string &s, const std::string &toSearch);
+
+/**
+ * Удалить все указанные символы в строке.
+ * @param s - исходная строка.
+ * @param any - список символов.
+ */
+std::string EraseAllAny(const std::string s, const std::string any);
+
+// убрать в строке s повторяющиеся подряд символы ch
+std::string CompressSymbol(std::string s, const char ch);
 
 } // namespace utils
 

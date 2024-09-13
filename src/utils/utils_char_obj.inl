@@ -33,7 +33,7 @@ inline bool CAN_SEE_OBJ(const CharData *sub, const ObjData *obj) {
 				|| obj->get_in_obj()->get_carried_by() == sub))
 		|| MORT_CAN_SEE_OBJ(sub, obj)
 		|| (!sub->IsNpc()
-			&& PRF_FLAGGED((sub), EPrf::kHolylight)));
+			&& (sub)->IsFlagged(EPrf::kHolylight)));
 }
 
 inline const char *OBJN(const ObjData *obj, const CharData *vict, const size_t pad) {
@@ -57,11 +57,11 @@ inline bool CAN_GET_OBJ(const CharData *ch, const ObjData *obj) {
 }
 
 inline bool CanTakeObj(CharData *ch, ObjData *obj) {
-	if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)
+	if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)
 		&& GET_OBJ_TYPE(obj) != EObjType::kMoney) {
 		act("$p: Вы не могете нести столько вещей.", false, ch, obj, nullptr, kToChar);
 		return false;
-	} else if ((IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj)) > CAN_CARRY_W(ch)
+	} else if ((ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj)) > CAN_CARRY_W(ch)
 		&& GET_OBJ_TYPE(obj) != EObjType::kMoney) {
 		act("$p: Вы не в состоянии нести еще и $S.", false, ch, obj, nullptr, kToChar);
 		return false;

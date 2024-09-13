@@ -71,10 +71,8 @@ void deathtrap::activity() {
 
 			if (dmg.Process(i, i) < 0) {
 				char buf_[kMaxInputLength];
-				snprintf(buf_, sizeof(buf_),
-						 "Player %s died in slow DT (room %d)",
-						 name.c_str(), (*it)->room_vn);
-				mudlog(buf_, LGH, kLvlImmortal, SYSLOG, true);
+				snprintf(buf_, sizeof(buf_), "Player %s died in slow DT (room %d)", name.c_str(), (*it)->vnum);
+				mudlog(buf_, CMP, kLvlImmortal, SYSLOG, true);
 			}
 		}
 	}
@@ -99,7 +97,7 @@ void deathtrap::log_death_trap(CharData *ch) {
 
 // * Попадание в обычное дт.
 int deathtrap::check_death_trap(CharData *ch) {
-	if (ch->in_room != kNowhere && !PRF_FLAGGED(ch, EPrf::kCoderinfo)) {
+	if (ch->in_room != kNowhere && !ch->IsFlagged(EPrf::kCoderinfo)) {
 		if ((ROOM_FLAGGED(ch->in_room, ERoomFlag::kDeathTrap)
 			&& !IS_IMMORTAL(ch))
 			|| (real_sector(ch->in_room) == ESector::kOnlyFlying && !ch->IsNpc()

@@ -24,11 +24,12 @@
 #include "entities/world_characters.h"
 #include "structs/global_objects.h"
 #include "dg_script/dg_db_scripts.h"
+#include "game_mechanics/dungeons.h"
 
 extern const char *trig_types[], *otrig_types[], *wtrig_types[];
 extern DescriptorData *descriptor_list;
 extern int top_of_trigt;
-extern void extract_trigger(Trigger *trig);
+extern void ExtractTrigger(Trigger *trig);
 
 // prototype externally defined functions
 void free_varlist(struct TriggerVar *vd);
@@ -329,9 +330,9 @@ void TriggerDistribution(DescriptorData *d) {
 						char smallbuf[32];
 						sprintf(smallbuf, "%d", OLC_NUM(d));
 						sc->remove_trigger(smallbuf);
-						auto trig = read_trigger(real_trigger(OLC_NUM(d)));
+						auto trig = read_trigger(GetTriggerRnum(OLC_NUM(d)));
 						if (!add_trigger(ch->script.get(), trig, -1)) {
-							extract_trigger(trig);
+							ExtractTrigger(trig);
 						}
 					}
 				}
@@ -347,9 +348,9 @@ void TriggerDistribution(DescriptorData *d) {
 						char smallbuf[32];
 						sprintf(smallbuf, "%d", OLC_NUM(d));
 						sc->remove_trigger(smallbuf);
-						auto trig = read_trigger(real_trigger(OLC_NUM(d)));
+						auto trig = read_trigger(GetTriggerRnum(OLC_NUM(d)));
 						if (!add_trigger(obj_ptr->get_script().get(), trig, -1)) {
-							extract_trigger(trig);
+							ExtractTrigger(trig);
 						}
 					}
 				}
@@ -399,8 +400,9 @@ void trigedit_save(DescriptorData *d) {
 		cmd->line_num = line_num++;
 	}
 	cmd->next.reset();
+//	log("Триггер зона1 %d внум %d ласт %d", OLC_ZNUM(d), zone_table[OLC_ZNUM(d)].vnum, trig_index[zone_table[OLC_ZNUM(d)].RnumTrigsLocation.second]->vnum);
 
-	if ((trig_rnum = real_trigger(OLC_NUM(d))) != -1) {
+	if ((trig_rnum = GetTriggerRnum(OLC_NUM(d))) != -1) {
 		// Этот триггер уже есть.
 
 		// Очистка прототипа
@@ -420,8 +422,8 @@ void trigedit_save(DescriptorData *d) {
 
 				trigger->arglist.clear();
 				trigger->set_name("");
-				if (GET_TRIG_WAIT(trigger)) {
-					free(GET_TRIG_WAIT(trigger)->info);    // Причина уже обсуждалась
+				if (GET_TRIG_WAIT(trigger).time_remaining > 0) {
+					free(GET_TRIG_WAIT(trigger).info);    // Причина уже обсуждалась
 					remove_event(GET_TRIG_WAIT(trigger));
 				}
 
@@ -459,7 +461,6 @@ void trigedit_save(DescriptorData *d) {
 				proto->set_rnum(i + 1);
 			}
 		}
-
 		if (!found) {
 			trig_rnum = i;
 			CREATE(new_index[trig_rnum], 1);
@@ -472,6 +473,7 @@ void trigedit_save(DescriptorData *d) {
 		free(trig_index);
 		trig_index = new_index;
 		top_of_trigt++;
+		zone_table[OLC_ZNUM(d)].RnumTrigsLocation.second++;
 
 		// HERE IT HAS TO GO THROUGH AND FIX ALL SCRIPTS/TRIGS OF HIGHER RNUM
 		trigger_list.shift_rnums_from(trig_rnum);
@@ -494,13 +496,12 @@ void trigedit_save(DescriptorData *d) {
 	TriggerDistribution(d);
 	zone = zone_table[OLC_ZNUM(d)].vnum;
 	top = zone_table[OLC_ZNUM(d)].top;
-
-#ifdef CIRCLE_MAC
-	sprintf(fname, "%s:%i.new", TRG_PREFIX, zone);
-#else
+	if (zone >= dungeons::kZoneStartDungeons) {
+			sprintf(buf, "Отказ сохранения зоны %d на диск.", zone);
+			mudlog(buf, CMP, kLvlGreatGod, SYSLOG, true);
+			return;
+	}
 	sprintf(fname, "%s/%i.new", TRG_PREFIX, zone);
-#endif
-
 	if (!(trig_file = fopen(fname, "w"))) {
 		snprintf(logbuf, kMaxInputLength, "SYSERR: OLC: Can't open trig file \"%s\"", fname);
 		mudlog(logbuf, BRF, MAX(kLvlBuilder, GET_INVIS_LEV(d->character)), SYSLOG, true);
@@ -508,7 +509,7 @@ void trigedit_save(DescriptorData *d) {
 	}
 
 	for (i = zone * 100; i <= top; i++) {
-		if ((trig_rnum = real_trigger(i)) != -1) {
+		if ((trig_rnum = GetTriggerRnum(i)) != -1) {
 			trig = trig_index[trig_rnum]->proto;
 
 			if (fprintf(trig_file, "#%d\n", i) < 0) {
@@ -540,7 +541,8 @@ void trigedit_save(DescriptorData *d) {
 			}
 
 			if (!buf[0]) {
-				strcpy(buf, "* Empty script");
+				strcpy(buf, "* Empty script~\n");
+				fprintf(trig_file, "%s", buf);
 			} else {
 				char *p;
 				// замена одиночного '~' на '~~'
@@ -665,9 +667,9 @@ void dg_script_menu(DescriptorData *d) {
 
 	for (const auto trigger_vnum : OLC_SCRIPT(d)) {
 		sprintf(buf, "     %2d) [%s%d%s] %s%s%s", ++i, cyn,
-				trigger_vnum, nrm, cyn, trig_index[real_trigger(trigger_vnum)]->proto->get_name().c_str(), nrm);
+				trigger_vnum, nrm, cyn, trig_index[GetTriggerRnum(trigger_vnum)]->proto->get_name().c_str(), nrm);
 		SendMsgToChar(buf, d->character.get());
-		if (trig_index[real_trigger(trigger_vnum)]->proto->get_attach_type() != OLC_ITEM_TYPE(d)) {
+		if (trig_index[GetTriggerRnum(trigger_vnum)]->proto->get_attach_type() != OLC_ITEM_TYPE(d)) {
 			sprintf(buf, "   %s** Mis-matched Trigger Type **%s\r\n", grn, nrm);
 		} else {
 			sprintf(buf, "\r\n");
@@ -736,7 +738,7 @@ int dg_script_edit_parse(DescriptorData *d, char *arg) {
 				break;    // this aborts a new trigger entry
 			}
 
-			if (real_trigger(vnum) < 0) {
+			if (GetTriggerRnum(vnum) < 0) {
 				SendMsgToChar("Неверный VNUM триггера!\r\n"
 							 "Пожалуйста, выберите позицию, vnum   (ex: 1, 200):", d->character.get());
 				return 1;

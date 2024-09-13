@@ -11,9 +11,6 @@
 #include "house.h"
 #include "utils/parse.h"
 #include "utils/random.h"
-#include "game_economics/currencies.h"
-
-#include <boost/algorithm/string.hpp>
 
 // see http://stackoverflow.com/questions/20145488/cygwin-g-stdstoi-error-stoi-is-not-a-member-of-std
 #if defined __CYGWIN__
@@ -22,7 +19,6 @@
 #endif
 
 extern int max_npc_corpse_time, max_pc_corpse_time;
-extern MobRaceListType mobraces_list;
 extern void obj_to_corpse(ObjData *corpse, CharData *ch, int rnum, bool setload);
 extern ObjData::shared_ptr CreateCurrencyObj(long quantity);
 
@@ -211,7 +207,7 @@ void init() {
 		tmp_node.chance = chance;
 
 		if (obj_vnum >= 0) {
-			int obj_rnum = real_object(obj_vnum);
+			int obj_rnum = GetObjRnum(obj_vnum);
 			if (obj_rnum < 0) {
 				snprintf(buf, kMaxStringLength, "...incorrect ObjVnum=%d", obj_vnum);
 				mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
@@ -229,7 +225,7 @@ void init() {
 					return;
 				}
 				// проверяем шмотку
-				int item_rnum = real_object(item_vnum);
+				int item_rnum = GetObjRnum(item_vnum);
 				if (item_rnum < 0) {
 					snprintf(buf, kMaxStringLength, "...incorrect item_vnum=%d", item_vnum);
 					mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
@@ -280,9 +276,9 @@ void save() {
 int get_obj_to_drop(DropListType::iterator &i) {
 	std::vector<int> tmp_list;
 	for (OlistType::iterator k = i->olist.begin(), kend = i->olist.end(); k != kend; ++k) {
-		if ((GET_OBJ_MIW(obj_proto[k->second]) == ObjData::UNLIMITED_GLOBAL_MAXIMUM)
+		if ((GetObjMIW(k->second) == ObjData::UNLIMITED_GLOBAL_MAXIMUM)
 			|| (k->second >= 0
-				&& obj_proto.actual_count(k->second) < GET_OBJ_MIW(obj_proto[k->second])))
+				&& obj_proto.actual_count(k->second) < GetObjMIW(k->second)))
 			tmp_list.push_back(k->second);
 	}
 	if (!tmp_list.empty()) {
@@ -297,12 +293,12 @@ int get_obj_to_drop(DropListType::iterator &i) {
  * Если vnum отрицательный, то поиск идет по списку общего дропа.
  */
 bool check_mob(ObjData *corpse, CharData *mob) {
-	if (MOB_FLAGGED(mob, EMobFlag::kMounting))
+	if (mob->IsFlagged(EMobFlag::kMounting))
 		return false;
 	for (size_t i = 0; i < tables_drop.size(); i++) {
 		if (tables_drop[i].check_mob(GET_MOB_VNUM(mob))) {
 			int rnum;
-			if ((rnum = real_object(tables_drop[i].get_vnum())) < 0) {
+			if ((rnum = GetObjRnum(tables_drop[i].get_vnum())) < 0) {
 				log("Ошибка tdrop. Внум: %d", tables_drop[i].get_vnum());
 				return true;
 			}
@@ -336,9 +332,9 @@ bool check_mob(ObjData *corpse, CharData *mob) {
 					continue;
 				}
 				if (number(1, 1000) <= i->chance
-					&& ((GET_OBJ_MIW(obj_proto[obj_rnum]) == ObjData::UNLIMITED_GLOBAL_MAXIMUM)
+					&& ((GetObjMIW(obj_rnum) == ObjData::UNLIMITED_GLOBAL_MAXIMUM)
 						|| (obj_rnum >= 0
-							&& obj_proto.actual_count(obj_rnum) < GET_OBJ_MIW(obj_proto[obj_rnum])))) {
+							&& obj_proto.actual_count(obj_rnum) < GetObjMIW(obj_rnum)))) {
 					act("&GГде-то высоко-высоко раздался мелодичный звон бубенчиков.&n", false, mob, 0, 0, kToRoom);
 					sprintf(buf, "Фридроп: упал предмет %s VNUM %d с моба %s VNUM %d (%d lvl)",
 							obj_proto[obj_rnum]->get_short_description().c_str(),
@@ -414,7 +410,7 @@ ObjData *make_corpse(CharData *ch, CharData *killer) {
 	ObjData *obj, *next_obj;
 	int i;
 
-	if (ch->IsNpc() && MOB_FLAGGED(ch, EMobFlag::kCorpse))
+	if (ch->IsNpc() && ch->IsFlagged(EMobFlag::kCorpse))
 		return nullptr;
 	auto corpse = world_objects.create_blank();
 	sprintf(buf2, "труп %s", GET_PAD(ch, 1));
@@ -468,7 +464,7 @@ ObjData *make_corpse(CharData *ch, CharData *killer) {
 		}
 	}
 	// Считаем вес шмоток после того как разденем чара
-	corpse->set_weight(GET_WEIGHT(ch) + IS_CARRYING_W(ch));
+	corpse->set_weight(GET_WEIGHT(ch) + ch->GetCarryingWeight());
 	// transfer character's inventory to the corpse
 	corpse->set_contains(ch->carrying);
 	for (obj = corpse->get_contains(); obj != nullptr; obj = obj->get_next_content()) {
@@ -505,7 +501,6 @@ ObjData *make_corpse(CharData *ch, CharData *killer) {
 	IS_CARRYING_N(ch) = 0;
 	IS_CARRYING_W(ch) = 0;
 
-	//Polud привязываем загрузку ингров к расе (типу) моба
 	if (ch->IsNpc() && GET_RACE(ch) > ENpcRace::kBasic && !NPC_FLAGGED(ch, ENpcFlag::kNoIngrDrop)
 		&& !ROOM_FLAGGED(ch->in_room, ERoomFlag::kHouse)) {
 		ObjData *ingr = try_make_ingr(ch, 1000);
@@ -514,13 +509,9 @@ ObjData *make_corpse(CharData *ch, CharData *killer) {
 		}
 	}
 
-	// Загружаю шмотки по листу. - перемещено в raw_kill
-	//if (IS_NPC (ch))
-	//	dl_load_obj (corpse, ch);
-
 	// если чармис убит палачом или на арене(и владелец не в бд) то труп попадает не в клетку а в инвентарь к владельцу чармиса
-	if (IS_CHARMICE(ch) && !MOB_FLAGGED(ch, EMobFlag::kCorpse)
-		&& ((killer && PRF_FLAGGED(killer, EPrf::kExecutor)) || (ROOM_FLAGGED(ch->in_room, ERoomFlag::kArena) && !NORENTABLE(ch->get_master())))) {
+	if (IS_CHARMICE(ch) && !ch->IsFlagged(EMobFlag::kCorpse)
+		&& ((killer && killer->IsFlagged(EPrf::kExecutor)) || (ROOM_FLAGGED(ch->in_room, ERoomFlag::kArena) && !NORENTABLE(ch->get_master())))) {
 		if (ch->has_master()) {
 			PlaceObjToInventory(corpse.get(), ch->get_master());
 		}

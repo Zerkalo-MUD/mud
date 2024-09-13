@@ -31,7 +31,7 @@ void AbilityRoll::PerformAbilityTest() {
 	int difficulty = actor_rating_ - target_rating;
 	int roll_result = difficulty - roll;
 	ProcessingResult(roll_result, roll);
-	if (PRF_FLAGGED(actor_, EPrf::kTester)) {
+	if (actor_->IsFlagged(EPrf::kTester)) {
 		SendMsgToChar(actor_,
 					  "&CНавык: %s, Рейтинг навыка: %d, Рейтинг цели: %d, Сложность: %d Бросок d100: %d, Итог: %d (%s)&n\r\n",
 					  MUD::Ability(ability_).GetCName(),
@@ -56,11 +56,69 @@ bool AbilityRoll::TryRevealWrongConditions() {
 	return false;
 };
 
+// явно что-то не дописано, чтоб не углубляться в чужие мысли сделаем пока так
+EFeat ConvertFeat(abilities::EAbility new_enum) {
+	switch (new_enum) {
+		case abilities::EAbility::kScirmisher:
+			return EFeat::kScirmisher;
+		break;
+		case abilities::EAbility::kTactician:
+			return  EFeat::kTactician;
+		break;
+		case abilities::EAbility::kShadowThrower:
+			return  EFeat::kShadowThrower;
+		break;
+		case abilities::EAbility::kCutting:
+			return  EFeat::kCutting;
+		break;
+		case abilities::EAbility::kShadowDagger:
+			return  EFeat::kShadowDagger;
+		break;
+		case abilities::EAbility::kShadowSpear:
+			return  EFeat::kShadowSpear;
+		break;
+		case abilities::EAbility::kShadowClub:
+			return  EFeat::kShadowClub;
+		break;
+		case abilities::EAbility::kDoubleThrower:
+			return  EFeat::kDoubleThrower;
+		break;
+		case abilities::EAbility::kTripleThrower:
+			return  EFeat::kTripleThrower;
+		break;
+		case abilities::EAbility::kPowerThrow:
+			return  EFeat::kPowerThrow;
+		break;
+		case abilities::EAbility::kDeadlyThrow:
+			return  EFeat::kDeadlyThrow;
+		break;
+		default:
+			return EFeat::kUndefined;
+		break;
+	}
+}
+// второй костыль
+bool CanUseAbilitySkill(CharData *ch, abilities::EAbility new_enum) {
+	switch (new_enum) {
+		case abilities::EAbility::kTurnUndead:
+			if (ch->GetSkill(ESkill::kTurnUndead))
+				return  true;
+			break;
+		case abilities::EAbility::kThrowWeapon:
+			if (ch->GetSkill(ESkill::kThrow))
+				return  true;
+			break;
+		default:
+		break;
+	}
+	return false;
+}
+
 bool AbilityRoll::IsActorCantUseAbility() {
-/*	if (!IS_IMPL(actor_) && !CanUseFeat(actor_, ability_->id)) {
+	if (!CanUseFeat(actor_, ConvertFeat(ability_)) && !CanUseAbilitySkill(actor_, ability_)) {
 		deny_msg_ = "Вы не можете использовать этот навык.\r\n";
 		wrong_conditions_ = true;
-	};*/
+	}
 	return wrong_conditions_;
 }
 
@@ -199,7 +257,7 @@ bool TechniqueRoll::IsSuitableItem(const TechniqueItem &item) {
 		if (char_item->get_type() == EObjType::kWeapon) {
 			weapon_equip_position_ = item.wear_position;
 			if (MUD::Ability(ability_).IsWeaponTechnique()) {
-				base_skill_ = static_cast<ESkill>(char_item->get_skill());
+				base_skill_ = static_cast<ESkill>(char_item->get_spec_param());
 			};
 		};
 		return true;

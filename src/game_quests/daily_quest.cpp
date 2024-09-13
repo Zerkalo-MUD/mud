@@ -1,6 +1,7 @@
 #include "game_quests/daily_quest.h"
 
 #include "entities/char_data.h"
+#include "entities/char_player.h"
 #include "structs/global_objects.h"
 
 namespace DailyQuest {
@@ -114,7 +115,7 @@ bool DailyQuestLoader::do_load()
 	return m_load_status;
 }
 
-void load_from_file(CharData *ch)
+void LoadFromFile(CharData *ch)
 {
 	DailyQuestLoader quest_loader;
 	if (quest_loader.load()) {

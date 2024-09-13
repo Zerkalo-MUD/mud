@@ -10,7 +10,7 @@
             <stat id="kDex"	gen_min="10"	gen_max="12"	auto="10"	cap="50" />
             <stat id="kCon"	gen_min="12"	gen_max="15"	auto="15"	cap="50" />
             <stat id="kWis"	gen_min="15"	gen_max="18"	auto="18"	cap="100" />
-            <stat id="kInt"	gen_min="19"	gen_max="24"	auto="24"	cap="50" />
+            <stat id="kInt"	gen_min="19"	gen_max="24"	auto="24"	cap="100" />
             <stat id="kCha"	gen_min="12"	gen_max="12"	auto="12"	cap="50" />
         </base_stats>
     </stats>
@@ -31,6 +31,7 @@
         <skill id="kHangovering"	level="3"	remort="0"	improve="54000"/>
         <skill id="kDigging"		level="5"	remort="0"	improve="600"/>
         <skill id="kIdentify"		level="10"	remort="0"	improve="3000"/>
+        <skill id="kLifeMagic"		level="1"	remort="0"	improve="400"/>
     </skills>
     <spells level_decrement="3">
         <!-- This class has no spells. -->

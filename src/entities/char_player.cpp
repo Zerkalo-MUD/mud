@@ -14,11 +14,12 @@
 #include "handler.h"
 #include "structs/global_objects.h"
 #include "game_affects/affect_handler.h"
-#include "player_races.h"
+#include "game_mechanics/player_races.h"
 #include "game_economics/ext_money.h"
 #include "game_magic/magic_temp_spells.h"
 #include "administration/accounts.h"
 #include "liquid.h"
+#include "game_mechanics/cities.h"
 
 #ifdef _WIN32
 #else
@@ -29,8 +30,7 @@
 
 
 long GetExpUntilNextLvl(CharData *ch, int level);
-extern std::vector<City> cities;
-extern std::string default_str_cities;
+
 namespace {
 
 uint8_t get_day_today() {
@@ -175,10 +175,6 @@ void Player::set_last_tell(const char *text) {
 	}
 }
 
-void Player::str_to_cities(std::string str) {
-	decltype(cities) tmp_bitset(str);
-	this->cities = tmp_bitset;
-}
 
 int Player::get_hryvn() {
 	return this->hryvn;
@@ -219,7 +215,12 @@ void Player::add_hryvn(int value) {
 	if (GetRealRemort(this) < 6) {
 		SendMsgToChar(this, "Глянув на непонятный слиток, Вы решили выкинуть его...\r\n");
 		return;
-	} else if ((this->get_hryvn() + value) > cap_hryvn) {
+	} 
+	if (zone_table[world[this->in_room]->zone_rn].under_construction) {
+		SendMsgToChar(this, "Зона тестовая, вашу гривну отобрали боги.\r\n");
+		return;
+	}
+	if ((this->get_hryvn() + value) > cap_hryvn) {
 		value = cap_hryvn - this->get_hryvn();
 		SendMsgToChar(this, "Вы получили только %ld %s, так как в вашу копилку больше не лезет...\r\n",
 					  static_cast<long>(value), GetDeclensionInNumber(value, EWhat::kTorcU));
@@ -244,7 +245,6 @@ void Player::dquest(const int id) {
 		log("Quest Id: %d - не найден", id);
 		return;
 	}
-
 	if (!this->account->quest_is_available(id)) {
 		SendMsgToChar(this, "Сегодня вы уже получали гривны за выполнение этого задания.\r\n");
 		return;
@@ -256,30 +256,44 @@ void Player::dquest(const int id) {
 		&& zone_lvl <= (GetRealLevel(this) + GetRealRemort(this) / 5)) {
 		value /= 2;
 	}
-
 	this->add_hryvn(value);
-
 	this->account->complete_quest(id);
 }
 
 void Player::mark_city(const size_t index) {
-	if (index < cities.size()) {
-		cities[index] = true;
+	if (index < cities_visited_.size()) {
+		cities_visited_[index] = true;
 	}
 }
 
 bool Player::check_city(const size_t index) {
-	if (index < cities.size()) {
-		return cities[index];
+	if (index < cities_visited_.size()) {
+		return cities_visited_[index];
 	}
 
 	return false;
 }
 
+void Player::str_to_cities(std::string str) {
+	this->cities_visited_.clear();
+	for (auto &it : reverse(str)) {
+		if (it == '1')
+			this->cities_visited_.push_back(true);
+		else
+			this->cities_visited_.push_back(false);
+	}
+}
+
 std::string Player::cities_to_str() {
-	std::string return_value;
-	boost::to_string(this->cities, return_value);
-	return return_value;
+	std::string value = "";
+
+	for (auto it : reverse(this->cities_visited_)) {
+		if (it)
+			value += "1";
+		else
+			value += "0";
+	}
+	return value;
 }
 
 std::string const &Player::get_last_tell() {
@@ -392,7 +406,7 @@ void Player::save_char() {
 	time_t li;
 	ObjData *char_eq[EEquipPos::kNumEquipPos];
 	struct TimedSkill *skj;
-	struct CharacterPortal *prt;
+
 	int tmp = time(0) - this->player_data.time.logon;
 
 	if (this->IsNpc() || this->get_pfilepos() < 0)
@@ -451,7 +465,7 @@ void Player::save_char() {
 	fprintf(saved, "Rmrt: %d\n", this->get_remort());
 	// флаги
 	*buf = '\0';
-	PLR_FLAGS(this).tascii(4, buf);
+	char_specials.saved.act.tascii(FlagData::kPlanesNumber, buf);
 	fprintf(saved, "Act : %s\n", buf);
 	if (GET_EMAIL(this))//edited WorM 2010.08.27 перенесено чтоб грузилось для сохранения в индексе игроков
 	{
@@ -496,7 +510,7 @@ void Player::save_char() {
 	// структуры
 	fprintf(saved, "Alin: %d\n", GET_ALIGNMENT(this));
 	*buf = '\0';
-	AFF_FLAGS(this).tascii(4, buf);
+	AFF_FLAGS(this).tascii(FlagData::kPlanesNumber, buf);
 	fprintf(saved, "Aff : %s\n", buf);
 
 	// дальше не по порядку
@@ -653,31 +667,31 @@ void Player::save_char() {
 	fprintf(saved, "DrSt: %d\n", GET_DRUNK_STATE(this));
 	fprintf(saved, "Olc : %d\n", GET_OLC_ZONE(this));
 	*buf = '\0';
-	PRF_FLAGS(this).tascii(4, buf);
+	this->player_specials->saved.pref.tascii(FlagData::kPlanesNumber, buf);
 	fprintf(saved, "Pref: %s\n", buf);
 
-	if (MUTE_DURATION(this) > 0 && PLR_FLAGGED(this, EPlrFlag::kMuted))
+	if (MUTE_DURATION(this) > 0 && this->IsFlagged(EPlrFlag::kMuted))
 		fprintf(saved,
 				"PMut: %ld %d %ld %s~\n",
 				MUTE_DURATION(this),
 				GET_MUTE_LEV(this),
 				MUTE_GODID(this),
 				MUTE_REASON(this));
-	if (NAME_DURATION(this) > 0 && PLR_FLAGGED(this, EPlrFlag::kNameDenied))
+	if (NAME_DURATION(this) > 0 && this->IsFlagged(EPlrFlag::kNameDenied))
 		fprintf(saved,
 				"PNam: %ld %d %ld %s~\n",
 				NAME_DURATION(this),
 				GET_NAME_LEV(this),
 				NAME_GODID(this),
 				NAME_REASON(this));
-	if (DUMB_DURATION(this) > 0 && PLR_FLAGGED(this, EPlrFlag::kDumbed))
+	if (DUMB_DURATION(this) > 0 && this->IsFlagged(EPlrFlag::kDumbed))
 		fprintf(saved,
 				"PDum: %ld %d %ld %s~\n",
 				DUMB_DURATION(this),
 				GET_DUMB_LEV(this),
 				DUMB_GODID(this),
 				DUMB_REASON(this));
-	if (HELL_DURATION(this) > 0 && PLR_FLAGGED(this, EPlrFlag::kHelled))
+	if (HELL_DURATION(this) > 0 && this->IsFlagged(EPlrFlag::kHelled))
 		fprintf(saved,
 				"PHel: %ld %d %ld %s~\n",
 				HELL_DURATION(this),
@@ -691,7 +705,7 @@ void Player::save_char() {
 				GET_GCURSE_LEV(this),
 				GCURSE_GODID(this),
 				GCURSE_REASON(this));
-	if (FREEZE_DURATION(this) > 0 && PLR_FLAGGED(this, EPlrFlag::kFrozen))
+	if (FREEZE_DURATION(this) > 0 && this->IsFlagged(EPlrFlag::kFrozen))
 		fprintf(saved,
 				"PFrz: %ld %d %ld %s~\n",
 				FREEZE_DURATION(this),
@@ -724,7 +738,7 @@ void Player::save_char() {
 	fprintf(saved, "NaID: %ld\n", NAME_ID_GOD(this));
 	fprintf(saved, "StrL: %d\n", STRING_LENGTH(this));
 	fprintf(saved, "StrW: %d\n", STRING_WIDTH(this));
-	fprintf(saved, "NtfE: %ld\n", NOTIFY_EXCH_PRICE(this)); //Polud мин. цена для оффлайн-оповещений
+	fprintf(saved, "NtfE: %ld\n", NOTIFY_EXCH_PRICE(this));
 
 	if (this->remember_get_num() != Remember::DEF_REMEMBER_NUM) {
 		fprintf(saved, "Rmbr: %u\n", this->remember_get_num());
@@ -753,9 +767,9 @@ void Player::save_char() {
 	}
 
 	// порталы
-	for (prt = GET_PORTALS(this); prt; prt = prt->next) {
-		fprintf(saved, "Prtl: %d\n", prt->vnum);
-	}
+	std::ostringstream out;
+	this->player_specials->runestones.Serialize(out);
+	fprintf(saved, "%s", out.str().c_str());
 
 	for (auto x : this->daily_quest) {
 		std::stringstream buffer;
@@ -901,7 +915,7 @@ void Player::save_char() {
 	}
 	affect_total(this);
 
-	i = get_ptable_by_name(GET_NAME(this));
+	i = GetPlayerTablePosByName(GET_NAME(this));
 	if (i >= 0) {
 		player_table[i].last_logon = LAST_LOGON(this);
 		player_table[i].level = GetRealLevel(this);
@@ -918,13 +932,13 @@ void Player::save_char() {
 
 #undef NO_EXTRANEOUS_TRIGGERS
 
-// на счет reboot: используется только при старте мада в вызовах из entrycount
+// на счет reboot: используется только при старте мада в вызовах из ActualizePlayersIndex
 // при включенном флаге файл читается только до поля Rebt, все остальные поля пропускаются
-// поэтому при каких-то изменениях в entrycount, must_be_deleted и TopPlayer::Refresh следует
+// поэтому при каких-то изменениях в ActualizePlayersIndex, MustBeDeleted и TopPlayer::Refresh следует
 // убедиться, что изменный код работает с действительно проинициализированными полями персонажа
 // на данный момент это: EPlrFlag::FLAGS, GetClass(), GET_EXP, GET_IDNUM, LAST_LOGON, GetRealLevel, GET_NAME, GetRealRemort, GET_UNIQUE, GET_EMAIL
 // * \param reboot - по дефолту = false
-int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*= true*/) {
+int Player::load_char_ascii(const char *name, const int load_flags) {
 	int id, num = 0, num2 = 0, num3 = 0, num4 = 0, num5 = 0, num6 = 0, i;
 	long int lnum = 0, lnum3 = 0;
 	unsigned long long llnum = 0;
@@ -936,10 +950,10 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 	TimedFeat timed_feat;
 	*filename = '\0';
 	log("Load ascii char %s", name);
-	if (!find_id) {
-		id = 1;
-	} else {
+	if (load_flags & ELoadCharFlags::kFindId) {
 		id = find_name(name);
+	} else {
+		id = 1;
 	}
 
 	bool result = id >= 0;
@@ -971,7 +985,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 	set_remort(0);
 	GET_LASTIP(this)[0] = 0;
 	GET_EMAIL(this)[0] = 0;
-	PLR_FLAGS(this).from_string("");    // suspicious line: we should clear flags.. Loading from "" does not clear flags.
+	char_specials.saved.act.from_string("");    // suspicious line: we should clear flags.. Loading from "" does not clear flags.
 
 	bool skip_file = 0;
 
@@ -981,7 +995,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 			return (-1);
 		}
 
-		tag_argument(line, tag);
+		ExtractTagFromArgument(line, tag);
 		for (i = 0; !(line[i] == ' ' || line[i] == '\0'); i++) {
 			line1[i] = line[i];
 		}
@@ -997,7 +1011,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 		switch (*tag) {
 			case 'A':
 				if (!strcmp(tag, "Act ")) {
-					PLR_FLAGS(this).from_string(line);
+					char_specials.saved.act.from_string(line);
 				}
 				break;
 			case 'C':
@@ -1050,21 +1064,20 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 		}
 	} while (!skip_file);
 
-	//added by WorM 2010.08.27 лоадим мыло и последний ip даже при считывании индексов
+	bool reboot = (load_flags & ELoadCharFlags::kReboot);
 	while ((reboot) && (!*GET_EMAIL(this) || !*GET_LASTIP(this))) {
 		if (!fbgetline(fl, line)) {
 			log("SYSERROR: Wrong file ascii %d %s", id, filename);
 			return (-1);
 		}
 
-		tag_argument(line, tag);
+		ExtractTagFromArgument(line, tag);
 
 		if (!strcmp(tag, "EMal"))
 			strcpy(GET_EMAIL(this), line);
 		else if (!strcmp(tag, "Host"))
 			strcpy(GET_LASTIP(this), line);
 	}
-	//end by WorM
 
 	// если с загруженными выше полями что-то хочется делать после лоада - делайте это здесь
 
@@ -1083,11 +1096,11 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 	this->account->add_player(this->get_uid());
 
 
-	if (reboot) {
+	if (load_flags & ELoadCharFlags::kReboot) {
 		fbclose(fl);
 		return id;
 	}
-	this->str_to_cities(default_str_cities);
+	this->str_to_cities(cities::default_str_cities);
 	// если происходит обычный лоад плеера, то читаем файл дальше и иним все остальные поля
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1209,9 +1222,9 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 	GET_COND(this, THIRST) = kNormCondition;
 	GET_WEIGHT(this) = 50;
 	GET_WIMP_LEV(this) = 0;
-	PRF_FLAGS(this).from_string("");    // suspicious line: we should clear flags.. Loading from "" does not clear flags.
+	this->player_specials->saved.pref.from_string("");    // suspicious line: we should clear flags.. Loading from "" does not clear flags.
 	AFF_FLAGS(this).from_string("");    // suspicious line: we should clear flags.. Loading from "" does not clear flags.
-	GET_PORTALS(this) = nullptr;
+
 	EXCHANGE_FILTER(this) = nullptr;
 	clear_ignores();
 	CREATE(GET_LOGS(this), 1 + LAST_LOG);
@@ -1221,7 +1234,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 	this->set_who_last(time(0));
 
 	while (fbgetline(fl, line)) {
-		tag_argument(line, tag);
+		ExtractTagFromArgument(line, tag);
 		for (i = 0; !(line[i] == ' ' || line[i] == '\0'); i++) {
 			line1[i] = line[i];
 		}
@@ -1336,17 +1349,14 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 					this->reset_stats_cnt_[stats_reset::Type::FEATS] = num;
 				else if (!strcmp(tag, "Cits")) {
 					std::string buffer_cities = std::string(line);
-					// это на тот случай, если вдруг количество городов поменялось
-					if (buffer_cities.size() != ::cities.size()) {
-						// если меньше
-						if (buffer_cities.size() < ::cities.size()) {
+					auto cities_number = cities::CountCities();
+					if (buffer_cities.size() != cities_number) {
+						if (buffer_cities.size() < cities_number) {
 							const size_t b_size = buffer_cities.size();
-							// то добиваем нулями
-							for (unsigned int i = 0; i < ::cities.size() - b_size; i++)
+							for (unsigned int i = 0; i < cities_number - b_size; i++)
 								buffer_cities += "0";
 						} else {
-							// режем строку
-							buffer_cities.resize(buffer_cities.size() - (buffer_cities.size() - ::cities.size()));
+							buffer_cities.resize(buffer_cities.size() - (buffer_cities.size() - cities_number));
 						}
 					}
 					this->str_to_cities(std::string(buffer_cities));
@@ -1563,7 +1573,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 					NAME_GOD(this) = num;
 				else if (!strcmp(tag, "NaID"))
 					NAME_ID_GOD(this) = lnum;
-				else if (!strcmp(tag, "NtfE"))//Polud мин. цена для оффлайн-оповещений
+				else if (!strcmp(tag, "NtfE"))
 					NOTIFY_EXCH_PRICE(this) = lnum;
 				break;
 
@@ -1582,7 +1592,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 				else if (!strcmp(tag, "PfOt"))
 					POOFOUT(this) = str_dup(line);
 				else if (!strcmp(tag, "Pref")) {
-					PRF_FLAGS(this).from_string(line);
+					this->player_specials->saved.pref.from_string(line);
 				} else if (!strcmp(tag, "Pkil")) {
 					do {
 						if (!fbgetline(fl, line))
@@ -1592,7 +1602,7 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 						if (sscanf(line, "%ld %d %d", &lnum, &num, &num2) < 3) {
 							num2 = 0;
 						};
-						if (lnum < 0 || !correct_unique(lnum))
+						if (lnum < 0 || !IsCorrectUnique(lnum))
 							continue;
 						if (num2 >= MAX_REVENGE) {
 							if (--num <= 0) {
@@ -1616,10 +1626,15 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 						pk_one->next = this->pk_list;
 						this->pk_list = pk_one;
 					} while (true);
-				} else if (!strcmp(tag, "Prtl"))
-					add_portal_to_char(this, num);
+				} else if (!strcmp(tag, "Prtl")) {
+					if (num > 0) {
+						auto portal = MUD::Runestones().FindRunestone(num);
+						if (portal.IsAllowed()) {
+							this->player_specials->runestones.AddRunestone(portal);
+						}
+					}
 					// Loads Here new punishment strings
-				else if (!strcmp(tag, "PMut")) {
+				} else if (!strcmp(tag, "PMut")) {
 					sscanf(line, "%ld %d %ld %[^~]", &lnum, &num2, &lnum3, &buf[0]);
 					MUTE_DURATION(this) = lnum;
 					GET_MUTE_LEV(this) = num2;
@@ -1861,10 +1876,10 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 			default: sprintf(buf, "SYSERR: Unknown tag %s in pfile %s", tag, name);
 		}
 	}
-	PRF_FLAGS(this).set(EPrf::kColor2); //всегда цвет полный
+	this->SetFlag(EPrf::kColor2); //всегда цвет полный
 	// initialization for imms
 	if (GetRealLevel(this) >= kLvlImmortal) {
-		set_god_skills(this);
+		SetGodSkills(this);
 		set_god_morphs(this);
 		GET_COND(this, FULL) = -1;
 		GET_COND(this, THIRST) = -1;
@@ -1906,7 +1921,9 @@ int Player::load_char_ascii(const char *name, bool reboot, const bool find_id /*
 	// здесь мы закладываемся на то, что при ребуте это все сейчас пропускается и это нормально,
 	// иначе в таблице crc будут пустые имена, т.к. сама плеер-таблица еще не сформирована
 	// и в любом случае при ребуте это все пересчитывать не нужно
-	FileCRC::check_crc(filename, FileCRC::PLAYER, GET_UNIQUE(this));
+	if (!(load_flags & ELoadCharFlags::kNoCrcCheck)) {
+		FileCRC::check_crc(filename, FileCRC::PLAYER, GET_UNIQUE(this));
+	}
 
 	return (id);
 }
@@ -2054,7 +2071,7 @@ time_t Player::get_time_daily_quest(int id) {
 }
 
 void Player::add_value_cities(bool v) {
-	this->cities.push_back(v);
+	this->cities_visited_.push_back(v);
 }
 
 void Player::reset_daily_quest() {
@@ -2153,7 +2170,7 @@ int con_total_hp(CharData *ch) {
 ///
 unsigned weight_dex_penalty(CharData *ch) {
 	int n = 0;
-	switch (IS_CARRYING_W(ch) * 10 / MAX(1, CAN_CARRY_W(ch))) {
+	switch (ch->GetCarryingWeight() * 10 / MAX(1, CAN_CARRY_W(ch))) {
 		case 10:
 		case 9:
 		case 8: n = 2;

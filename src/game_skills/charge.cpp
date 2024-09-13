@@ -12,6 +12,7 @@
 #include "bash.h"
 #include "action_targeting.h"
 #include "game_fight/common.h"
+#include "game_fight/mobact.h"
 
 // ********************* CHARGE PROCEDURE
 
@@ -30,11 +31,11 @@ void do_charge(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		SendMsgToChar("Верхом это сделать затруднительно.\r\n", ch);
 		return;
 	}
-	if (PRF_FLAGS(ch).get(EPrf::kIronWind)) {
+	if (ch->IsFlagged(EPrf::kIronWind)) {
 		SendMsgToChar("Невидимые оковы мешают вам ринуться в бой!\r\n", ch);
 		return;
 	}
-	if (GET_POS(ch) != EPosition::kStand) {
+	if (ch->GetPosition() != EPosition::kStand) {
 		SendMsgToChar("Вы не можете ринуться в бой из этого положения!\r\n", ch);
 		return;
 	}
@@ -43,16 +44,13 @@ void do_charge(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if ((direction = search_block(arg, dirs, false)) >= 0 ||
 		(direction = search_block(arg, dirs_rus, false)) >= 0) {
 		go_charge(ch, direction);
-		return;
 	} else {
 		SendMsgToChar("В каком направлении Вы желаете ринуться в бой?\r\n", ch);
-		return;
 	}
 }
 
 void go_charge(CharData *ch, int direction) {
-	if (IsCorrectDirection(ch, direction, true, false)
-		&& !ROOM_FLAGGED(EXIT(ch, direction)->to_room(), ERoomFlag::kDeathTrap)) {
+	if (IsCorrectDirection(ch, direction, true, false)) {
 		act("$n истошно завопил$g и ринул$u в бой, лихо размахивая своим оружием.",
 			false, ch, nullptr, nullptr, kToRoom | kToArenaListen);
 		if (DoSimpleMove(ch, direction, true, nullptr, false)) {
@@ -66,12 +64,12 @@ void go_charge(CharData *ch, int direction) {
 	}
 
 	bool is_awake = false;
-	if PRF_FLAGGED(ch, EPrf::kAwake) {
+	if (ch->IsFlagged(EPrf::kAwake)) {
 		is_awake = true;
 	}
-
-	int dam = (number(ceil((ceil GET_SKILL(ch,ESkill::kCharge) * 3) / 1.25),
-					  ceil(((ceil GET_SKILL(ch,ESkill::kCharge) * 3) * 1.25))) *
+	auto skill_charge = ch->GetSkill(ESkill::kCharge);
+	int dam = (number(ceil(ch->GetSkill(ESkill::kCharge) * 3 / 1.25),
+					  ceil(ch->GetSkill(ESkill::kCharge) * 3 * 1.25)) *
 			   GetRealLevel(ch)) / 30;
 
 	if (is_awake) {
@@ -80,7 +78,7 @@ void go_charge(CharData *ch, int direction) {
 
 	int victims_amount = 2;
 	if (is_awake) {
-		victims_amount = 2 + ((ch->GetSkill(ESkill::kCharge) / 40));
+		victims_amount = 2 + ch->GetSkill(ESkill::kCharge) / 40;
 	}
 
 	Affect<EApply> af;
@@ -101,7 +99,7 @@ void go_charge(CharData *ch, int direction) {
 
 	ActionTargeting::FoesRosterType roster{ch};
 	for (const auto target: roster) {
-		if (MOB_FLAGGED(target, EMobFlag::kProtect) || (!may_kill_here(ch,target, arg)) ||target == ch || !CAN_SEE(ch,target)) {
+		if (target->IsFlagged(EMobFlag::kProtect) || !may_kill_here(ch,target, arg) ||target == ch || !CAN_SEE(ch,target)) {
 			--victims_amount;
 		} else {
 			if (IsAffectedBySpellWithCasterId(ch, target, ESpell::kNoCharge)) {
@@ -121,7 +119,7 @@ void go_charge(CharData *ch, int direction) {
 				TrainSkill(ch, ESkill::kCharge, success,target);
 				TryToFindProtector(target, ch);
 				if (!success) {
-					act("Вам не удалось привести $N3 в замешательство своим бешенным натиском!",
+					act("Вам не удалось привести $N3 в замешательство своим натиском!",
 						false, ch, nullptr,target, kToChar);
 					act("$N попытал$U неожиданно напасть на Вас, но Вы вовремя спохватились и приняли бой!",
 						false,target, nullptr, ch, kToChar);
@@ -130,7 +128,7 @@ void go_charge(CharData *ch, int direction) {
 					dmg.dam = 0;
 					dmg.Process(target, ch);
 				} else {
-					if (ch->GetSkill(ESkill::kShieldBash) && (ch->GetSkill(ESkill::kBash)) && (GET_EQ(ch, kShield)) && (!is_awake)) {
+					if (ch->GetSkill(ESkill::kShieldBash) && ch->GetSkill(ESkill::kBash) && (GET_EQ(ch, kShield)) && !is_awake) {
 						go_bash(ch,target);
 					} else {
 						act("Хорошенько разогнавшись Вы прописали $N2 роскошного тумака!",
@@ -150,4 +148,5 @@ void go_charge(CharData *ch, int direction) {
 			break;
 		}
 	}
+	do_aggressive_room(ch,1);
 }

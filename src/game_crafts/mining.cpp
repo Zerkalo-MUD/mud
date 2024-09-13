@@ -110,16 +110,16 @@ int check_for_dig(CharData *ch) {
 void dig_obj(CharData *ch, ObjData *obj) {
 	char textbuf[300];
 
-	if (GET_OBJ_MIW(obj) >= obj_proto.actual_count(obj->get_rnum())
-		|| GET_OBJ_MIW(obj) == ObjData::UNLIMITED_GLOBAL_MAXIMUM) {
+	if (GetObjMIW(obj->get_rnum()) >= obj_proto.actual_count(obj->get_rnum())
+		|| GetObjMIW(obj->get_rnum()) == ObjData::UNLIMITED_GLOBAL_MAXIMUM) {
 		sprintf(textbuf, "Вы нашли %s!\r\n", obj->get_PName(3).c_str());
 		SendMsgToChar(textbuf, ch);
 		sprintf(textbuf, "$n выкопал$g %s!\r\n", obj->get_PName(3).c_str());
 		act(textbuf, false, ch, nullptr, nullptr, kToRoom);
-		if (IS_CARRYING_N(ch) >= CAN_CARRY_N(ch)) {
+		if (ch->GetCarryingQuantity() >= CAN_CARRY_N(ch)) {
 			SendMsgToChar("Вы не смогли унести столько предметов.\r\n", ch);
 			PlaceObjToRoom(obj, ch->in_room);
-		} else if (IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj) > CAN_CARRY_W(ch)) {
+		} else if (ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj) > CAN_CARRY_W(ch)) {
 			SendMsgToChar("Вы не смогли унести такой веc.\r\n", ch);
 			PlaceObjToRoom(obj, ch->in_room);
 		} else {
@@ -196,10 +196,10 @@ void do_dig(CharData *ch, char * /*argument*/, int/* cmd*/, int/* subcmd*/) {
 	// копнули мертвяка
 	if (number(1, dig_vars.mob_chance) == 1) {
 		vnum = number(dig_vars.mob_vnum_start, dig_vars.mob_vnum_end);
-		mob = read_mobile(real_mobile(vnum), REAL);
+		mob = ReadMobile(GetMobRnum(vnum), kReal);
 		if (mob) {
 			if (GetRealLevel(mob) <= GetRealLevel(ch)) {
-				MOB_FLAGS(mob).set(EMobFlag::kAgressive);
+				mob->SetFlag(EMobFlag::kAgressive);
 				sprintf(textbuf, "Вы выкопали %s!\r\n", mob->player_data.PNames[3].c_str());
 				SendMsgToChar(textbuf, ch);
 				sprintf(textbuf, "$n выкопал$g %s!\r\n", mob->player_data.PNames[3].c_str());

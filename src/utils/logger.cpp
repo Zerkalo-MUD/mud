@@ -269,11 +269,11 @@ void mudlog(const char *str, LogMode type, int level, EOutputStream channel, int
 			continue;
 		if (GET_LOGS(i->character)[channel] < type && type != DEF)
 			continue;
-		if (type == DEF && GetRealLevel(i->character) < kLvlImmortal && !PRF_FLAGGED(i->character, EPrf::kCoderinfo))
+		if (type == DEF && GetRealLevel(i->character) < kLvlImmortal && !i->character->IsFlagged(EPrf::kCoderinfo))
 			continue;
-		if (GetRealLevel(i->character) < level && !PRF_FLAGGED(i->character, EPrf::kCoderinfo))
+		if (GetRealLevel(i->character) < level && !i->character->IsFlagged(EPrf::kCoderinfo))
 			continue;
-		if (PLR_FLAGGED(i->character, EPlrFlag::kWriting) || PLR_FLAGGED(i->character, EPlrFlag::kFrozen))
+		if (i->character->IsFlagged(EPlrFlag::kWriting) || i->character->IsFlagged(EPlrFlag::kFrozen))
 			continue;
 
 		SendMsgToChar(CCGRN(i->character, C_NRM), i->character.get());
@@ -339,7 +339,7 @@ void Logger::operator()(const char *format, ...) {
 		prefix += part;
 	}
 	const size_t plength = std::min(BUFFER_SIZE, prefix.length());
-	strncpy(p, prefix.c_str(), plength);
+	strncpy(p, prefix.c_str(), plength - 1);
 	free_space -= plength;
 	p += plength;
 

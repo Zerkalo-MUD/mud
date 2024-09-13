@@ -153,8 +153,8 @@ CharData *find_renter(int room_rnum) {
 void check_help_message(CharData *ch) {
 	if (Noob::is_noob(ch)
 		&& GET_HIT(ch) <= 1
-		&& IS_CARRYING_N(ch) <= 0
-		&& IS_CARRYING_W(ch) <= 0) {
+		&& ch->GetCarryingQuantity() <= 0
+		&& ch->GetCarryingWeight() <= 0) {
 		int birth_id = Birthplaces::GetIdByRoom(GET_ROOM_VNUM(ch->in_room));
 		if (birth_id >= 0) {
 			CharData *renter = find_renter(ch->in_room);
@@ -187,15 +187,15 @@ void equip_start_outfit(CharData *ch, ObjData *obj) {
 		if (CAN_WEAR(obj, EWearFlag::kWield)
 			&& !GET_EQ(ch, EEquipPos::kWield)) {
 			EquipObj(ch, obj, EEquipPos::kWield, CharEquipFlags());
-			ch->set_skill(static_cast<ESkill>(GET_OBJ_SKILL(obj)), 10);
+			ch->set_skill(static_cast<ESkill>(obj->get_spec_param()), 10);
 		} else if (CAN_WEAR(obj, EWearFlag::kBoth)
 			&& !GET_EQ(ch, EEquipPos::kBoths)) {
 			EquipObj(ch, obj, EEquipPos::kBoths, CharEquipFlags());
-			ch->set_skill(static_cast<ESkill>(GET_OBJ_SKILL(obj)), 10);
+			ch->set_skill(static_cast<ESkill>(obj->get_spec_param()), 10);
 		} else if (CAN_WEAR(obj, EWearFlag::kHold)
 			&& !GET_EQ(ch, EEquipPos::kHold)) {
 			EquipObj(ch, obj, EEquipPos::kHold, CharEquipFlags());
-			ch->set_skill(static_cast<ESkill>(GET_OBJ_SKILL(obj)), 10);
+			ch->set_skill(static_cast<ESkill>(obj->get_spec_param()), 10);
 		}
 	}
 }

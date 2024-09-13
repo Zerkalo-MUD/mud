@@ -25,7 +25,7 @@
 #include <stack>
 
 //External functions
-extern void extract_trigger(Trigger *trig);
+extern void ExtractTrigger(Trigger *trig);
 
 //внум_триггера : [внум_триггера_который_прикрепил_данный тригер : [перечисление к чему прикрепленно (внумы объектов/мобов/комнат)]]
 trigger_to_owners_map_t owner_trig;
@@ -160,7 +160,7 @@ void dg_obj_trigger(char *line, ObjData *obj) {
 		return;
 	}
 
-	rnum = real_trigger(vnum);
+	rnum = GetTriggerRnum(vnum);
 	if (rnum < 0) {
 		sprintf(line, "SYSERR: Trigger vnum #%d asked for but non-existant for obj vnum %d!", vnum, GET_OBJ_VNUM(obj));
 		log("%s", line);
@@ -183,19 +183,18 @@ void assign_triggers(void *i, int type) {
 	switch (type) {
 		case MOB_TRIGGER: mob = (CharData *) i;
 			for (const auto trigger_vnum : *mob_proto[GET_MOB_RNUM(mob)].proto_script) {
-				rnum = real_trigger(trigger_vnum);
+				rnum = GetTriggerRnum(trigger_vnum);
 				if (rnum == -1) {
 					const auto rnum = mob->get_rnum();
 					sprintf(buf, "SYSERR: trigger #%d non-existent, for mob #%d", trigger_vnum, mob_index[rnum].vnum);
 					log("%s", buf);
 				} else {
 					if (trig_index[rnum]->proto->get_attach_type() != MOB_TRIGGER) {
-						const auto rnum = mob->get_rnum();
 						sprintf(buf, "SYSERR: trigger #%d has wrong attach_type: %d, for mob #%d",
 								trigger_vnum,
-								static_cast<int>(trig_index[rnum]->proto->get_attach_type()),
-								mob_index[rnum].vnum);
-						mudlog(buf, BRF, kLvlBuilder, ERRLOG, true);
+								trig_index[rnum]->proto->get_attach_type(),
+								mob_index[mob->get_rnum()].vnum);
+						mudlog(buf, BRF, kLvlBuilder, SYSLOG, true);
 					} else {
 						auto trig = read_trigger(rnum);
 						if (add_trigger(SCRIPT(mob).get(), trig, -1)) {
@@ -205,7 +204,7 @@ void assign_triggers(void *i, int type) {
 							}
 							add_trig_to_owner(-1, trigger_vnum, GET_MOB_VNUM(mob));
 						} else {
-							extract_trigger(trig);
+							ExtractTrigger(trig);
 						}
 					}
 				}
@@ -214,7 +213,7 @@ void assign_triggers(void *i, int type) {
 
 		case OBJ_TRIGGER: obj = (ObjData *) i;
 			for (const auto trigger_vnum : obj_proto.proto_script(GET_OBJ_RNUM(obj))) {
-				rnum = real_trigger(trigger_vnum);
+				rnum = GetTriggerRnum(trigger_vnum);
 				if (rnum == -1) {
 					sprintf(buf, "SYSERR: trigger #%d non-existent, for obj #%d",
 							trigger_vnum, obj->get_vnum());
@@ -235,7 +234,7 @@ void assign_triggers(void *i, int type) {
 							}
 							add_trig_to_owner(-1, trigger_vnum, GET_OBJ_VNUM(obj));
 						} else {
-							extract_trigger(trig);
+							ExtractTrigger(trig);
 						}
 					}
 				}
@@ -244,16 +243,16 @@ void assign_triggers(void *i, int type) {
 
 		case WLD_TRIGGER: room = (RoomData *) i;
 			for (const auto trigger_vnum : *room->proto_script) {
-				rnum = real_trigger(trigger_vnum);
+				rnum = GetTriggerRnum(trigger_vnum);
 				if (rnum == -1) {
 					sprintf(buf, "SYSERR: trigger #%d non-existant, for room #%d",
-							trigger_vnum, room->room_vn);
+							trigger_vnum, room->vnum);
 					log("%s", buf);
 				} else {
 					if (trig_index[rnum]->proto->get_attach_type() != WLD_TRIGGER) {
 						sprintf(buf, "SYSERR: trigger #%d has wrong attach_type: %d, for room #%d",
 								trigger_vnum, static_cast<int>(trig_index[rnum]->proto->get_attach_type()),
-								room->room_vn);
+								room->vnum);
 						mudlog(buf, BRF, kLvlBuilder, ERRLOG, true);
 					} else {
 						auto trig = read_trigger(rnum);
@@ -262,9 +261,9 @@ void assign_triggers(void *i, int type) {
 								owner_to_triggers_map_t tmp_map;
 								owner_trig.emplace(trigger_vnum, tmp_map);
 							}
-							add_trig_to_owner(-1, trigger_vnum, room->room_vn);
+							add_trig_to_owner(-1, trigger_vnum, room->vnum);
 						} else {
-							extract_trigger(trig);
+							ExtractTrigger(trig);
 						}
 					}
 				}

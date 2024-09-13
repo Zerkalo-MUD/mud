@@ -13,6 +13,7 @@ ExitData::ExitData() : keyword(nullptr),
 }
 
 ExitData::~ExitData() {
+	general_description.clear();
 	if (keyword != nullptr)
 		free(keyword);
 	if (vkeyword != nullptr)
@@ -64,7 +65,7 @@ void ExitData::to_room(const RoomRnum _) {
 	to_room_ = _;
 }
 
-RoomData::RoomData() : room_vn(0),
+RoomData::RoomData() : vnum(0),
 					   zone_rn(0),
 					   sector_type(0),
 					   sector_state(0),
@@ -84,18 +85,13 @@ RoomData::RoomData() : room_vn(0),
 					   affected(0),
 					   fires(0),
 					   ices(0),
-					   portal_room(0),
-					   portal_time(0),
 					   pkPenterUnique(0),
 					   holes(0),
 					   poison(0) {
 	for (auto i = 0; i < EDirection::kMaxDirNum; ++i) {
 		dir_option[i].reset();
 	}
-
 	memset(&weather, 0, sizeof(WeatherControl));
-	memset(&base_property, 0, sizeof(RoomState));
-	memset(&add_property, 0, sizeof(RoomState));
 }
 
 RoomData::~RoomData() {

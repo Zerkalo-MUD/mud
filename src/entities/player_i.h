@@ -14,6 +14,12 @@
 #include "sysdep.h"
 #include "administration/reset_stats.h"
 
+enum ELoadCharFlags : int {
+  kReboot		= 1,
+  kFindId		= 2,
+  kNoCrcCheck	= 4
+};
+
 struct MERCDATA;
 
 class Account;
@@ -34,7 +40,7 @@ extern RoomRnum r_helled_start_room;
 */
 class PlayerI {
  public:
-	virtual int get_pfilepos() const { return -1; };
+  	virtual int get_pfilepos() const { return -1; };
 	virtual void set_pfilepos(int/* pfilepos*/) {};
 
 	virtual RoomRnum get_was_in_room() const { return kNowhere; };
@@ -86,9 +92,7 @@ class PlayerI {
 	virtual void dps_add_exp(int/* exp*/, bool/* battle*/ = false) {};
 
 	virtual void save_char() {};
-	virtual int load_char_ascii(const char * /*name*/,
-								bool/* reboot*/ = false,
-								const bool /*find_id*/ = true) { return -1; };
+	virtual int load_char_ascii(const char * /*name*/, const int /* load_flags */) { return -1; };
 
 	virtual bool get_disposable_flag(int/* num*/) { return false; };
 	virtual void set_disposable_flag(int/* num*/) {};
@@ -142,8 +146,7 @@ class PlayerI {
 	std::string cities_to_str() { return ""; };
 	virtual bool check_city(const size_t) { return false; };
 	virtual void mark_city(const size_t) {};
-	/*virtual void touch_stigma(char* buf) {};
-	virtual void add_stigma(int wear, int id_stigma) {}*/
+
 	virtual int death_player_count() {
 		return 1;
 	};

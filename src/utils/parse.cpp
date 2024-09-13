@@ -4,7 +4,9 @@
 #include "parse.h"
 
 #include "obj_prototypes.h"
-#include "utils/utils.h"
+#include "db.h"
+
+//extern ObjRnum GetObjRnum(ObjVnum vnum) { return obj_proto.rnum(vnum);
 
 namespace text_id {
 
@@ -105,7 +107,7 @@ int TextIdNode::ToNum(const std::string &str) const {
 } // namespace text_id
 
 namespace parse {
-
+	char buf[kMaxStringLength];
 ///
 /// Попытка конвертирования \param text в <int> с перехватом исключения
 /// \return число или -1, в случае неудачи
@@ -211,7 +213,7 @@ pugi::xml_node GetChild(const pugi::xml_node &node, const char *name) {
 /// \return true - если есть прототип объекта (рнум) с данным внумом
 ///
 bool IsValidObjVnum(int vnum) {
-	if (real_object(vnum) < 0) {
+	if (GetObjRnum(vnum) < 0) {
 		snprintf(buf, sizeof(buf), "...bad obj vnum (%d)", vnum);
 		mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
 		return false;

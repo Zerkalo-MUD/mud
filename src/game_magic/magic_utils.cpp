@@ -81,7 +81,7 @@ void SaySpell(CharData *ch, ESpell spell_id, CharData *tch, ObjData *tobj) {
 				helpee_vict = "$n издал$g непонятный звук.";
 		}
 	} else {
-		if (PRF_FLAGGED(ch, EPrf::kNoRepeat)) {
+		if (ch->IsFlagged(EPrf::kNoRepeat)) {
 			if (!ch->GetEnemy()) {
 				SendMsgToChar(OK, ch);
 			}
@@ -108,7 +108,7 @@ void SaySpell(CharData *ch, ESpell spell_id, CharData *tch, ObjData *tobj) {
 		helpee_vict = "$n подмигнул$g вам и произнес$q : '%s'.";
 	}
 
-	if (tch != nullptr && IN_ROOM(tch) == ch->in_room) {
+	if (tch != nullptr && tch->in_room == ch->in_room) {
 		if (tch == ch) {
 			format = say_to_self;
 		} else {
@@ -137,7 +137,7 @@ void SaySpell(CharData *ch, ESpell spell_id, CharData *tch, ObjData *tobj) {
 
 	act(buf1, 1, ch, tobj, tch, kToArenaListen);
 
-	if (tch != nullptr && tch != ch && IN_ROOM(tch) == ch->in_room && !AFF_FLAGGED(tch, EAffect::kDeafness)) {
+	if (tch != nullptr && tch != ch && tch->in_room == ch->in_room && !AFF_FLAGGED(tch, EAffect::kDeafness)) {
 		if (MUD::Spell(spell_id).IsViolent()) {
 			sprintf(buf1, damagee_vict,
 					IS_SET(GET_SPELL_TYPE(tch, spell_id), ESpellType::kKnow | ESpellType::kTemp) ?
@@ -289,7 +289,7 @@ bool MayCastInNomagic(CharData *caster, ESpell spell_id) {
 		return true;
 	}
 	if (caster->IsNpc() &&
-		!(AFF_FLAGGED(caster, EAffect::kCharmed) || MOB_FLAGGED(caster, EMobFlag::kTutelar)))
+		!(AFF_FLAGGED(caster, EAffect::kCharmed) || caster->IsFlagged(EMobFlag::kTutelar)))
 		return true;
 	return false;
 }
@@ -297,11 +297,11 @@ bool MayCastInNomagic(CharData *caster, ESpell spell_id) {
 bool MayCastHere(CharData *caster, CharData *victim, ESpell spell_id) {
 	int ignore;
 
-	if (IS_GRGOD(caster) || !ROOM_FLAGGED(IN_ROOM(caster), ERoomFlag::kPeaceful)) {
+	if (IS_GRGOD(caster) || !ROOM_FLAGGED(caster->in_room, ERoomFlag::kPeaceful)) {
 		return true;
 	}
 
-	if (ROOM_FLAGGED(IN_ROOM(caster), ERoomFlag::kNoBattle) && MUD::Spell(spell_id).IsViolent()) {
+	if (ROOM_FLAGGED(caster->in_room, ERoomFlag::kNoBattle) && MUD::Spell(spell_id).IsViolent()) {
 		return false;
 	}
 
@@ -360,7 +360,7 @@ int CallMagic(CharData *caster, CharData *cvict, ObjData *ovict, RoomData *rvict
 	if (spell_id < ESpell::kFirst || spell_id > ESpell::kLast)
 		return 0;
 
-	if (ROOM_FLAGGED(IN_ROOM(caster), ERoomFlag::kNoMagic) && !MayCastInNomagic(caster, spell_id)) {
+	if (ROOM_FLAGGED(caster->in_room, ERoomFlag::kNoMagic) && !MayCastInNomagic(caster, spell_id)) {
 		SendMsgToChar("Ваша магия потерпела неудачу и развеялась по воздуху.\r\n", caster);
 		act("Магия $n1 потерпела неудачу и развеялась по воздуху.",
 			false, caster, nullptr, nullptr, kToRoom | kToArenaListen);
@@ -569,8 +569,8 @@ int CastSpell(CharData *ch, CharData *tch, ObjData *tobj, RoomData *troom, ESpel
 		troom = world[ch->in_room];
 	}
 
-	if (GET_POS(ch) < MUD::Spell(spell_id).GetMinPos()) {
-		switch (GET_POS(ch)) {
+	if (ch->GetPosition() < MUD::Spell(spell_id).GetMinPos()) {
+		switch (ch->GetPosition()) {
 			case EPosition::kSleep: SendMsgToChar("Вы спите и не могете думать больше ни о чем.\r\n", ch);
 				break;
 			case EPosition::kRest: SendMsgToChar("Вы расслаблены и отдыхаете. И далась вам эта магия?\r\n", ch);
@@ -600,14 +600,14 @@ int CastSpell(CharData *ch, CharData *tch, ObjData *tobj, RoomData *troom, ESpel
 		return 0;
 	}
 
-	if ((!tch || IN_ROOM(tch) == kNowhere) && !tobj && !troom &&
+	if ((!tch || tch->in_room == kNowhere) && !tobj && !troom &&
 		MUD::Spell(spell_id).AllowTarget(kTarCharRoom | kTarCharWorld | kTarFightSelf | kTarFightVict |
 			kTarObjInv | kTarObjRoom | kTarObjWorld | kTarObjEquip | kTarRoomThis | kTarRoomDir)) {
 		SendMsgToChar("Цель заклинания недоступна.\r\n", ch);
 		return 0;
 	}
 
-	if (tch != nullptr && IN_ROOM(tch) != ch->in_room) {
+	if (tch != nullptr && tch->in_room != ch->in_room) {
 		if (!MUD::Spell(spell_id).AllowTarget(kTarCharWorld)) {
 			SendMsgToChar("Цель заклинания недоступна.\r\n", ch);
 			return 0;
@@ -650,7 +650,7 @@ int CastSpell(CharData *ch, CharData *tch, ObjData *tobj, RoomData *troom, ESpel
 		GET_SPELL_MEM(ch, spell_subst) = 0;
 	}
 
-	if (!ch->IsNpc() && !IS_IMMORTAL(ch) && PRF_FLAGGED(ch, EPrf::kAutomem)) {
+	if (!ch->IsNpc() && !IS_IMMORTAL(ch) && ch->IsFlagged(EPrf::kAutomem)) {
 		MemQ_remember(ch, spell_subst);
 	}
 

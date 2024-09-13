@@ -9,7 +9,6 @@
 #include "third_party_libs/pugixml/pugixml.h"
 
 #include <third_party_libs/fmt/include/fmt/format.h>
-#include <boost/algorithm/string.hpp>
 
 using namespace ExtMoney;
 using namespace Remort;
@@ -560,7 +559,7 @@ void drop_torc(CharData *mob) {
 	std::pair<int /* uid */, int /* rounds */> damager = mob->get_max_damager_in_room();
 	DescriptorData *d = nullptr;
 	if (damager.first > 0) {
-		d = DescByUID(damager.first);
+		d = DescriptorByUid(damager.first);
 	}
 	if (!d) {
 		return;
@@ -573,7 +572,7 @@ void drop_torc(CharData *mob) {
 	int members = 1;
 	for (FollowerType *f = leader->followers; f; f = f->next) {
 		if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-			&& f->follower->in_room == IN_ROOM(mob)
+			&& f->follower->in_room == mob->in_room
 			&& !f->follower->IsNpc()) {
 			++members;
 		}
@@ -585,7 +584,7 @@ void drop_torc(CharData *mob) {
 		return;
 	}
 
-	if (IN_ROOM(leader) == IN_ROOM(mob)
+	if (leader->in_room == mob->in_room
 		&& GET_GOD_FLAG(leader, EGf::kRemort)
 		&& (GET_UNIQUE(leader) == damager.first
 			|| mob->get_attacker(leader, ATTACKER_ROUNDS) >= damager.second / 2)) {
@@ -594,7 +593,7 @@ void drop_torc(CharData *mob) {
 
 	for (FollowerType *f = leader->followers; f; f = f->next) {
 		if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-			&& f->follower->in_room == IN_ROOM(mob)
+			&& f->follower->in_room == mob->in_room
 			&& !f->follower->IsNpc()
 			&& GET_GOD_FLAG(f->follower, EGf::kRemort)
 			&& mob->get_attacker(f->follower, ATTACKER_ROUNDS) >= damager.second / 2) {
@@ -677,7 +676,7 @@ void init() {
 
 // проверка, мешает ли что-то чару уйти в реморт
 bool can_remort_now(CharData *ch) {
-	if (PRF_FLAGGED(ch, EPrf::kCanRemort) || !need_torc(ch)) {
+	if (ch->IsFlagged(EPrf::kCanRemort) || !need_torc(ch)) {
 		return true;
 	}
 	return false;
@@ -757,7 +756,7 @@ namespace {
 void donat_torc(CharData *ch, const std::string &mob_name, unsigned type, int amount) {
 	const int balance = ch->get_ext_money(type) - amount;
 	ch->set_ext_money(type, balance);
-	PRF_FLAGS(ch).set(EPrf::kCanRemort);
+	ch->SetFlag(EPrf::kCanRemort);
 
 	SendMsgToChar(ch, "Вы пожертвовали %d %s %s.\r\n",
 				  amount, GetDeclensionInNumber(amount, type_list[type].DESC_MESSAGE_NUM),
@@ -830,7 +829,7 @@ int torc(CharData *ch, void *me, int cmd, char * /*argument*/) {
 			// от чара для реморта ничего не требуется
 			SendMsgToChar(
 				"Вам не нужно подтверждать свое право на перевоплощение, просто наберите 'перевоплотиться'.\r\n", ch);
-		} else if (PRF_FLAGGED(ch, EPrf::kCanRemort)) {
+		} else if (ch->IsFlagged(EPrf::kCanRemort)) {
 			// чар на этом морте уже жертвовал необходимое кол-во гривен
 			if (GET_GOD_FLAG(ch, EGf::kRemort)) {
 				SendMsgToChar(

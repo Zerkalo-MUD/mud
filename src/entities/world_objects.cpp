@@ -44,9 +44,8 @@ void WorldObjects::WO_RNumChangeObserver::notify(CObjectPrototype &object, const
 		ObjData::shared_ptr object_ptr = *i->second;
 
 		// remove old index entry
-		auto rnum_to_object_ptr_i = m_parent.m_rnum_to_object_ptr.find(old_rnum);
-		if (rnum_to_object_ptr_i != m_parent.m_vnum_to_object_ptr.end()) {
-			rnum_to_object_ptr_i->second.erase(object_ptr);
+		if (m_parent.m_rnum_to_object_ptr.contains(old_rnum)) {
+			m_parent.m_rnum_to_object_ptr[old_rnum].erase(object_ptr);
 		}
 
 		// insert new entry to the index
@@ -92,7 +91,7 @@ ObjData::shared_ptr WorldObjects::create_blank() {
 }
 
 ObjData::shared_ptr WorldObjects::create_from_prototype_by_vnum(ObjVnum vnum) {
-	const auto rnum = real_object(vnum);
+	const auto rnum = GetObjRnum(vnum);
 	if (rnum < 0) {
 		log("Object (V) %d does not exist in database.", vnum);
 		return nullptr;
@@ -112,17 +111,17 @@ ObjData::shared_ptr WorldObjects::create_from_prototype_by_rnum(ObjRnum rnum) {
 			new_object->set_extra_flag(EObjFlag::kNolocate);
 			new_object->set_extra_flag(EObjFlag::KLimitedTimer);
 			new_object->set_extra_flag(EObjFlag::kTransformed);
+			new_object->set_extra_flag(EObjFlag::kNosell);
 		}
-
 		new_object->clear_proto_script();
-
 		const auto id = max_id.allocate();
+
 		new_object->set_id(id);
 		if (new_object->get_type() == EObjType::kLiquidContainer) {
 			if (new_object->get_val(1) > 0) {
 				name_from_drinkcon(new_object.get());
 				name_to_drinkcon(new_object.get(), new_object->get_val(2));
-			}
+				}
 		}
 
 		assign_triggers(new_object.get(), OBJ_TRIGGER);
@@ -139,7 +138,12 @@ ObjData::shared_ptr WorldObjects::create_raw_from_prototype_by_rnum(ObjRnum rnum
 	}
 
 	auto new_object = std::make_shared<ObjData>(*obj_proto[rnum]);
-	obj_proto.inc_number(rnum);
+	auto orn  = obj_proto[rnum]->get_parent_rnum();
+	if (orn > -1) {
+		obj_proto.inc_number(orn);
+	} else {
+		obj_proto.inc_number(rnum);
+	}
 	world_objects.add(new_object);
 
 	return new_object;

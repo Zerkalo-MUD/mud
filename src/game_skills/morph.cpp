@@ -6,7 +6,6 @@
 #include "game_magic/magic_utils.h"
 #include "third_party_libs/pugixml/pugixml.h"
 
-#include <boost/algorithm/string.hpp>
 #include <third_party_libs/fmt/include/fmt/format.h>
 
 MorphListType IdToMorphMap;
@@ -55,8 +54,8 @@ void NormalMorph::set_skill(const ESkill skill_num, int percent) {
 void AnimalMorph::set_skill(const ESkill skill_num, int percent) {
 	auto it = skills_.find(skill_num);
 	if (it != skills_.end()) {
-		int diff = percent - it->second;//Polud	пока все снижения уровня скилов в звериной форме уходят в /dev/null
-		if (diff > 0 && number(1, 2) == 2)//Polud в звериной форме вся прокачка идет в оборотничество
+		int diff = percent - it->second;
+		if (diff > 0 && number(1, 2) == 2)
 		{
 			sprintf(buf,
 					"%sВаши успехи сделали вас опытнее в оборотничестве.%s\r\n",
@@ -381,8 +380,8 @@ void morphs_save(CharData *ch, FILE *saved) {
 };
 
 void morphs_load(CharData *ch, std::string line) {
-	std::list<std::string> morphs;
-	boost::split(morphs, line, boost::is_any_of(std::string("#")), boost::token_compress_on);
+	std::vector<std::string> morphs = utils::Split(line, '#');
+
 	for (const auto &it : morphs) {
 		if (ExistsMorph(it)
 			&& !ch->know_morph(it)) {

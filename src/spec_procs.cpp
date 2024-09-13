@@ -12,7 +12,6 @@
 *  $Revision$                                                      *
 ************************************************************************ */
 
-#include <boost/algorithm/string.hpp>
 
 #include "act_movement.h"
 #include "utils/utils_char_obj.inl"
@@ -61,12 +60,12 @@ int horse_keeper(CharData *ch, void *me, int cmd, char *argument) {
 	if (!*argument) {
 		if (ch->has_horse(false)) {
 			act("$N поинтересовал$U : \"$n, зачем тебе второй скакун? У тебя ведь одно седалище.\"",
-				false, ch, 0, victim, kToChar);
+				false, ch, nullptr, victim, kToChar);
 			return (true);
 		}
 		sprintf(buf, "$N сказал$G : \"Я продам тебе скакуна за %d %s.\"",
 				kHorseCost, GetDeclensionInNumber(kHorseCost, EWhat::kMoneyA));
-		act(buf, false, ch, 0, victim, kToChar);
+		act(buf, false, ch, nullptr, victim, kToChar);
 		return (true);
 	}
 
@@ -80,7 +79,7 @@ int horse_keeper(CharData *ch, void *me, int cmd, char *argument) {
 				false, ch, 0, victim, kToChar);
 			return (true);
 		}
-		if (!(horse = read_mobile(kHorseVnum, VIRTUAL))) {
+		if (!(horse = ReadMobile(kHorseVnum, kVirtual))) {
 			act("\"Извини, у меня нет для тебя скакуна.\"-смущенно произнес$Q $N",
 				false, ch, 0, victim, kToChar);
 			return (true);
@@ -92,7 +91,7 @@ int horse_keeper(CharData *ch, void *me, int cmd, char *argument) {
 		sprintf(buf, "$N оседлал$G %s и отдал$G %s $n2.", GET_PAD(horse, 3), HSHR(horse));
 		act(buf, false, ch, 0, victim, kToRoom);
 		ch->remove_gold(kHorseCost);
-		PLR_FLAGS(ch).set(EPlrFlag::kCrashSave);
+		ch->SetFlag(EPlrFlag::kCrashSave);
 		return (true);
 	}
 
@@ -112,7 +111,7 @@ int horse_keeper(CharData *ch, void *me, int cmd, char *argument) {
 			return (true);
 		}
 
-		if (IN_ROOM(horse) != IN_ROOM(victim)) {
+		if (horse->in_room != victim->in_room) {
 			act("\"Извини, твой скакун где-то бродит.\"- заявил$G $N", false, ch, 0, victim, kToChar);
 			return (true);
 		}
@@ -123,7 +122,7 @@ int horse_keeper(CharData *ch, void *me, int cmd, char *argument) {
 		act(buf, false, ch, 0, victim, kToRoom);
 		ExtractCharFromWorld(horse, false);
 		ch->add_gold((kHorseCost >> 1));
-		PLR_FLAGS(ch).set(EPlrFlag::kCrashSave);
+		ch->SetFlag(EPlrFlag::kCrashSave);
 		return (true);
 	}
 
@@ -193,7 +192,7 @@ int npc_scavenge(CharData *ch) {
 	int max = 1;
 	ObjData *obj, *best_obj, *cont, *best_cont, *cobj;
 
-	if (!MOB_FLAGGED(ch, EMobFlag::kScavenger)) {
+	if (!ch->IsFlagged(EMobFlag::kScavenger)) {
 		return (false);
 	}
 
@@ -223,14 +222,14 @@ int npc_scavenge(CharData *ch) {
 				// Заперто, открываем, если есть ключ
 				if (OBJVAL_FLAGGED(obj, EContainerFlag::kLockedUp)
 					&& HasKey(ch, GET_OBJ_VAL(obj, 2))) {
-					do_doorcmd(ch, obj, 0, SCMD_UNLOCK);
+					do_doorcmd(ch, obj, 0, kScmdUnlock);
 				}
 
 				// Заперто, взламываем, если умеем
 				if (OBJVAL_FLAGGED(obj, EContainerFlag::kLockedUp)
 					&& ch->GetSkill(ESkill::kPickLock)
-					&& ok_pick(ch, 0, obj, 0, SCMD_PICK)) {
-					do_doorcmd(ch, obj, 0, SCMD_PICK);
+					&& ok_pick(ch, 0, obj, 0, kScmdPick)) {
+					do_doorcmd(ch, obj, 0, kScmdPick);
 				}
 				// Все равно заперто, ну тогда фиг с ним
 				if (OBJVAL_FLAGGED(obj, EContainerFlag::kLockedUp)) {
@@ -238,7 +237,7 @@ int npc_scavenge(CharData *ch) {
 				}
 
 				if (OBJVAL_FLAGGED(obj, EContainerFlag::kShutted)) {
-					do_doorcmd(ch, obj, 0, SCMD_OPEN);
+					do_doorcmd(ch, obj, 0, kScmdOpen);
 				}
 
 				if (OBJVAL_FLAGGED(obj, EContainerFlag::kShutted)) {
@@ -288,7 +287,7 @@ int npc_loot(CharData *ch) {
 	int max = false;
 	ObjData *obj, *loot_obj, *next_loot, *cobj, *cnext_obj;
 
-	if (!MOB_FLAGGED(ch, EMobFlag::kLooter))
+	if (!ch->IsFlagged(EMobFlag::kLooter))
 		return (false);
 	if (IS_SHOPKEEPER(ch))
 		return (false);
@@ -363,7 +362,7 @@ int npc_loot(CharData *ch) {
 						// ...или взломаем?
 						if (OBJVAL_FLAGGED(loot_obj, EContainerFlag::kLockedUp)
 							&& ch->GetSkill(ESkill::kPickLock)
-							&& ok_pick(ch, 0, loot_obj, 0, SCMD_PICK)) {
+							&& ok_pick(ch, 0, loot_obj, 0, kScmdPick)) {
 							loot_obj->toggle_val_bit(1, EContainerFlag::kLockedUp);
 						}
 
@@ -405,8 +404,7 @@ int npc_move(CharData *ch, int dir, int/* need_specials_check*/) {
 		return (false);
 	} else if (!EXIT(ch, dir) || EXIT(ch, dir)->to_room() == kNowhere) {
 		return (false);
-	} else if (ch->has_master()
-		&& ch->in_room == IN_ROOM(ch->get_master())) {
+	} else if (ch->has_master() && ch->isInSameRoom(ch->get_master())) {
 		return (false);
 	} else if (EXIT_FLAGGED(EXIT(ch, dir), EExitFlag::kClosed)) {
 		if (!EXIT_FLAGGED(EXIT(ch, dir), EExitFlag::kHasDoor)) {
@@ -420,7 +418,7 @@ int npc_move(CharData *ch, int dir, int/* need_specials_check*/) {
 				|| (!EXIT_FLAGGED(rdata, EExitFlag::kPickroof)
 					&& !EXIT_FLAGGED(rdata, EExitFlag::kBrokenLock)
 					&& CalcCurrentSkill(ch, ESkill::kPicks, 0) >= number(0, 100))) {
-				do_doorcmd(ch, 0, dir, SCMD_UNLOCK);
+				do_doorcmd(ch, 0, dir, kScmdUnlock);
 				need_lock = true;
 			} else {
 				return (false);
@@ -429,8 +427,8 @@ int npc_move(CharData *ch, int dir, int/* need_specials_check*/) {
 		if (EXIT_FLAGGED(rdata, EExitFlag::kClosed)) {
 			if (GetRealInt(ch) >= 15
 				|| GET_DEST(ch) != kNowhere
-				|| MOB_FLAGGED(ch, EMobFlag::kOpensDoor)) {
-				do_doorcmd(ch, 0, dir, SCMD_OPEN);
+				|| ch->IsFlagged(EMobFlag::kOpensDoor)) {
+				do_doorcmd(ch, 0, dir, kScmdOpen);
 				need_close = true;
 			}
 		}
@@ -444,7 +442,7 @@ int npc_move(CharData *ch, int dir, int/* need_specials_check*/) {
 		if (EXIT(ch, close_direction) &&
 			EXIT_FLAGGED(EXIT(ch, close_direction), EExitFlag::kHasDoor) &&
 			EXIT(ch, close_direction)->to_room() != kNowhere) {
-			do_doorcmd(ch, 0, close_direction, SCMD_CLOSE);
+			do_doorcmd(ch, 0, close_direction, kScmdClose);
 		}
 	}
 
@@ -454,7 +452,7 @@ int npc_move(CharData *ch, int dir, int/* need_specials_check*/) {
 		if (EXIT(ch, lock_direction) &&
 			EXIT_FLAGGED(EXIT(ch, lock_direction), EExitFlag::kHasDoor) &&
 			EXIT(ch, lock_direction)->to_room() != kNowhere) {
-			do_doorcmd(ch, 0, lock_direction, SCMD_LOCK);
+			do_doorcmd(ch, 0, lock_direction, kScmdLock);
 		}
 	}
 
@@ -482,7 +480,7 @@ int calculate_weapon_class(CharData *ch, ObjData *weapon) {
 		return 0;
 	}
 
-	hits = CalcCurrentSkill(ch, static_cast<ESkill>(GET_OBJ_SKILL(weapon)), 0);
+	hits = CalcCurrentSkill(ch, static_cast<ESkill>(weapon->get_spec_param()), 0);
 	damage = (GET_OBJ_VAL(weapon, 1) + 1) * (GET_OBJ_VAL(weapon, 2)) / 2;
 	for (i = 0; i < kMaxObjAffect; i++) {
 		auto &affected = weapon->get_affected(i);
@@ -544,7 +542,7 @@ void npc_wield(CharData *ch) {
 	for (obj = ch->carrying; obj; obj = next) {
 		next = obj->get_next_content();
 		if (GET_OBJ_TYPE(obj) != EObjType::kWeapon
-			|| GET_OBJ_UID(obj) != 0) {
+			|| GET_OBJ_UNIQUE_ID(obj) != 0) {
 			continue;
 		}
 
@@ -755,7 +753,7 @@ int npc_battle_scavenge(CharData *ch) {
 	int max = false;
 	ObjData *obj, *next_obj = nullptr;
 
-	if (!MOB_FLAGGED(ch, EMobFlag::kScavenger))
+	if (!ch->IsFlagged(EMobFlag::kScavenger))
 		return (false);
 
 	if (IS_SHOPKEEPER(ch))
@@ -783,7 +781,7 @@ int npc_walk(CharData *ch) {
 	if (ch->in_room == kNowhere)
 		return (kBfsError);
 
-	if (GET_DEST(ch) == kNowhere || (rnum = real_room(GET_DEST(ch))) == kNowhere)
+	if (GET_DEST(ch) == kNowhere || (rnum = GetRoomRnum(GET_DEST(ch))) == kNowhere)
 		return (kBfsError);
 
 	if (ch->in_room == rnum) {
@@ -794,14 +792,14 @@ int npc_walk(CharData *ch) {
 		if (!ch->mob_specials.dest_pos && ch->mob_specials.dest_dir < 0)
 			ch->mob_specials.dest_dir = 0;
 		ch->mob_specials.dest_pos += ch->mob_specials.dest_dir >= 0 ? 1 : -1;
-		if (((rnum = real_room(GET_DEST(ch))) == kNowhere)
+		if (((rnum = GetRoomRnum(GET_DEST(ch))) == kNowhere)
 			|| rnum == ch->in_room)
 			return (kBfsError);
 		else
 			return (npc_walk(ch));
 	}
 
-	door = find_first_step(ch->in_room, real_room(GET_DEST(ch)), ch);
+	door = find_first_step(ch->in_room, GetRoomRnum(GET_DEST(ch)), ch);
 
 	return (door);
 }
@@ -837,10 +835,10 @@ int do_npc_steal(CharData *ch, CharData *victim) {
 			victim->remove_gold(gold);
 		}
 		// Steal something from equipment
-		if (IS_CARRYING_N(ch) < CAN_CARRY_N(ch) && CalcCurrentSkill(ch, ESkill::kSteal, victim)
+		if (ch->GetCarryingQuantity() < CAN_CARRY_N(ch) && CalcCurrentSkill(ch, ESkill::kSteal, victim)
 			>= number(1, 100) - (AWAKE(victim) ? 100 : 0)) {
 			for (obj = victim->carrying; obj; obj = obj->get_next_content())
-				if (CAN_SEE_OBJ(ch, obj) && IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj)
+				if (CAN_SEE_OBJ(ch, obj) && ch->GetCarryingWeight() + GET_OBJ_WEIGHT(obj)
 					<= CAN_CARRY_W(ch) && (!best || GET_OBJ_COST(obj) > GET_OBJ_COST(best)))
 					best = obj;
 			if (best) {
@@ -857,7 +855,7 @@ int npc_steal(CharData *ch) {
 	if (!NPC_FLAGGED(ch, ENpcFlag::kStealing))
 		return (false);
 
-	if (GET_POS(ch) != EPosition::kStand || IS_SHOPKEEPER(ch) || ch->GetEnemy())
+	if (ch->GetPosition() != EPosition::kStand || IS_SHOPKEEPER(ch) || ch->GetEnemy())
 		return (false);
 
 	for (const auto cons : world[ch->in_room]->people) {
@@ -882,12 +880,11 @@ void npc_group(CharData *ch) {
 		return;
 
 	// ноугруп мобы не вступают в группу
-	if (MOB_FLAGGED(ch, EMobFlag::kNoGroup)) {
+	if (ch->IsFlagged(EMobFlag::kNoGroup)) {
 		return;
 	}
 
-	if (ch->has_master()
-		&& ch->in_room == IN_ROOM(ch->get_master())) {
+	if (ch->has_master() && ch->isInSameRoom(ch->get_master())) {
 		leader = ch->get_master();
 	}
 
@@ -897,13 +894,12 @@ void npc_group(CharData *ch) {
 
 	if (leader
 		&& (AFF_FLAGGED(leader, EAffect::kCharmed)
-			|| GET_POS(leader) < EPosition::kSleep)) {
+			|| leader->GetPosition() < EPosition::kSleep)) {
 		leader = nullptr;
 	}
 
 	// ноугруп моб не может быть лидером
-	if (leader
-		&& MOB_FLAGGED(leader, EMobFlag::kNoGroup)) {
+	if (leader && leader->IsFlagged(EMobFlag::kNoGroup)) {
 		leader = nullptr;
 	}
 
@@ -913,9 +909,9 @@ void npc_group(CharData *ch) {
 			|| GET_DEST(vict) != GET_DEST(ch)
 			|| zone != ZONE(vict)
 			|| group != GROUP(vict)
-			|| MOB_FLAGGED(vict, EMobFlag::kNoGroup)
+			|| vict->IsFlagged(EMobFlag::kNoGroup)
 			|| AFF_FLAGGED(vict, EAffect::kCharmed)
-			|| GET_POS(vict) < EPosition::kSleep) {
+			|| vict->GetPosition() < EPosition::kSleep) {
 			continue;
 		}
 
@@ -946,7 +942,7 @@ void npc_group(CharData *ch) {
 			|| zone != ZONE(vict)
 			|| group != GROUP(vict)
 			|| AFF_FLAGGED(vict, EAffect::kCharmed)
-			|| GET_POS(vict) < EPosition::kSleep) {
+			|| vict->GetPosition() < EPosition::kSleep) {
 			continue;
 		}
 
@@ -982,11 +978,11 @@ void npc_groupbattle(CharData *ch) {
 	tch = ch->has_master() ? ch->get_master() : ch;
 	for (; k; (k = tch ? k : k->next), tch = nullptr) {
 		helper = tch ? tch : k->follower;
-		if (ch->in_room == IN_ROOM(helper)
+		if (ch->in_room == helper->in_room
 			&& !helper->GetEnemy()
 			&& !helper->IsNpc()
-			&& GET_POS(helper) > EPosition::kStun) {
-			GET_POS(helper) = EPosition::kStand;
+			&& helper->GetPosition() > EPosition::kStun) {
+			helper->SetPosition(EPosition::kStand);
 			SetFighting(helper, ch->GetEnemy());
 			act("$n вступил$u за $N3.", false, helper, 0, ch, kToRoom);
 		}
@@ -1049,7 +1045,7 @@ path = close_path;
 index = 0;
 }
 }
-if (cmd || !move || (GET_POS(ch) < EPosition::kSleep) || (GET_POS(ch) == EPosition::kFight))
+if (cmd || !move || (ch->GetPosition() < EPosition::kSleep) || (ch->GetPosition() == EPosition::kFight))
 return (false);
 
 switch (path[index])
@@ -1062,12 +1058,12 @@ perform_move(ch, path[index] - '0', 1, false);
 break;
 
 case 'W':
-GET_POS(ch) = EPosition::kStand;
+ch->SetPosition(EPosition::kStand);
 act("$n awakens and groans loudly.", false, ch, 0, 0, TO_ROOM);
 break;
 
 case 'S':
-GET_POS(ch) = EPosition::kSleep;
+ch->SetPosition(EPosition::kSleep);
 act("$n lies down and instantly falls asleep.", false, ch, 0, 0, TO_ROOM);
 break;
 
@@ -1127,7 +1123,7 @@ return (false);
 	if (cmd)
 		return (false);
 
-	if (GET_POS(ch) != EPosition::kStand)
+	if (ch->GetPosition() != EPosition::kStand)
 		return (false);
 
 	for (const auto cons : world[ch->in_room]->people)
@@ -1146,7 +1142,7 @@ return (false);
 }
 */
 int magic_user(CharData *ch, void * /*me*/, int cmd, char * /*argument*/) {
-	if (cmd || GET_POS(ch) != EPosition::kFight) {
+	if (cmd || ch->GetPosition() != EPosition::kFight) {
 		return (false);
 	}
 
@@ -1163,7 +1159,7 @@ int magic_user(CharData *ch, void * /*me*/, int cmd, char * /*argument*/) {
 
 	// if I didn't pick any of those, then just slam the guy I'm fighting //
 	if (target == nullptr
-		&& IN_ROOM(ch->GetEnemy()) == ch->in_room) {
+		&& ch->GetEnemy()->in_room == ch->in_room) {
 		target = ch->GetEnemy();
 	}
 
@@ -1286,7 +1282,7 @@ int cityguard(CharData *ch, void * /*me*/, int cmd, char * /*argument*/) {
 	evil = 0;
 
 	for (const auto tch : world[ch->in_room]->people) {
-		if (!tch->IsNpc() && CAN_SEE(ch, tch) && PLR_FLAGGED(tch, EPlrFlag::kKiller)) {
+		if (!tch->IsNpc() && CAN_SEE(ch, tch) && tch->IsFlagged(EPlrFlag::kKiller)) {
 			act("$n screams 'HEY!!!  You're one of those PLAYER KILLERS!!!!!!'", false, ch, 0, 0, kToRoom);
 			hit(ch, tch, ESkill::kUndefined, fight::kMainHand);
 
@@ -1295,7 +1291,7 @@ int cityguard(CharData *ch, void * /*me*/, int cmd, char * /*argument*/) {
 	}
 
 	for (const auto tch : world[ch->in_room]->people) {
-		if (!tch->IsNpc() && CAN_SEE(ch, tch) && PLR_FLAGGED(tch, EPlrFlag::kBurglar)) {
+		if (!tch->IsNpc() && CAN_SEE(ch, tch) && tch->IsFlagged(EPlrFlag::kBurglar)) {
 			act("$n screams 'HEY!!!  You're one of those PLAYER THIEVES!!!!!!'", false, ch, 0, 0, kToRoom);
 			hit(ch, tch, ESkill::kUndefined, fight::kMainHand);
 
@@ -1353,7 +1349,7 @@ int pet_shops(CharData *ch, void * /*me*/, int cmd, char *argument) {
 		}
 		ch->remove_gold(PET_PRICE(pet));
 
-		pet = read_mobile(GET_MOB_RNUM(pet), REAL);
+		pet = ReadMobile(GET_MOB_RNUM(pet), kReal);
 		pet->set_exp(0);
 		AFF_FLAGS(pet).set(EAffect::kCharmed);
 
@@ -1485,7 +1481,7 @@ int bank(CharData *ch, void * /*me*/, int cmd, char *argument) {
 
 		} else {
 			vict = new Player; // TODO: переделать на стек
-			if (load_char(arg, vict) < 0) {
+			if (LoadPlayerCharacter(arg, vict, ELoadCharFlags::kFindId) < 0) {
 				SendMsgToChar("Такого персонажа не существует.\r\n", ch);
 				delete vict;
 				return (1);

@@ -27,8 +27,8 @@ void TopPlayer::Remove(CharData *short_ch) {
 // подробности в комментарии к load_char_ascii
 void TopPlayer::Refresh(CharData *short_ch, bool reboot) {
 	if (short_ch->IsNpc()
-		|| PLR_FLAGS(short_ch).get(EPlrFlag::kFrozen)
-		|| PLR_FLAGS(short_ch).get(EPlrFlag::kDeleted)
+		|| short_ch->IsFlagged(EPlrFlag::kFrozen)
+		|| short_ch->IsFlagged(EPlrFlag::kDeleted)
 		|| IS_IMMORTAL(short_ch)) {
 		return;
 	}
@@ -60,7 +60,7 @@ void TopPlayer::Refresh(CharData *short_ch, bool reboot) {
 
 const PlayerChart &TopPlayer::Chart() {
 	return chart_;
-};
+}
 
 void TopPlayer::PrintPlayersChart(CharData *ch) {
 	SendMsgToChar(" Лучшие персонажи игроков:\r\n", ch);
@@ -135,7 +135,7 @@ void TopPlayer::PrintHelp(CharData *ch) {
 	table_wrapper::PrintTableToChar(ch, table);
 }
 
-void DoBest(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
+void Rating::DoBest(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (ch->IsNpc()) {
 		return;
 	}

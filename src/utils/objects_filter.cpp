@@ -11,6 +11,7 @@
 #include "house.h"
 #include "obj_prototypes.h"
 #include "structs/global_objects.h"
+#include "game_mechanics/stable_objs.h"
 
 extern ESkill FixNameAndFindSkillId(char *name);
 
@@ -439,8 +440,7 @@ bool ParseFilter::check_state(ObjData *obj) const {
 			mudlog(buf_, CMP, kLvlImmortal, SYSLOG, true);
 		} else {
 			int tm_pct;
-			if (check_unlimited_timer(obj))  // если шмотка нерушима, физически проставляем текст нерушимо
-			{
+			if (stable_objs::IsTimerUnlimited(obj)) {
 				tm_pct = 1000;
 			} else {
 				tm_pct = obj->get_timer() * 100 / proto_tm;
@@ -479,7 +479,7 @@ bool ParseFilter::check_wear(ObjData *obj) const {
 }
 
 bool ParseFilter::check_weap_class(ObjData *obj) const {
-	if (MUD::Skills().IsInvalid(weap_class) || weap_class == static_cast<ESkill>(GET_OBJ_SKILL(obj))) {
+	if (MUD::Skills().IsInvalid(weap_class) || weap_class == static_cast<ESkill>(obj->get_spec_param())) {
 		return true;
 	}
 	return false;
@@ -609,7 +609,7 @@ bool ParseFilter::check_affect_extra(ObjData *obj) const {
 
 bool ParseFilter::check_owner(ExchangeItem *exch_obj) const {
 	if (owner.empty()
-		|| isname(owner, get_name_by_id(GET_EXCHANGE_ITEM_SELLERID(exch_obj)))) {
+		|| isname(owner, GetNameById(GET_EXCHANGE_ITEM_SELLERID(exch_obj)))) {
 		return true;
 	}
 	return false;

@@ -6,7 +6,6 @@
 
 #include "obj_save.h"
 #include "entities/world_objects.h"
-#include "obj_prototypes.h"
 #include "utils/parse.h"
 #include "handler.h"
 #include "color.h"
@@ -15,24 +14,28 @@
 #include "cache.h"
 #include "depot.h"
 #include "house.h"
+#include "obj_prototypes.h"
+#include "game_mechanics/stable_objs.h"
+
+#include <cmath>
+#include <memory>
+
 //#include <sstream>
 
 extern void get_from_container(CharData *ch, ObjData *cont, char *local_arg, int mode, int amount, bool autoloot);
-void set_obj_eff(ObjData *itemobj, EApply type, int mod);
-void set_obj_aff(ObjData *itemobj, EAffect bitv);
-extern void extract_trigger(Trigger *trig);
+extern void ExtractTrigger(Trigger *trig);
+extern double CalcRemortRequirements(const CObjectPrototype *obj);
 
 id_to_set_info_map ObjData::set_table;
 
 ObjData::ObjData(const ObjVnum vnum) :
 	CObjectPrototype(vnum),
-	m_uid(0),
+	m_unique_id(0),
 	m_in_room(0),
 	m_room_was_in(0),
 	m_maker(DEFAULT_MAKER),
 	m_owner(DEFAULT_OWNER),
 	m_zone_from(0),
-	m_parent(DEFAULT_PARENT),
 	m_is_rename(false),
 	m_carried_by(nullptr),
 	m_worn_by(nullptr),
@@ -53,13 +56,12 @@ ObjData::ObjData(const ObjVnum vnum) :
 
 ObjData::ObjData(const CObjectPrototype &other) :
 	CObjectPrototype(other),
-	m_uid(0),
+	m_unique_id(0),
 	m_in_room(0),
 	m_room_was_in(0),
 	m_maker(DEFAULT_MAKER),
 	m_owner(DEFAULT_OWNER),
 	m_zone_from(0),
-	m_parent(DEFAULT_PARENT),
 	m_is_rename(false),
 	m_carried_by(nullptr),
 	m_worn_by(nullptr),
@@ -80,7 +82,7 @@ ObjData::ObjData(const CObjectPrototype &other) :
 ObjData::ObjData(const ObjData &other) : CObjectPrototype(other.get_vnum()) {
 	*this = other;
 
-	m_script.reset(new Script(*other.m_script));    // each object must have its own script. Just copy it
+	m_script = std::make_shared<Script>(*other.m_script);    // each object must have its own script. Just copy it
 
 	caching::obj_cache.Add(this);
 }
@@ -93,7 +95,7 @@ ObjData::~ObjData() {
 void ObjData::zero_init() {
 	CObjectPrototype::zero_init();
 	set_weight(0);
-	m_uid = 0;
+	m_unique_id = 0;
 	m_in_room = kNowhere;
 	m_carried_by = nullptr;
 	m_worn_by = nullptr;
@@ -129,7 +131,7 @@ void ObjData::purge() {
 	//см. комментарий в структуре BloodyInfo из pk.cpp
 	bloody::remove_obj(this);
 	//weak_ptr тут бы был какраз в тему
-	Celebrates::remove_from_obj_lists(this->get_uid());
+	celebrates::RemoveFromObjLists(this->get_unique_id());
 }
 
 int ObjData::get_serial_num() {
@@ -234,20 +236,20 @@ void ObjData::cleanup_script() {
 	m_script->cleanup();
 }
 
-void ObjData::set_uid(const unsigned _) {
-	if (_ != m_uid) {
-		const auto old_uid = m_uid;
+void ObjData::set_unique_id(const long _) {
+	if (_ != m_unique_id) {
+		const auto old_uid = m_unique_id;
 
-		m_uid = _;
+		m_unique_id = _;
 
-		for (const auto &observer : m_uid_change_observers) {
+		for (const auto &observer : m_unique_id_change_observers) {
 			observer->notify(*this, old_uid);
 		}
 	}
 }
 
 void CObjectPrototype::toggle_skill(const uint32_t skill) {
-	TOGGLE_BIT(m_skill, skill);
+	TOGGLE_BIT(m_sparam, skill);
 }
 
 void CObjectPrototype::toggle_val_bit(const size_t index, const Bitvector bit) {
@@ -352,7 +354,7 @@ CObjectPrototype &CObjectPrototype::operator=(const CObjectPrototype &from) {
 		m_destroyer = from.m_destroyer;
 		m_spell = from.m_spell;
 		m_level = from.m_level;
-		m_skill = from.m_skill;
+		m_sparam = from.m_sparam;
 		m_maximum_durability = from.m_maximum_durability;
 		m_current_durability = from.m_current_durability;
 		m_material = from.m_material;
@@ -517,7 +519,7 @@ void ObjData::unset_enchant() {
 }
 
 bool ObjData::clone_olc_object_from_prototype(const ObjVnum vnum) {
-	const auto rnum = real_object(vnum);
+	const auto rnum = GetObjRnum(vnum);
 
 	if (rnum < 0) {
 		return false;
@@ -642,18 +644,15 @@ void ObjData::set_tag(const char *tag) {
 
 void ObjData::attach_triggers(const triggers_list_t &trigs) {
 	for (auto it = trigs.begin(); it != trigs.end(); ++it) {
-		int rnum = real_trigger(*it);
+		int rnum = GetTriggerRnum(*it);
 		if (rnum != -1) {
 			auto trig = read_trigger(rnum);
 			if (!add_trigger(get_script().get(), trig, -1)) {
-				extract_trigger(trig);
+				ExtractTrigger(trig);
 			}
 		}
 	}
 }
-
-float count_mort_requred(const CObjectPrototype *obj);
-float count_unlimited_timer(const CObjectPrototype *obj);
 
 /**
 * Реальное старение шмотки (без всяких технических сетов таймера по коду).
@@ -665,27 +664,31 @@ void ObjData::dec_timer(int time, bool ignore_utimer, bool exchange) {
 	if (!m_timed_spell.empty()) {
 		m_timed_spell.dec_timer(this, time);
 	}
-	if (!ignore_utimer && check_unlimited_timer(this)) {
+	if (!ignore_utimer && stable_objs::IsTimerUnlimited(this)) {
 		return;
 	}
 	std::stringstream buffer;
 
-	if (get_timer()  > 100000 && (GET_OBJ_TYPE(this) == EObjType::kArmor
-			|| GET_OBJ_TYPE(this) == EObjType::kStaff
-			|| GET_OBJ_TYPE(this) == EObjType::kWorm
-			|| GET_OBJ_TYPE(this) == EObjType::kWeapon)) {
+	if (get_timer() > 100000 && (GET_OBJ_TYPE(this) == EObjType::kArmor
+		|| GET_OBJ_TYPE(this) == EObjType::kStaff
+		|| GET_OBJ_TYPE(this) == EObjType::kWorm
+		|| GET_OBJ_TYPE(this) == EObjType::kWeapon)) {
 		buffer << "У предмета [" << GET_OBJ_VNUM(this)
-				<< "] имя: " << GET_OBJ_PNAME(this, 0).c_str() << ", id: " <<  get_id() << ", таймер > 100к равен: " << get_timer();
+			   << "] имя: " << GET_OBJ_PNAME(this, 0).c_str() << ", id: " << get_id() << ", таймер > 100к равен: "
+			   << get_timer();
 		if (get_in_room() != kNowhere) {
-			buffer << ", находится в комнате vnum: " << world[get_in_room()]->room_vn;
+			buffer << ", находится в комнате vnum: " << world[get_in_room()]->vnum;
 		} else if (get_carried_by()) {
-			buffer << ", затарено: " <<  GET_NAME(get_carried_by()) << "["
-					<< GET_MOB_VNUM(get_carried_by()) <<"] в комнате: [" << world[this->get_carried_by()->in_room]->room_vn << "]";
+			buffer << ", затарено: " << GET_NAME(get_carried_by()) << "["
+				   << GET_MOB_VNUM(get_carried_by()) << "] в комнате: [" << world[this->get_carried_by()->in_room]->vnum
+				   << "]";
 		} else if (get_worn_by()) {
-			buffer << ", надет на перс: " << GET_NAME(get_worn_by()) << "[" << GET_MOB_VNUM(get_worn_by()) << "] в комнате: [" 
-					<< world[get_worn_by()->in_room]->room_vn <<"]";
+			buffer << ", надет на перс: " << GET_NAME(get_worn_by()) << "[" << GET_MOB_VNUM(get_worn_by())
+				   << "] в комнате: ["
+				   << world[get_worn_by()->in_room]->vnum << "]";
 		} else if (get_in_obj()) {
-			buffer << ", находится в сумке: " << GET_OBJ_PNAME(get_in_obj(), 0) << " в комнате: [" << world[get_in_obj()->get_in_room()]->room_vn << "]";
+			buffer << ", находится в сумке: " << GET_OBJ_PNAME(get_in_obj(), 0) << " в комнате: ["
+				   << world[get_in_obj()->get_in_room()]->vnum << "]";
 		}
 		mudlog(buffer.str(), BRF, kLvlGod, SYSLOG, true);
 	}
@@ -702,19 +705,23 @@ void ObjData::dec_timer(int time, bool ignore_utimer, bool exchange) {
 	}
 }
 
-float CObjectPrototype::show_mort_req() {
-	return count_mort_requred(this);
+ObjRnum CObjectPrototype::get_parent_vnum() {
+	return obj_proto[this->get_parent_rnum()]->get_vnum();
 }
 
-float CObjectPrototype::show_koef_obj() {
-	return count_unlimited_timer(this);
+double CObjectPrototype::show_mort_req() const {
+	return CalcRemortRequirements(this);
 }
 
-float CObjectPrototype::get_ilevel() const {
+double CObjectPrototype::show_koef_obj() const {
+	return stable_objs::CountUnlimitedTimer(this);
+}
+
+double CObjectPrototype::get_ilevel() const {
 	return m_ilevel;
 }
 
-void CObjectPrototype::set_ilevel(float ilvl) {
+void CObjectPrototype::set_ilevel(double ilvl) {
 	m_ilevel = ilvl;
 }
 
@@ -976,7 +983,7 @@ void init_ilvl(CObjectPrototype *obj) {
 		return;
 	}
 
-	float total_weight = count_mort_requred(obj);
+	auto total_weight = CalcRemortRequirements(obj);
 
 	obj->set_ilevel(total_weight);
 }
@@ -1000,8 +1007,8 @@ TelegramBot *bot = new TelegramBot();
 
 /// при старте сразу после лоада зон
 void init() {
-	PURSE_RNUM = real_object(PURSE_VNUM);
-	PERS_CHEST_RNUM = real_object(PERS_CHEST_VNUM);
+	PURSE_RNUM = GetObjRnum(PURSE_VNUM);
+	PERS_CHEST_RNUM = GetObjRnum(PERS_CHEST_VNUM);
 }
 
 ObjData *create_purse(CharData *ch, int/* gold*/) {
@@ -1158,7 +1165,7 @@ std::string ObjVal::print_to_zone() const {
 
 	std::sort(m_val_vec.begin(), m_val_vec.end(),
 			  [](std::pair<std::string, int> &a, std::pair<std::string, int> &b) {
-				  return a.first < b.first;
+				return a.first < b.first;
 			  });
 
 	for (auto const &i : m_val_vec) {
@@ -1255,13 +1262,13 @@ void print_obj_affects(CharData *ch, const obj_affected_type &affect) {
 
 namespace SetSystem {
 struct SetNode {
-	// список шмоток по конкретному сету для сверки
-	// инится один раз при ребуте и больше не меняется
-	std::set<int> set_vnum;
-	// список шмоток из данного сета у текущего чара
-	// если после заполнения в списке только 1 предмет
-	// значит удаляем его как единственный у чара
-	std::vector<int> obj_vnum;
+  // список шмоток по конкретному сету для сверки
+  // инится один раз при ребуте и больше не меняется
+  std::set<int> set_vnum;
+  // список шмоток из данного сета у текущего чара
+  // если после заполнения в списке только 1 предмет
+  // значит удаляем его как единственный у чара
+  std::vector<int> obj_vnum;
 };
 
 std::vector<SetNode> set_list;
@@ -1314,7 +1321,7 @@ void delete_item(const std::size_t pt_num, int vnum) {
 			if (i->vnum == vnum) {
 				log("[TO] Player %s : set-item %d deleted", player_table[pt_num].name(), i->vnum);
 				i->timer = -1;
-				int rnum = real_object(i->vnum);
+				int rnum = GetObjRnum(i->vnum);
 				if (rnum >= 0) {
 					obj_proto.dec_stored(rnum);
 				}
@@ -1434,7 +1441,7 @@ bool is_norent_set(int vnum, std::vector<int> objs) {
 // * Поиск в хране из списка vnum_list.
 bool house_find_set_item(CharData *ch, const std::set<int> &vnum_list) {
 	// храны у нас через задницу сделаны
-	for (ObjData *chest = world[real_room(CLAN(ch)->get_chest_room())]->contents; chest;
+	for (ObjData *chest = world[GetRoomRnum(CLAN(ch)->get_chest_room())]->contents; chest;
 		 chest = chest->get_next_content()) {
 		if (Clan::is_clan_chest(chest)) {
 			for (ObjData *temp = chest->get_contains(); temp; temp = temp->get_next_content()) {
@@ -1508,5 +1515,104 @@ bool is_norent_set(CharData *ch, ObjData *obj, bool clan_chest) {
 }
 
 } // namespace SetSystem
+
+int GetObjMIW(ObjRnum rnum) {
+	if (rnum < 0)
+		return 0;
+	return obj_proto[rnum]->get_max_in_world();
+}
+
+double CalcRemortRequirements(const CObjectPrototype *obj) {
+	const float SQRT_MOD = 1.7095f;
+	const int AFF_SHIELD_MOD = 30;
+	const int AFF_MAGICGLASS_MOD = 10;
+	const int AFF_BLINK_MOD = 10;
+	const int AFF_CLOUDLY_MOD = 10;
+
+	double result{0.0};
+	if (ObjSystem::is_mob_item(obj) || obj->has_flag(EObjFlag::KSetItem)) {
+		return result;
+	}
+
+	double total_weight{0.0};
+	// аффекты APPLY_x
+	for (int k = 0; k < kMaxObjAffect; k++) {
+		if (obj->get_affected(k).location == 0) continue;
+
+		// случай, если один аффект прописан в нескольких полях
+		for (int kk = 0; kk < kMaxObjAffect; kk++) {
+			if (obj->get_affected(k).location == obj->get_affected(kk).location
+				&& k != kk) {
+				log("SYSERROR: double affect=%d, ObjVnum=%d",
+					obj->get_affected(k).location, GET_OBJ_VNUM(obj));
+				return 1000000;
+			}
+		}
+		if ((obj->get_affected(k).modifier > 0) && ((obj->get_affected(k).location != EApply::kAc) &&
+			(obj->get_affected(k).location != EApply::kSavingWill) &&
+			(obj->get_affected(k).location != EApply::kSavingCritical) &&
+			(obj->get_affected(k).location != EApply::kSavingStability) &&
+			(obj->get_affected(k).location != EApply::kSavingReflex))) {
+			auto weight =
+				ObjSystem::count_affect_weight(obj, obj->get_affected(k).location, obj->get_affected(k).modifier);
+			total_weight += pow(weight, SQRT_MOD);
+		}
+			// савесы которые с минусом должны тогда понижать вес если в +
+		else if ((obj->get_affected(k).modifier > 0) && ((obj->get_affected(k).location == EApply::kAc) ||
+			(obj->get_affected(k).location == EApply::kSavingWill) ||
+			(obj->get_affected(k).location == EApply::kSavingCritical) ||
+			(obj->get_affected(k).location == EApply::kSavingStability) ||
+			(obj->get_affected(k).location == EApply::kSavingReflex))) {
+			auto weight =
+				ObjSystem::count_affect_weight(obj, obj->get_affected(k).location, 0 - obj->get_affected(k).modifier);
+			total_weight -= pow(weight, -SQRT_MOD);
+		}
+			//Добавленый кусок учет савесов с - значениями
+		else if ((obj->get_affected(k).modifier < 0)
+			&& ((obj->get_affected(k).location == EApply::kAc) ||
+				(obj->get_affected(k).location == EApply::kSavingWill) ||
+				(obj->get_affected(k).location == EApply::kSavingCritical) ||
+				(obj->get_affected(k).location == EApply::kSavingStability) ||
+				(obj->get_affected(k).location == EApply::kSavingReflex))) {
+			auto weight =
+				ObjSystem::count_affect_weight(obj, obj->get_affected(k).location, obj->get_affected(k).modifier);
+			total_weight += pow(weight, SQRT_MOD);
+		}
+			//Добавленый кусок учет отрицательного значения но не савесов
+		else if ((obj->get_affected(k).modifier < 0)
+			&& ((obj->get_affected(k).location != EApply::kAc) &&
+				(obj->get_affected(k).location != EApply::kSavingWill) &&
+				(obj->get_affected(k).location != EApply::kSavingCritical) &&
+				(obj->get_affected(k).location != EApply::kSavingStability) &&
+				(obj->get_affected(k).location != EApply::kSavingReflex))) {
+			auto weight =
+				ObjSystem::count_affect_weight(obj, obj->get_affected(k).location, 0 - obj->get_affected(k).modifier);
+			total_weight -= pow(weight, -SQRT_MOD);
+		}
+	}
+	// аффекты AFF_x через weapon_affect
+	for (const auto &m : weapon_affect) {
+		if (IS_OBJ_AFF(obj, m.aff_pos)) {
+			auto obj_affects = static_cast<EAffect>(m.aff_bitvector);
+			if (obj_affects == EAffect::kAirShield ||
+				obj_affects == EAffect::kFireShield ||
+				obj_affects == EAffect::kIceShield) {
+				total_weight += pow(AFF_SHIELD_MOD, SQRT_MOD);
+			} else if (obj_affects == EAffect::kMagicGlass) {
+				total_weight += pow(AFF_MAGICGLASS_MOD, SQRT_MOD);
+			} else if (obj_affects == EAffect::kBlink) {
+				total_weight += pow(AFF_BLINK_MOD, SQRT_MOD);
+			} else if (obj_affects == EAffect::kCloudly) {
+				total_weight += pow(AFF_CLOUDLY_MOD, SQRT_MOD);
+			}
+		}
+	}
+
+	if (total_weight < 1) {
+		return result;
+	} else {
+		return ceil(pow(total_weight, 1 / SQRT_MOD));
+	}
+}
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :

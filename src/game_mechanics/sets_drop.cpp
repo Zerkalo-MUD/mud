@@ -3,8 +3,6 @@
 
 #include "sets_drop.h"
 
-#include <boost/algorithm/string.hpp>
-
 #include "third_party_libs/pugixml/pugixml.h"
 #include <third_party_libs/fmt/include/fmt/format.h>
 
@@ -148,11 +146,11 @@ bool Linked::need_reset() const {
 		std::map<int, DropNode>::iterator k = drop_list.find(*i);
 		if (k != drop_list.end()) {
 			const int num = obj_proto.actual_count(k->second.obj_rnum);
-			if (num < GET_OBJ_MIW(obj_proto[k->second.obj_rnum]) && !k->second.can_drop) {
+			if (num < GetObjMIW(k->second.obj_rnum) && !k->second.can_drop) {
 				flag = true;
 				k->second.can_drop = true;
 			}
-			if (num >= GET_OBJ_MIW(obj_proto[k->second.obj_rnum]) && k->second.can_drop) {
+			if (num >= GetObjMIW(k->second.obj_rnum) && k->second.can_drop) {
 				k->second.can_drop = false;
 			}
 		}
@@ -193,10 +191,10 @@ void create_clone_miniset(int vnum) {
 		return;
 	}
 
-	const int rnum = real_object(vnum);
+	const int rnum = GetObjRnum(vnum);
 
 	// проверяем, есть ли у нашей сетины клон в системной зоне
-	const int rnum_nobj = real_object(new_vnum);
+	const int rnum_nobj = GetObjRnum(new_vnum);
 
 	if (rnum_nobj < 0) {
 		return;
@@ -245,7 +243,7 @@ void init_obj_list() {
 			for (pugi::xml_node obj_node = set_node.child("obj");
 				 obj_node; obj_node = obj_node.next_sibling("obj")) {
 				const int obj_vnum = parse::ReadAttrAsInt(obj_node, "vnum");
-				const int obj_rnum = real_object(obj_vnum);
+				const int obj_rnum = GetObjRnum(obj_vnum);
 				if (obj_rnum < 0) {
 					snprintf(buf, sizeof(buf),
 							 "...bad obj_node attributes (vnum=%d)", obj_vnum);
@@ -294,7 +292,7 @@ void init_obj_list() {
 
 			for (pugi::xml_node obj_node = set_node.child("obj"); obj_node; obj_node = obj_node.next_sibling("obj")) {
 				const int obj_vnum = parse::ReadAttrAsInt(obj_node, "vnum");
-				if (real_object(obj_vnum) < 0) {
+				if (GetObjRnum(obj_vnum) < 0) {
 					snprintf(buf, sizeof(buf),
 							 "...bad obj_node attributes (vnum=%d)", obj_vnum);
 					mudlog(buf, CMP, kLvlImmortal, SYSLOG, true);
@@ -416,7 +414,7 @@ void init_mob_name_list() {
 
 	for (auto i = mob_stat::mob_stat_register.cbegin(),
 			 iend = mob_stat::mob_stat_register.cend(); i != iend; ++i) {
-		const int rnum = real_mobile(i->first);
+		const int rnum = GetMobRnum(i->first);
 		const int zone = i->first / 100;
 		std::set<int>::const_iterator k = bad_zones.find(zone);
 
@@ -518,13 +516,13 @@ void filter_dupe_names() {
 			}
 			// редко появляющиеся мобы, мобы без экспы
 			const CharData *mob = &mob_proto[k->rnum];
-			if (MOB_FLAGGED(mob, EMobFlag::kAppearsFullmoon)
-				|| MOB_FLAGGED(mob, EMobFlag::kAppearsWinter)
-				|| MOB_FLAGGED(mob, EMobFlag::kAppearsSpring)
-				|| MOB_FLAGGED(mob, EMobFlag::kAppearsSummer)
-				|| MOB_FLAGGED(mob, EMobFlag::kAppearsAutumn)
+			if (mob->IsFlagged(EMobFlag::kAppearsFullmoon)
+				|| mob->IsFlagged(EMobFlag::kAppearsWinter)
+				|| mob->IsFlagged(EMobFlag::kAppearsSpring)
+				|| mob->IsFlagged(EMobFlag::kAppearsSummer)
+				|| mob->IsFlagged(EMobFlag::kAppearsAutumn)
 				|| NPC_FLAGGED(mob, ENpcFlag::kFreeDrop) //не падает фридроп
-				|| MOB_FLAGGED(mob, EMobFlag::kProtect) //нельзя убить
+				|| mob->IsFlagged(EMobFlag::kProtect) //нельзя убить
 				|| mob->get_exp() <= 0) {
 				continue;
 			}
@@ -664,7 +662,7 @@ void init_drop_table(int type) {
 	while (!obj_list.empty() && !mob_list.empty()) {
 		std::list<int>::iterator it = obj_list.begin();
 		std::advance(it, number(0, static_cast<int>(obj_list.size()) - 1));
-		const int obj_rnum = real_object(*it);
+		const int obj_rnum = GetObjRnum(*it);
 
 		std::list<ZoneNode>::iterator k = mob_list.begin();
 		std::advance(k, number(0, static_cast<int>(mob_list.size()) - 1));
@@ -831,8 +829,8 @@ void init_xhelp_full() {
 	for (std::vector<HelpNode>::const_iterator i = help_list.begin(),
 			 iend = help_list.end(); i != iend; ++i) {
 		std::string text = print_current_set(*i);
-		std::vector<std::string> str_list;
-		boost::split(str_list, i->alias_list, boost::is_any_of(", "), boost::token_compress_on);
+		std::vector<std::string> str_list = utils::SplitAny(i->alias_list, ", ");
+
 		for (std::vector<std::string>::const_iterator k = str_list.begin(),
 				 kend = str_list.end(); k != kend; ++k) {
 			HelpSystem::add_sets_drop(*k, text);
@@ -901,7 +899,7 @@ bool load_drop_table() {
 	for (pugi::xml_node item_node = node_list.child("item"); item_node;
 		 item_node = item_node.next_sibling("item")) {
 		const int obj_vnum = parse::ReadAttrAsInt(item_node, "vnum");
-		const int obj_rnum = real_object(obj_vnum);
+		const int obj_rnum = GetObjRnum(obj_vnum);
 		if (obj_vnum <= 0 || obj_rnum < 0) {
 			snprintf(buf, sizeof(buf),
 					 "...bad item attributes (vnum=%d)", obj_vnum);
@@ -910,7 +908,7 @@ bool load_drop_table() {
 		}
 
 		const int mob_vnum = parse::ReadAttrAsInt(item_node, "mob");
-		const int mob_rnum = real_mobile(mob_vnum);
+		const int mob_rnum = GetMobRnum(mob_vnum);
 		if (mob_vnum <= 0 || mob_rnum < 0) {
 			snprintf(buf, sizeof(buf),
 					 "...bad item attributes (mob=%d)", mob_vnum);
@@ -1080,7 +1078,7 @@ int check_mob(int mob_rnum) {
 		const int num = obj_proto.actual_count(it->second.obj_rnum);
 		// груп сетины по старой системе
 		if (!it->second.solo) {
-			if (num < GET_OBJ_MIW(obj_proto[it->second.obj_rnum])
+			if (num < GetObjMIW(it->second.obj_rnum)
 				&& number(0, 1000) <= it->second.chance) {
 				rnum = it->second.obj_rnum;
 			}
@@ -1101,8 +1099,8 @@ int check_mob(int mob_rnum) {
 		const int drop_count = it->second.linked_mobs.drop_count();
 		const int drop_mod = mobs_count - drop_count;
 //		log("list_size=%d, drop_count=%d, drop_mod=%d", mobs_count, drop_count, drop_mod);
-//		log("num=%d, miw=%d", num, GET_OBJ_MIW(obj_proto[it->second.ObjRnum]));
-		if (num < GET_OBJ_MIW(obj_proto[it->second.obj_rnum])) {
+//		log("num=%d, miw=%d", num, GetObjMIW(obj_proto[it->second.ObjRnum]));
+		if (num < GetObjMIW(it->second.obj_rnum)) {
 //			log("chance1=%d", it->second.drop_chance);
 			it->second.chance += std::max(0, drop_mod);
 //			log("chance2=%d", it->second.drop_chance);

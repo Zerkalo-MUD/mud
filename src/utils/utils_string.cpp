@@ -130,13 +130,40 @@ bool IsAbbr(const char *arg1, const char *arg2) {
 	}
 }
 
+std::string ReplaceSymbol(std::string s, const char ToSearch, const char Replacer) {
+	for (char &it: s) {
+		if (it == ToSearch) {
+			it = Replacer;
+		}
+	}
+	return s;
+}
+
+std::string ReplaceAny(std::string s, std::string any) {
+	if (any.size() == 1)
+		return s;
+	size_t i = 1;
+
+	while (i < any.size()) {
+		s = ReplaceSymbol(s, any[i], any[0]);
+		i++;
+	}
+		return s;
+}
+
+std::vector<std::string> SplitAny(const std::string s, std::string any) {
+	return Split(ReplaceAny(s, any), any[0]);
+}
+
 std::vector<std::string> Split(const std::string s, char delimiter) {
 	std::string token;
 	std::istringstream tokens_stream(s);
 	std::vector<std::string> tokens;
 
 	while (std::getline(tokens_stream, token, delimiter)) {
-		utils::Trim(token);
+		if (token.empty())
+			continue;
+		TrimLeft(token);
 		tokens.push_back(token);
 	}
 	return tokens; //если разделитель не найден вернется 1 элемент содержащий полную строку
@@ -235,6 +262,22 @@ void Trim(std::string &s) {
 	TrimRight(s);
 }
 
+void skip_spaces_from_end(char* string) {
+	if (!string || !*string) {
+		return;
+	}
+	size_t len = strlen(string);
+	while (len > 0 && (string[len - 1] == ' ')) {
+		len--;
+	}
+	string[len] = '\0';
+}
+
+void Trim(char *s) {
+	skip_spaces(&s);
+	skip_spaces_from_end(s);
+}
+
 std::string TrimLeftCopy(std::string s) {
 	TrimLeft(s);
 	return s;
@@ -299,6 +342,13 @@ void SortKoiStringReverse(std::vector<std::string> &str) {
 	}
 }
 
+void ReplaceFirst(std::string &s, const std::string &toSearch, const std::string &replacer) {
+	size_t pos = s.find(toSearch);
+	if (pos != std::string::npos) {
+		s.replace(pos, toSearch.size(), replacer);
+	}
+}
+
 void ReplaceAll(std::string &s, const std::string &toSearch, const std::string &replacer) {
 	size_t pos = s.find(toSearch);
 	while (pos != std::string::npos) {
@@ -314,6 +364,25 @@ void EraseAll(std::string &s, const std::string &toSearch) {
 		s.erase(pos, len);
 		pos = s.find(toSearch);
 	}
+}
+
+std::string EraseAllAny(const std::string s, const std::string any) {
+	std::string mstr = ReplaceAny(s, any);
+	for (size_t k = mstr.find(any[0]); k != mstr.npos;  k = mstr.find(any[0], k )) {
+		mstr.erase(k, 1);
+	}
+	return mstr;
+}
+
+std::string CompressSymbol(std::string s, const char ch) {
+	std::string c(1, ch);
+	std::string::size_type pos = s.find(c + c);
+
+	while (pos != std::string::npos) {
+		s.replace(pos, 2, c);
+		pos = s.find(c + c, pos);
+	}
+	return s;
 }
 
 }

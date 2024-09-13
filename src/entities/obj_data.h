@@ -163,13 +163,14 @@ class CObjectPrototype {
 	CObjectPrototype(const ObjVnum vnum) : m_vnum(vnum),
 										   m_type(DEFAULT_TYPE),
 										   m_weight(DEFAULT_WEIGHT),
+										   m_parent_proto(-1),
 										   m_proto_script(new triggers_list_t()),
 										   m_max_in_world(DEFAULT_MAX_IN_WORLD),
 										   m_vals({0, 0, 0, 0}),
 										   m_destroyer(DEFAULT_DESTROYER),
 										   m_spell(ESpell::kUndefined),
 										   m_level(DEFAULT_LEVEL),
-										   m_skill(-1),
+										   m_sparam(-1),
 										   m_maximum_durability(DEFAULT_MAXIMUM_DURABILITY),
 										   m_current_durability(DEFAULT_CURRENT_DURABILITY),
 										   m_material(DEFAULT_MATERIAL),
@@ -183,7 +184,9 @@ class CObjectPrototype {
 										   m_ilevel(0),
 										   m_rnum(DEFAULT_RNUM) {}
 	virtual    ~CObjectPrototype() {};
-
+	ObjRnum get_parent_rnum() const {return m_parent_proto;}
+	ObjVnum get_parent_vnum();
+	void set_parent_rnum(ObjRnum _) {m_parent_proto = _;}
 	auto &get_skills() const { return m_skills; }
 	auto dec_val(size_t index) { return --m_vals[index]; }
 	auto get_current_durability() const { return m_current_durability; }
@@ -193,7 +196,7 @@ class CObjectPrototype {
 	auto get_max_in_world() const { return m_max_in_world; }
 	auto get_maximum_durability() const { return m_maximum_durability; }
 	auto get_sex() const { return m_sex; }
-	auto get_skill() const { return m_skill; }
+	auto get_spec_param() const { return m_sparam; }
 	auto get_spell() const { return m_spell; }
 	auto get_type() const { return m_type; }
 	auto get_val(size_t index) const { return m_vals[index]; }
@@ -287,7 +290,7 @@ class CObjectPrototype {
 	void set_proto_script(const triggers_list_t &_) { *m_proto_script = _; }
 	void set_short_description(const char *_) { m_short_description = _; }
 	void set_short_description(const std::string &_) { m_short_description = _; }
-	void set_skill(const int _) { m_skill = _; }
+	void set_spec_param(const int _) { m_sparam = _; }
 	void set_spell(const int _) { m_spell = std::clamp(static_cast<ESpell>(_), ESpell::kUndefined, ESpell::kLast); }
 	void set_type(const EObjType _) { m_type = _; }
 	void set_sex(const EGender _) { m_sex = _; }
@@ -328,10 +331,10 @@ class CObjectPrototype {
 	void set_minimum_remorts(const int _) { m_minimum_remorts = _; }
 	void set_dgscript_field(const std::string _) { m_dgscript_field = _; }
 	int get_auto_mort_req() const;
-	float show_mort_req();
-	float show_koef_obj();
-	float get_ilevel() const;    ///< разные системы расчета привлекательности предмета
-	void set_ilevel(float ilvl);
+	double show_mort_req() const;
+	double show_koef_obj() const;
+	double get_ilevel() const;    ///< разные системы расчета привлекательности предмета
+	void set_ilevel(double ilvl);
 	auto get_rnum() const { return m_rnum; }
 	void set_rnum(const ObjRnum _);
 	auto get_vnum() const { return m_vnum; }
@@ -364,7 +367,7 @@ class CObjectPrototype {
 	int m_weight;
 
 	affected_t m_affected;    // affects //
-
+	ObjRnum m_parent_proto;
 	std::string m_aliases;        // Title of object :get etc.        //
 	std::string m_description;    // When in room                     //
 
@@ -383,7 +386,7 @@ class CObjectPrototype {
 	int m_destroyer;
 	ESpell m_spell;
 	int m_level;
-	int m_skill;
+	int m_sparam;
 	int m_maximum_durability;
 	int m_current_durability;
 
@@ -399,8 +402,7 @@ class CObjectPrototype {
 
 	int m_timer;    ///< таймер (в минутах рл)
 
-	skills_t
-		m_skills;    ///< если этот массив создался, то до выхода из программы уже не удалится. тут это вроде как "нормально"
+	skills_t m_skills;    ///< если этот массив создался, то до выхода из программы уже не удалится. тут это вроде как "нормально"
 
 	int m_minimum_remorts;    ///< если > 0 - требование по минимальным мортам, проставленное в олц
 	std::string m_dgscript_field;
@@ -408,7 +410,7 @@ class CObjectPrototype {
 	int m_rent_on;    ///< стоимость ренты, если надета
 	int m_rent_off;    ///< стоимость ренты, если в инве
 
-	float m_ilevel;    ///< расчетный уровень шмотки, не сохраняется
+  	double m_ilevel;    ///< расчетный уровень шмотки, не сохраняется
 	ObjVnum m_rnum;    ///< Where in data-base
 
 	std::unordered_set<VNumChangeObserver::shared_ptr> m_vnum_change_observers;
@@ -675,7 +677,7 @@ class ObjData : public CObjectPrototype {
 	void dec_timer(int time = 1, bool ingore_utimer = false, bool exchange = false);
 
 	static id_to_set_info_map set_table;
-	static void init_set_table();
+	static void InitSetTable() {};
 
 	void purge();
 
@@ -700,9 +702,8 @@ class ObjData : public CObjectPrototype {
 	auto get_next() const { return m_next; }
 	auto get_next_content() const { return m_next_content; }
 	auto get_owner() const { return m_owner; }
-	auto get_parent() const { return m_parent; }
 	auto get_room_was_in() const { return m_room_was_in; }
-	auto get_uid() const { return m_uid; }
+	auto get_unique_id() const { return m_unique_id; }
 	auto get_worn_by() const { return m_worn_by; }
 	auto get_worn_on() const { return m_worn_on; }
 	auto get_vnum_zone_from() const { return m_zone_from; }
@@ -728,12 +729,11 @@ class ObjData : public CObjectPrototype {
 	void set_next(ObjData *_) { m_next = _; }
 	void set_next_content(ObjData *_) { m_next_content = _; }
 	void set_owner(const int _) { m_owner = _; }
-	void set_parent(const int _) { m_parent = _; }
 	void set_room_was_in(const int _) { m_room_was_in = _; }
 	void set_script(const std::shared_ptr<Script> &_) { m_script = _; }
 	void set_script(Script *_);
 	void cleanup_script();
-	void set_uid(const unsigned _);
+	void set_unique_id(const long _);
 	void set_worn_by(CharData *_) { m_worn_by = _; }
 	void set_worn_on(const short _) { m_worn_on = _; }
 	void set_vnum_zone_from(const int _) { m_zone_from = _; }
@@ -752,11 +752,11 @@ class ObjData : public CObjectPrototype {
 	void subscribe_for_id_change(const IDChangeObserver::shared_ptr &observer) { m_id_change_observers.insert(observer); }
 	void unsubscribe_from_id_change(const IDChangeObserver::shared_ptr &observer) { m_id_change_observers.erase(observer); }
 
-	void subscribe_for_uid_change(const UIDChangeObserver::shared_ptr &observer) {
-		m_uid_change_observers.insert(observer);
+	void subscribe_for_unique_id_change(const UIDChangeObserver::shared_ptr &observer) {
+		m_unique_id_change_observers.insert(observer);
 	}
-	void unsubscribe_from_uid_change(const UIDChangeObserver::shared_ptr &observer) {
-		m_uid_change_observers.erase(observer);
+	void unsubscribe_from_unique_id_change(const UIDChangeObserver::shared_ptr &observer) {
+		m_unique_id_change_observers.erase(observer);
 	}
 
 	void attach_triggers(const triggers_list_t &trigs);
@@ -766,14 +766,13 @@ class ObjData : public CObjectPrototype {
 
 	void detach_ex_description();
 
-	unsigned int m_uid;
+	long m_unique_id;
 	RoomRnum m_in_room;    // In what room -1 when conta/carr //
 	int m_room_was_in;
 
 	int m_maker;
 	int m_owner;
 	int m_zone_from;
-	int m_parent;        // Vnum for object parent //
 	bool m_is_rename;
 
 	CharData *m_carried_by;    // Carried by :NULL in room/conta   //
@@ -793,7 +792,7 @@ class ObjData : public CObjectPrototype {
 
 	TimedSpell m_timed_spell;    ///< временный обкаст
 
-	object_id_t m_id;            // used by DG triggers              //
+	long  m_id;            // used by DG triggers              //
 	std::shared_ptr<Script> m_script;    // script info for the object       //
 
 	// порядковый номер в списке чаров (для name_list)
@@ -804,7 +803,7 @@ class ObjData : public CObjectPrototype {
 	std::pair<bool, int> m_activator;
 
 	std::unordered_set<IDChangeObserver::shared_ptr> m_id_change_observers;
-	std::unordered_set<UIDChangeObserver::shared_ptr> m_uid_change_observers;
+	std::unordered_set<UIDChangeObserver::shared_ptr> m_unique_id_change_observers;
 };
 
 inline void CObjectPrototype::set_affected(const size_t index, const EApply location, const int modifier) {
@@ -821,6 +820,7 @@ inline bool OBJ_AFFECT(const CObjectPrototype *obj,
 inline bool OBJ_AFFECT(const CObjectPrototype *obj, const EWeaponAffect weapon_affect) {
 	return OBJ_AFFECT(obj, static_cast<Bitvector>(weapon_affect));
 }
+int GetObjMIW(ObjRnum rnum);
 
 class CActionDescriptionWriter : public utils::AbstractStringWriter {
  public:

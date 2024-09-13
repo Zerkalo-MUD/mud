@@ -21,12 +21,12 @@
 #include "color.h"
 #include "game_crafts/im.h"
 #include "constants.h"
-#include "game_skills/skills.h"
+//#include "game_skills/skills.h"
 #include "entities/char_data.h"
 #include "entities/char_player.h"
 #include "game_mechanics/named_stuff.h"
 #include "modify.h"
-#include "entities/room_data.h"
+//#include "entities/room_data.h"
 #include "communication/mail.h"
 #include "obj_save.h"
 #include "game_fight/pk.h"
@@ -35,7 +35,8 @@
 #include "utils/utils.h"
 #include "structs/structs.h"
 #include "sysdep.h"
-#include "conf.h"
+//#include "conf.h"
+#include "game_mechanics/stable_objs.h"
 
 #include <stdexcept>
 #include <sstream>
@@ -65,7 +66,7 @@ int exchange_purchase(CharData *ch, char *arg);
 int exchange_offers(CharData *ch, char *arg);
 bool exchange_setfilter(CharData *ch, char *argument);
 
-int exchange_database_load();
+int LoadExchange();
 int exchange_database_reload(bool loadbackup);
 void check_exchange(ObjData *obj);
 void extract_exchange_item(ExchangeItem *item);
@@ -105,7 +106,7 @@ int exchange(CharData *ch, void * /*me*/, int cmd, char *argument) {
 			SendMsgToChar("Вы немы, как рыба об лед.\r\n", ch);
 			return 1;
 		}
-		if (!ch->IsNpc() && PLR_FLAGGED(ch, EPlrFlag::kDumbed)) {
+		if (ch->IsFlagged(EPlrFlag::kDumbed)) {
 			SendMsgToChar("Вам запрещено общаться с торговцами!\r\n", ch);
 			return 1;
 		}
@@ -278,7 +279,7 @@ int exchange_exhibit(CharData *ch, char *arg) {
 	else
 		GET_EXCHANGE_ITEM_COMMENT(item) = nullptr;
 
-	if (check_unlimited_timer(obj)) // если нерушима таймер 1 неделя
+	if (stable_objs::IsTimerUnlimited(obj)) // если нерушима таймер 1 неделя
 		obj->set_timer(10080);
 	GET_EXCHANGE_ITEM(item) = obj;
 	RemoveObjFromChar(obj);
@@ -410,7 +411,7 @@ int exchange_withdraw(CharData *ch, char *arg) {
 				GET_EXCHANGE_ITEM(item)->get_PName(0).c_str(), GET_OBJ_SUF_6(GET_EXCHANGE_ITEM(item)));
 	}
 	message_exchange(tmpbuf, ch, item);
-	if (check_unlimited_timer(GET_EXCHANGE_ITEM(item))) // если нерушима фрешим таймер из прототипа
+	if (stable_objs::IsTimerUnlimited(GET_EXCHANGE_ITEM(item))) // если нерушима фрешим таймер из прототипа
 		GET_EXCHANGE_ITEM(item)->set_timer(obj_proto.at(GET_OBJ_RNUM(GET_EXCHANGE_ITEM(item)))->get_timer());
 	PlaceObjToInventory(GET_EXCHANGE_ITEM(item), ch);
 	clear_exchange_lot(item);
@@ -479,8 +480,8 @@ int exchange_information(CharData *ch, char *arg) {
 		strcat(buf, "\n");
 	}
 	sprintf(buf2, "%s",
-			get_name_by_id(GET_EXCHANGE_ITEM_SELLERID(item)) ?
-			get_name_by_id(GET_EXCHANGE_ITEM_SELLERID(item)) : "(null)");
+			GetNameById(GET_EXCHANGE_ITEM_SELLERID(item)) ?
+			GetNameById(GET_EXCHANGE_ITEM_SELLERID(item)) : "(null)");
 	*buf2 = UPPER(*buf2);
 	strcat(buf, "Продавец ");
 	strcat(buf, buf2);
@@ -584,23 +585,21 @@ int exchange_purchase(CharData *ch, char *arg) {
 	seller = get_char_by_id(GET_EXCHANGE_ITEM_SELLERID(item));
 
 	if (seller == nullptr) {
-		const char *seller_name = get_name_by_id(GET_EXCHANGE_ITEM_SELLERID(item));
+		const char *seller_name = GetNameById(GET_EXCHANGE_ITEM_SELLERID(item));
 
 		auto seller_ptr = std::make_unique<Player>();
 		seller = seller_ptr.get(); // TODO: переделать на стек
 		if (seller_name == nullptr
-			|| load_char(seller_name, seller) < 0) {
+			|| LoadPlayerCharacter(seller_name, seller, ELoadCharFlags::kFindId) < 0) {
 			ch->remove_both_gold(GET_EXCHANGE_ITEM_COST(item));
 
-			//edited by WorM 2011.05.21
 			act("Вы купили $O3 на базаре.", false, ch, 0, GET_EXCHANGE_ITEM(item), kToChar);
 			sprintf(tmpbuf, "Базар : лот %d(%s) продан%s за %d %s.\r\n", lot,
 					GET_EXCHANGE_ITEM(item)->get_PName(0).c_str(), GET_OBJ_SUF_6(GET_EXCHANGE_ITEM(item)),
 					GET_EXCHANGE_ITEM_COST(item), GetDeclensionInNumber(GET_EXCHANGE_ITEM_COST(item), EWhat::kMoneyU));
-			//end by WorM
 
 			message_exchange(tmpbuf, ch, item);
-			if (check_unlimited_timer(GET_EXCHANGE_ITEM(item))) // если нерушима фрешим таймер из прототипа
+			if (stable_objs::IsTimerUnlimited(GET_EXCHANGE_ITEM(item))) // если нерушима фрешим таймер из прототипа
 				GET_EXCHANGE_ITEM(item)->set_timer(obj_proto.at(GET_OBJ_RNUM(GET_EXCHANGE_ITEM(item)))->get_timer());
 			PlaceObjToInventory(GET_EXCHANGE_ITEM(item), ch);
 			clear_exchange_lot(item);
@@ -615,14 +614,14 @@ int exchange_purchase(CharData *ch, char *arg) {
 
 		seller->add_bank(GET_EXCHANGE_ITEM_COST(item), true);
 		ch->remove_both_gold(GET_EXCHANGE_ITEM_COST(item), true);
-//Polud напишем письмецо чару, раз уж его нету онлайн
+
 		if (NOTIFY_EXCH_PRICE(seller) && GET_EXCHANGE_ITEM_COST(item) >= NOTIFY_EXCH_PRICE(seller)) {
 			sprintf(tmpbuf, "Базар : лот %d(%s) продан%s. %d %s переведено на ваш счет.\r\n", lot,
 					GET_EXCHANGE_ITEM(item)->get_PName(0).c_str(), GET_OBJ_SUF_6(GET_EXCHANGE_ITEM(item)),
 					GET_EXCHANGE_ITEM_COST(item), GetDeclensionInNumber(GET_EXCHANGE_ITEM_COST(item), EWhat::kMoneyA));
 			mail::add_by_id(GET_EXCHANGE_ITEM_SELLERID(item), -1, tmpbuf);
 		}
-//-Polud
+
 		seller->save_char();
 
 		act("Вы купили $O3 на базаре.", false, ch, 0, GET_EXCHANGE_ITEM(item), kToChar);
@@ -630,7 +629,7 @@ int exchange_purchase(CharData *ch, char *arg) {
 				GET_EXCHANGE_ITEM(item)->get_PName(0).c_str(), GET_OBJ_SUF_6(GET_EXCHANGE_ITEM(item)),
 				GET_EXCHANGE_ITEM_COST(item), GetDeclensionInNumber(GET_EXCHANGE_ITEM_COST(item), EWhat::kMoneyU));
 		message_exchange(tmpbuf, ch, item);
-		if (check_unlimited_timer(GET_EXCHANGE_ITEM(item))) // если нерушима фрешим таймер из прототипа
+		if (stable_objs::IsTimerUnlimited(GET_EXCHANGE_ITEM(item))) // если нерушима фрешим таймер из прототипа
 			GET_EXCHANGE_ITEM(item)->set_timer(obj_proto.at(GET_OBJ_RNUM(GET_EXCHANGE_ITEM(item)))->get_timer());
 		PlaceObjToInventory(GET_EXCHANGE_ITEM(item), ch);
 		clear_exchange_lot(item);
@@ -883,7 +882,7 @@ void exchange_write_one_object_new(std::stringstream &out, ExchangeItem *item) {
 	out << "\n";
 }
 
-int exchange_database_load() {
+int LoadExchange() {
 	FILE *fl;
 	char *data, *readdata;
 	ExchangeItem *item;
@@ -1106,11 +1105,11 @@ void message_exchange(char *message, CharData *ch, ExchangeItem *j) {
 		if (STATE(i) == CON_PLAYING
 			&& (!ch || i != ch->desc)
 			&& i->character
-			&& !PRF_FLAGGED(i->character, EPrf::kNoExchange)
-			&& !PLR_FLAGGED(i->character, EPlrFlag::kWriting)
-			&& !ROOM_FLAGGED(IN_ROOM(i->character), ERoomFlag::kSoundproof)
-			&& GET_POS(i->character) > EPosition::kSleep) {
-			if (!PRF_FLAGGED(i->character, EPrf::kNoIngrMode)
+			&& !i->character->IsFlagged(EPrf::kNoExchange)
+			&& !i->character->IsFlagged(EPlrFlag::kWriting)
+			&& !ROOM_FLAGGED(i->character->in_room, ERoomFlag::kSoundproof)
+			&& i->character->GetPosition() > EPosition::kSleep) {
+			if (!i->character->IsFlagged(EPrf::kNoIngrMode)
 				&& (GET_OBJ_TYPE(GET_EXCHANGE_ITEM(j)) == EObjType::kIngredient
 					|| GET_OBJ_TYPE(GET_EXCHANGE_ITEM(j)) == EObjType::kMagicIngredient)) {
 				continue;
@@ -1143,7 +1142,7 @@ void show_lots(char *filter, short int show_type, CharData *ch) {
 		"--------------------------------------------------------------------------------------------\r\n";
 
 	for (ExchangeItem *j = exchange_item_list; j; j = j->next) {
-		if (show_type == 1 && !isname(GET_NAME(ch), get_name_by_id(GET_EXCHANGE_ITEM_SELLERID(j))))
+		if (show_type == 1 && !isname(GET_NAME(ch), GetNameById(GET_EXCHANGE_ITEM_SELLERID(j))))
 			continue;
 		// ну идиотизм сидеть статить 5-10 страниц резных
 		if (utils::IsAbbr("резное запястье", GET_EXCHANGE_ITEM(j)->get_PName(0).c_str())
@@ -1242,7 +1241,6 @@ void clear_exchange_lot(ExchangeItem *lot) {
 	free(lot);
 }
 
-//Polud дублируем кучку кода, чтобы можно было часть команд базара выполнять в любой комнате
 void do_exchange(CharData *ch, char *argument, int cmd, int/* subcmd*/) {
 	char *arg = str_dup(argument);
 	argument = one_argument(argument, arg1);

@@ -9,6 +9,7 @@
 #include "comm.h"
 #include "db.h"
 #include "olc.h"
+#include "game_mechanics/dungeons.h"
 #include "dg_script/dg_scripts.h"
 #include "entities/char_data.h"
 #include "entities/room_data.h"
@@ -29,7 +30,7 @@ extern IndexData *mob_index;
 extern char const *equipment_types[];
 extern char const *dirs[];
 extern struct ZoneCategory *zone_types;
-//------------------------------------------------------------------------
+//---------------------------------
 
 // * Function prototypes.
 void zedit_disp_menu(DescriptorData *d);
@@ -48,9 +49,8 @@ void zedit_disp_arg4(DescriptorData *d);
 void zedit_save_internally(DescriptorData *d);
 void zedit_save_to_disk(int zone_num);
 void zedit_create_index(int znum, char *type);
-void zedit_new_zone(CharData *ch, int vzone_num);
 
-void renum_single_table(int zone);
+void ResolveZoneCmdVnumArgsToRnums(ZoneData &zone_data);
 int is_number(const char *str);
 //------------------------------------------------------------------------
 
@@ -66,7 +66,7 @@ int is_number(const char *str);
 
 #define TRANS_MOB(field)  item->cmd.field = mob_index[item->cmd.field].vnum
 #define TRANS_OBJ(field)  item->cmd.field = obj_proto[item->cmd.field]->get_vnum()
-#define TRANS_ROOM(field) item->cmd.field = world[item->cmd.field]->room_vn
+#define TRANS_ROOM(field) item->cmd.field = world[item->cmd.field]->vnum
 
 //------------------------------------------------------------------------
 
@@ -100,14 +100,14 @@ pzcmd zedit_build_cmdlist(DescriptorData *d) {
 	CREATE(head, 1);
 	head->next = head->prev = head;
 	head->cmd.command = 'S';
-
+	if (!zone_table[OLC_ZNUM(d)].cmd)
+		return head;
 	for (subcmd = 0; ZCMD.command != 'S'; ++subcmd) {
 		if (ZCMD.command == '*')
 			continue;
 
 		CREATE(item, 1);
 		item->cmd = ZCMD;    // копирование команды
-
 		switch (ZCMD.command) {
 			case 'M': TRANS_MOB(arg1);
 				TRANS_ROOM(arg3);
@@ -143,6 +143,7 @@ pzcmd zedit_build_cmdlist(DescriptorData *d) {
 				break;
 
 			case 'T':
+				item->cmd.arg2 = trig_index[item->cmd.arg2]->vnum;
 				// arg2 не преобразовываю, хотя может надо :)
 				if (item->cmd.arg1 == WLD_TRIGGER) {
 					TRANS_ROOM(arg3);
@@ -153,21 +154,15 @@ pzcmd zedit_build_cmdlist(DescriptorData *d) {
 				if (item->cmd.arg1 == WLD_TRIGGER) {
 					TRANS_ROOM(arg2);
 				}
-				item->cmd.sarg1 = str_dup(item->cmd.sarg1);
-				item->cmd.sarg2 = str_dup(item->cmd.sarg2);
 				break;
-
 			default: free(item);
 				continue;
 		}
-
 		// Добавить item в конец буфера
 		item->next = head;
 		item->prev = head->prev;
 		item->next->prev = item->prev->next = item;
-
 	}
-
 	return head;
 }
 
@@ -296,6 +291,7 @@ void zedit_setup(DescriptorData *d, int/* room_num*/) {
 
 	// Allocate one scratch zone structure. //
 	CREATE(zone, 1);
+	new (zone) ZoneData();
 	if (zone_table[OLC_ZNUM(d)].typeA_count) {
 		CREATE(zone->typeA_list, zone_table[OLC_ZNUM(d)].typeA_count);
 	}
@@ -304,8 +300,8 @@ void zedit_setup(DescriptorData *d, int/* room_num*/) {
 	}
 
 	// Copy all the zone header information over. //
-	zone->name = str_dup(zone_table[OLC_ZNUM(d)].name);
-	zone->comment = str_dup(zone_table[OLC_ZNUM(d)].comment);
+	zone->name = zone_table[OLC_ZNUM(d)].name;
+	zone->comment = zone_table[OLC_ZNUM(d)].comment;
 	zone->location = zone_table[OLC_ZNUM(d)].location;
 	zone->author = zone_table[OLC_ZNUM(d)].author;
 	zone->description = zone_table[OLC_ZNUM(d)].description;
@@ -325,6 +321,7 @@ void zedit_setup(DescriptorData *d, int/* room_num*/) {
 		zone->typeB_list[i] = zone_table[OLC_ZNUM(d)].typeB_list[i];
 	zone->under_construction = zone_table[OLC_ZNUM(d)].under_construction;
 	zone->group = zone_table[OLC_ZNUM(d)].group;
+	zone->entrance = zone_table[OLC_ZNUM(d)].entrance;
 
 	// The remaining fields are used as a 'has been modified' flag //
 	zone->vnum = 0;    // Header information has changed.      //
@@ -349,14 +346,16 @@ void zedit_save_internally(DescriptorData *d) {
 	int count, i;
 	pzcmd head, item;
 
-	// Удалить старую таблицу команд
-	for (subcmd = 0; ZCMD.command != 'S'; ++subcmd) {
-		if (ZCMD.command == 'V') {
-			free(ZCMD.sarg1);
-			free(ZCMD.sarg2);
+	if (zone_table[OLC_ZNUM(d)].cmd) {
+		// Удалить старую таблицу команд
+		for (subcmd = 0; ZCMD.command != 'S'; ++subcmd) {
+			if (ZCMD.command == 'V') {
+				free(ZCMD.sarg1);
+				free(ZCMD.sarg2);
+			}
 		}
+		free(zone_table[OLC_ZNUM(d)].cmd);
 	}
-	free(zone_table[OLC_ZNUM(d)].cmd);
 
 	head = (pzcmd) OLC_ZONE(d)->cmd;
 	count = zedit_count_cmdlist(head);
@@ -367,17 +366,16 @@ void zedit_save_internally(DescriptorData *d) {
 		ZCMD = item->cmd;    // копирование команды
 	}
 	ZCMD.command = 'S';
-	renum_single_table(OLC_ZNUM(d));
+	ResolveZoneCmdVnumArgsToRnums(zone_table[OLC_ZNUM(d)]);
 
 	// Finally, if zone headers have been changed, copy over
 	if (OLC_ZONE(d)->vnum) {
-		free(zone_table[OLC_ZNUM(d)].name);
-		zone_table[OLC_ZNUM(d)].name = str_dup(OLC_ZONE(d)->name);
+		zone_table[OLC_ZNUM(d)].name = OLC_ZONE(d)->name;
 
-		if (zone_table[OLC_ZNUM(d)].comment) {
-			free(zone_table[OLC_ZNUM(d)].comment);
+		if (!zone_table[OLC_ZNUM(d)].comment.empty()) {
+			zone_table[OLC_ZNUM(d)].comment.clear();
 		}
-		zone_table[OLC_ZNUM(d)].comment = str_dup(OLC_ZONE(d)->comment);
+		zone_table[OLC_ZNUM(d)].comment = OLC_ZONE(d)->comment;
 		zone_table[OLC_ZNUM(d)].location = OLC_ZONE(d)->location;
 		zone_table[OLC_ZNUM(d)].author = OLC_ZONE(d)->author;
 		zone_table[OLC_ZNUM(d)].description = OLC_ZONE(d)->description;
@@ -414,6 +412,7 @@ void zedit_save_internally(DescriptorData *d) {
 			zone_table[OLC_ZNUM(d)].group = OLC_ZONE(d)->group;
 			HelpSystem::reload(HelpSystem::STATIC);
 		}
+		zone_table[OLC_ZNUM(d)].entrance = OLC_ZONE(d)->entrance;
 	}
 //	olc_add_to_save_list(zone_table[OLC_ZNUM(d)].vnum, OLC_SAVE_ZONE);
 	zedit_save_to_disk(OLC_ZNUM(d));
@@ -431,9 +430,14 @@ void zedit_save_internally(DescriptorData *d) {
 void zedit_save_to_disk(ZoneRnum zone_num) {
 	int subcmd, arg1 = -1, arg2 = -1, arg3 = -1, arg4 = -1, i;
 	char fname[64];
-	const char *comment = nullptr;
+	std::string comment;
 	FILE *zfile;
 
+	if (zone_table[zone_num].vnum >= dungeons::kZoneStartDungeons) {
+			sprintf(buf, "Отказ сохранения зоны %d на диск.", zone_table[zone_num].vnum);
+			mudlog(buf, CMP, kLvlGreatGod, SYSLOG, true);
+			return;
+	}
 	sprintf(fname, "%s/%d.new", ZON_PREFIX, zone_table[zone_num].vnum);
 	if (!(zfile = fopen(fname, "w"))) {
 		sprintf(buf, "SYSERR: OLC: zedit_save_to_disk:  Can't write zone %d.", zone_table[zone_num].vnum);
@@ -443,25 +447,26 @@ void zedit_save_to_disk(ZoneRnum zone_num) {
 
 	// * Print zone header to file
 	fprintf(zfile, "#%d\n" "%s~\n",
-			zone_table[zone_num].vnum, (zone_table[zone_num].name && *zone_table[zone_num].name)
-										 ? zone_table[zone_num].name : "неопределено");
-	if (zone_table[zone_num].comment && *zone_table[zone_num].comment) {
-		fprintf(zfile, "^%s~\n", zone_table[zone_num].comment);
+			zone_table[zone_num].vnum, (!zone_table[zone_num].name.empty() )
+										 ? zone_table[zone_num].name.c_str() : "неопределено");
+	if (!zone_table[zone_num].comment.empty()) {
+		fprintf(zfile, "^%s~\n", zone_table[zone_num].comment.c_str());
 	}
-	if (zone_table[zone_num].location && *zone_table[zone_num].location) {
-		fprintf(zfile, "&%s~\n", zone_table[zone_num].location);
+	if (!zone_table[zone_num].location.empty()) {
+		fprintf(zfile, "&%s~\n", zone_table[zone_num].location.c_str());
 	}
-	if (zone_table[zone_num].author && *zone_table[zone_num].author) {
-		fprintf(zfile, "!%s~\n", zone_table[zone_num].author);
+	if (!zone_table[zone_num].author.empty()) {
+		fprintf(zfile, "!%s~\n", zone_table[zone_num].author.c_str());
 	}
-	if (zone_table[zone_num].description && *zone_table[zone_num].description) {
-		fprintf(zfile, "$%s~\n", zone_table[zone_num].description);
+	if (!zone_table[zone_num].description.empty()) {
+		fprintf(zfile, "$%s~\n", zone_table[zone_num].description.c_str());
 	}
 
-	fprintf(zfile, "#%d %d %d\n" "%d %d %d %d %s %s\n",
+	fprintf(zfile, "#%d %d %d %d\n" "%d %d %d %d %s %s\n",
 			zone_table[zone_num].level,
 			zone_table[zone_num].type,
 			zone_table[zone_num].group,
+			zone_table[zone_num].entrance,
 			zone_table[zone_num].top,
 			zone_table[zone_num].lifespan,
 			zone_table[zone_num].reset_mode,
@@ -491,72 +496,72 @@ void zedit_save_to_disk(ZoneRnum zone_num) {
 	for (i = 0; i < zone_table[zone_num].typeB_count; i++)
 		fprintf(zfile, "B %d\n", zone_table[zone_num].typeB_list[i]);
 
-	for (subcmd = 0; ZCMD.command != 'S'; subcmd++) {
+	for (subcmd = 0; zone_table[zone_num].cmd != nullptr && ZCMD.command != 'S'; subcmd++) {
 		arg1 = arg2 = arg3 = arg4 = -1;
 		switch (ZCMD.command) {
 			case 'M': arg1 = mob_index[ZCMD.arg1].vnum;
 				arg2 = ZCMD.arg2;
-				arg3 = world[ZCMD.arg3]->room_vn;
+				arg3 = world[ZCMD.arg3]->vnum;
 				arg4 = ZCMD.arg4;
-				comment = mob_proto[ZCMD.arg1].get_npc_name().c_str();
+				comment = mob_proto[ZCMD.arg1].get_npc_name();
 				break;
 
-			case 'F': arg1 = world[ZCMD.arg1]->room_vn;
+			case 'F': arg1 = world[ZCMD.arg1]->vnum;
 				arg2 = mob_index[ZCMD.arg2].vnum;
 				arg3 = mob_index[ZCMD.arg3].vnum;
-				comment = mob_proto[ZCMD.arg2].get_npc_name().c_str();
+				comment = mob_proto[ZCMD.arg2].get_npc_name();
 				break;
 
 			case 'O': arg1 = obj_proto[ZCMD.arg1]->get_vnum();
 				arg2 = ZCMD.arg2;
-				arg3 = world[ZCMD.arg3]->room_vn;
+				arg3 = world[ZCMD.arg3]->vnum;
 				arg4 = ZCMD.arg4;
-				comment = obj_proto[ZCMD.arg1]->get_short_description().c_str();
+				comment = obj_proto[ZCMD.arg1]->get_short_description();
 				break;
 
 			case 'G': arg1 = obj_proto[ZCMD.arg1]->get_vnum();
 				arg2 = ZCMD.arg2;
 				arg3 = -1;
 				arg4 = ZCMD.arg4;
-				comment = obj_proto[ZCMD.arg1]->get_short_description().c_str();
+				comment = obj_proto[ZCMD.arg1]->get_short_description();
 				break;
 
 			case 'E': arg1 = obj_proto[ZCMD.arg1]->get_vnum();
 				arg2 = ZCMD.arg2;
 				arg3 = ZCMD.arg3;
 				arg4 = ZCMD.arg4;
-				comment = obj_proto[ZCMD.arg1]->get_short_description().c_str();
+				comment = obj_proto[ZCMD.arg1]->get_short_description();
 				break;
 
 			case 'Q': arg1 = mob_index[ZCMD.arg1].vnum;
 				arg2 = -1;
 				arg3 = -1;
-				comment = mob_proto[ZCMD.arg1].get_npc_name().c_str();
+				comment = mob_proto[ZCMD.arg1].get_npc_name();
 				break;
 
 			case 'P': arg1 = obj_proto[ZCMD.arg1]->get_vnum();
 				arg2 = ZCMD.arg2;
 				arg3 = obj_proto[ZCMD.arg3]->get_vnum();
 				arg4 = ZCMD.arg4;
-				comment = obj_proto[ZCMD.arg1]->get_short_description().c_str();
+				comment = obj_proto[ZCMD.arg1]->get_short_description();
 				break;
 
-			case 'D': arg1 = world[ZCMD.arg1]->room_vn;
+			case 'D': arg1 = world[ZCMD.arg1]->vnum;
 				arg2 = ZCMD.arg2;
 				arg3 = ZCMD.arg3;
 				comment = world[ZCMD.arg1]->name;
 				break;
 
-			case 'R': arg1 = world[ZCMD.arg1]->room_vn;
+			case 'R': arg1 = world[ZCMD.arg1]->vnum;
 				arg2 = obj_proto[ZCMD.arg2]->get_vnum();
-				comment = obj_proto[ZCMD.arg2]->get_short_description().c_str();
+				comment = obj_proto[ZCMD.arg2]->get_short_description();
 				arg3 = -1;
 				break;
 
 			case 'T': arg1 = ZCMD.arg1;    // trigger type
 				arg2 = ZCMD.arg2;
 				if (arg1 == WLD_TRIGGER) {
-					arg3 = world[ZCMD.arg3]->room_vn;
+					arg3 = world[ZCMD.arg3]->vnum;
 					comment = world[ZCMD.arg3]->name;
 				}
 				break;
@@ -576,7 +581,7 @@ void zedit_save_to_disk(ZoneRnum zone_num) {
 
 		if (ZCMD.command != 'V') {
 			fprintf(zfile, "%c %d %d %d %d %d\t(%s)\n",
-					ZCMD.command, ZCMD.if_flag, arg1, arg2, arg3, arg4, comment);
+					ZCMD.command, ZCMD.if_flag, arg1, arg2, arg3, arg4, comment.c_str());
 		} else {
 			fprintf(zfile, "%c %d %d %d %d %s %s\n",
 					ZCMD.command, ZCMD.if_flag, arg1, arg2, arg3, ZCMD.sarg1, ZCMD.sarg2);
@@ -607,10 +612,10 @@ enum { MOB_NAME, OBJ_NAME, ROOM_NAME, TRIG_NAME };
 
 /**
 * Замена макросов:
-* #define MOB_NAME(vnum) (rnum=real_mobile(vnum))>=0?mob_proto[rnum].player_data.short_descr:"???"
-* #define OBJ_NAME(vnum) (rnum=real_object(vnum))>=0?obj_proto[rnum]->short_description:"???"
-* #define ROOM_NAME(vnum) (rnum=real_room(vnum))>=0?world[rnum]->name:"???"
-* #define TRIG_NAME(vnum) (rnum=real_trigger(vnum))>=0?trig_index[rnum]->proto->name:"???"
+* #define MOB_NAME(vnum) (rnum=GetMobRnum(vnum))>=0?mob_proto[rnum].player_data.short_descr:"???"
+* #define OBJ_NAME(vnum) (rnum=GetObjRnum(vnum))>=0?obj_proto[rnum]->short_description:"???"
+* #define ROOM_NAME(vnum) (rnum=GetRoomRnum((vnum))>=0?world[rnum]->name:"???"
+* #define TRIG_NAME(vnum) (rnum=GetTriggerRnum(vnum))>=0?trig_index[rnum]->proto->name:"???"
 * т.к. gcc 4.x на такие конструкции косо смотрит и правильно делает
 * \param vnum - номер (внум) моба/объекта/комнаты/триггера
 * \param type - тип номера, чье имя возвращаем
@@ -620,25 +625,25 @@ const char *name_by_vnum(int vnum, int type) {
 	int rnum;
 
 	switch (type) {
-		case MOB_NAME: rnum = real_mobile(vnum);
+		case MOB_NAME: rnum = GetMobRnum(vnum);
 			if (rnum >= 0) {
 				return mob_proto[rnum].get_npc_name().c_str();
 			}
 			break;
 
-		case OBJ_NAME: rnum = real_object(vnum);
+		case OBJ_NAME: rnum = GetObjRnum(vnum);
 			if (rnum >= 0) {
 				return obj_proto[rnum]->get_short_description().c_str();
 			}
 			break;
 
-		case ROOM_NAME: rnum = real_room(vnum);
+		case ROOM_NAME: rnum = GetRoomRnum(vnum);
 			if (rnum >= 0) {
 				return world[rnum]->name;
 			}
 			break;
 
-		case TRIG_NAME: rnum = real_trigger(vnum);
+		case TRIG_NAME: rnum = GetTriggerRnum(vnum);
 			if (rnum >= 0) {
 				return trig_index[rnum]->proto->get_name().c_str();
 			}
@@ -671,7 +676,7 @@ void zedit_disp_commands(DescriptorData *d) {
 	int rnum = 0;
 	int show_all = d->olc->bitmask & OLC_BM_SHOWALLCMD;
 	int start = d->olc->bitmask & ~OLC_BM_SHOWALLCMD, stop;
-
+	
 	room = OLC_NUM(d);
 	head = (pzcmd) OLC_ZONE(d)->cmd;
 
@@ -881,23 +886,23 @@ void zedit_disp_menu(DescriptorData *d) {
 			grn,
 			nrm,
 			yel,
-			OLC_ZONE(d)->name ? OLC_ZONE(d)->name : "<NONE!>",
+			!OLC_ZONE(d)->name.empty() ? OLC_ZONE(d)->name.c_str() : "<NONE!>",
 			grn,
 			nrm,
 			yel,
-			OLC_ZONE(d)->comment ? OLC_ZONE(d)->comment : "<NONE!>",
+			!OLC_ZONE(d)->comment.empty() ? OLC_ZONE(d)->comment.c_str() : "<NONE!>",
 			grn,
 			nrm,
 			yel,
-			OLC_ZONE(d)->location ? OLC_ZONE(d)->location : "<NONE!>",
+			!OLC_ZONE(d)->location.empty() ? OLC_ZONE(d)->location.c_str() : "<NONE!>",
 			grn,
 			nrm,
 			yel,
-			OLC_ZONE(d)->description ? OLC_ZONE(d)->description : "<NONE!>",
+			!OLC_ZONE(d)->description.empty() ? OLC_ZONE(d)->description.c_str() : "<NONE!>",
 			grn,
 			nrm,
 			yel,
-			OLC_ZONE(d)->author ? OLC_ZONE(d)->author : "<NONE!>",
+			!OLC_ZONE(d)->author.empty() ? OLC_ZONE(d)->author.c_str() : "<NONE!>",
 			grn,
 			nrm,
 			yel,
@@ -939,6 +944,9 @@ void zedit_disp_menu(DescriptorData *d) {
 	SendMsgToChar(buf, d->character.get());
 	snprintf(buf, kMaxStringLength, "%sG%s) Оптимальное число игроков  : %s%d%s\r\n",
 			 grn, nrm, yel, OLC_ZONE(d)->group, nrm);
+	SendMsgToChar(buf, d->character.get());
+	snprintf(buf, kMaxStringLength, "%sV%s) Стартовая комната зоны     : %s%d%s\r\n",
+			 grn, nrm, yel, OLC_ZONE(d)->entrance, nrm);
 	SendMsgToChar(buf, d->character.get());
 	
 	// Print the commands into display buffer.
@@ -1348,10 +1356,10 @@ void zedit_disp_sarg2(DescriptorData *d) {
 // * The GARGANTAUN event handler                                          *
 // *************************************************************************
 
-#define CHECK_MOB(d, n)  if(real_mobile(n)<0)   {SendMsgToChar("Неверный номер моба, повторите : ",d->character.get());return;}
-#define CHECK_OBJ(d, n)  if(real_object(n)<0)   {SendMsgToChar("Неверный номер объекта, повторите : ",d->character.get());return;}
-#define CHECK_ROOM(d, n) if(real_room(n)<=kNowhere)     {SendMsgToChar("Неверный номер комнаты, повторите : ",d->character.get());return;}
-#define CHECK_TRIG(d, n) if(real_trigger(n)<0)  {SendMsgToChar("Неверный номер триггера, повторите : ",d->character.get());return;}
+#define CHECK_MOB(d, n)  if(GetMobRnum(n)<0)   {SendMsgToChar("Неверный номер моба, повторите : ",d->character.get());return;}
+#define CHECK_OBJ(d, n)  if(GetObjRnum(n)<0)   {SendMsgToChar("Неверный номер объекта, повторите : ",d->character.get());return;}
+#define CHECK_ROOM(d, n) if(GetRoomRnum(n)<=kNowhere)     {SendMsgToChar("Неверный номер комнаты, повторите : ",d->character.get());return;}
+#define CHECK_TRIG(d, n) if(GetTriggerRnum(n)<0)  {SendMsgToChar("Неверный номер триггера, повторите : ",d->character.get());return;}
 #define CHECK_NUM(d, n)  if(!is_signednumber(n)){SendMsgToChar("Ожидается число, повторите : ",d->character.get());return;}
 
 void zedit_parse(DescriptorData *d, char *arg) {
@@ -1484,6 +1492,10 @@ void zedit_parse(DescriptorData *d, char *arg) {
 				case 'g':
 				case 'G': SendMsgToChar(d->character.get(), "Оптимальное число игроков (1 - 20): ");
 					OLC_MODE(d) = ZEDIT_ZONE_GROUP;
+					break;
+				case 'v':
+				case 'V': SendMsgToChar(d->character.get(), "Укажите vnum основного входа в зону: ");
+					OLC_MODE(d) = ZEDIT_ZONE_ENTRANCE;
 					break;
 				case 'p':
 				case 'P':
@@ -1839,11 +1851,11 @@ void zedit_parse(DescriptorData *d, char *arg) {
 
 		case ZEDIT_ZONE_NAME:
 			// * Add new name and return to main menu.
-			if (OLC_ZONE(d)->name)
-				free(OLC_ZONE(d)->name);
+			if (!OLC_ZONE(d)->name.empty())
+				OLC_ZONE(d)->name.clear();
 			else
 				log("SYSERR: OLC: ZEDIT_ZONE_NAME: no name to free!");
-			OLC_ZONE(d)->name = str_dup(arg);
+			OLC_ZONE(d)->name = arg;
 			OLC_ZONE(d)->vnum = 1;
 			zedit_disp_menu(d);
 			break;
@@ -1922,8 +1934,9 @@ void zedit_parse(DescriptorData *d, char *arg) {
 		case ZEDIT_TYPE_A_LIST:
 			// * Add or delete new zone in the type A zones list.
 			pos = atoi(arg);
-			if (!is_number(arg) || (pos < 1) || (pos > kMaxProtoNumber)) {
-				SendMsgToChar(d->character.get(), "Повторите ввод (1-%d) : ", kMaxProtoNumber);
+			if (!is_number(arg) || GetZoneRnum(pos) == 0) {
+				SendMsgToChar(d->character.get(), "Повторите ввод (1-%d) : ",
+							  zone_table[zone_table.size() - 1 - dungeons::kNumberOfZoneDungeons].vnum);
 			} else {
 				for (i = 0; i < OLC_ZONE(d)->typeA_count; i++) {
 					if (OLC_ZONE(d)->typeA_list[i] == pos)    // нашли совпадающий -- убираем элемент
@@ -1965,8 +1978,9 @@ void zedit_parse(DescriptorData *d, char *arg) {
 		case ZEDIT_TYPE_B_LIST:
 			// * Add or delete new zone in the type A zones list.
 			pos = atoi(arg);
-			if (!is_number(arg) || (pos < 1) || (pos > kMaxProtoNumber)) {
-				SendMsgToChar(d->character.get(), "Повторите ввод (1-%d) : ", kMaxProtoNumber);
+			if (!is_number(arg) || GetZoneRnum(pos) == 0) {
+				SendMsgToChar(d->character.get(), "Повторите ввод (1-%d) : ",
+							  zone_table[zone_table.size() - 1 - dungeons::kNumberOfZoneDungeons].vnum);
 			} else {
 				for (i = 0; i < OLC_ZONE(d)->typeB_count; i++) {
 					if (OLC_ZONE(d)->typeB_list[i] == pos)    // нашли совпадающий -- убираем элемент
@@ -2018,43 +2032,41 @@ void zedit_parse(DescriptorData *d, char *arg) {
 			break;
 
 		case ZEDIT_ZONE_COMMENT:
-			if (OLC_ZONE(d)->comment) {
-				free(OLC_ZONE(d)->comment);
+			if (!OLC_ZONE(d)->comment.empty()) {
+				OLC_ZONE(d)->comment.clear();
 			}
-			OLC_ZONE(d)->comment = str_dup(arg);
+			OLC_ZONE(d)->comment = arg;
 			OLC_ZONE(d)->vnum = 1;
 			zedit_disp_menu(d);
 			break;
 
 		case ZEDIT_ZONE_LOCATION:
-			if (OLC_ZONE(d)->location) {
-				free(OLC_ZONE(d)->location);
-				OLC_ZONE(d)->location = nullptr;
+			if (!OLC_ZONE(d)->location.empty()) {
+				OLC_ZONE(d)->location.clear();
 			}
 			if (arg && *arg) {
-				OLC_ZONE(d)->location = str_dup(arg);
+				OLC_ZONE(d)->location = arg;
 			}
 			OLC_ZONE(d)->vnum = 1;
 			zedit_disp_menu(d);
 			break;
 
 		case ZEDIT_ZONE_AUTOR:
-			if (OLC_ZONE(d)->author) {
-				free(OLC_ZONE(d)->author);
-				OLC_ZONE(d)->author = nullptr;
+			if (!OLC_ZONE(d)->author.empty()) {
+				OLC_ZONE(d)->author.clear();
 			}
 			if (arg && *arg) {
-				OLC_ZONE(d)->author = str_dup(arg);
+				OLC_ZONE(d)->author = arg;
 			}
 			OLC_ZONE(d)->vnum = 1;
 			zedit_disp_menu(d);
 			break;
 
 		case ZEDIT_ZONE_DESCRIPTION:
-			if (OLC_ZONE(d)->description) {
-				free(OLC_ZONE(d)->description);
+			if (!OLC_ZONE(d)->description.empty()) {
+				OLC_ZONE(d)->description.clear();
 			}
-			OLC_ZONE(d)->description = str_dup(arg);
+			OLC_ZONE(d)->description = arg;
 			OLC_ZONE(d)->vnum = 1;
 			zedit_disp_menu(d);
 			break;
@@ -2065,6 +2077,19 @@ void zedit_parse(DescriptorData *d, char *arg) {
 				SendMsgToChar("Повторите ввод (от 1 до 20) :", d->character.get());
 			} else {
 				OLC_ZONE(d)->group = num;
+				OLC_ZONE(d)->vnum = 1;
+				zedit_disp_menu(d);
+			}
+			break;
+		}
+
+		case ZEDIT_ZONE_ENTRANCE: {
+			int num = atoi(arg);
+			
+			if (GetRoomRnum(num) == kNowhere) {
+				SendMsgToChar("Такая комната не найдена, повторите ввод:", d->character.get());
+			} else {
+				OLC_ZONE(d)->entrance = num;
 				OLC_ZONE(d)->vnum = 1;
 				zedit_disp_menu(d);
 			}

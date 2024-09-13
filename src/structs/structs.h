@@ -211,8 +211,8 @@ constexpr __uint16_t kLargeBufSize = kMaxSockBuf - kGarbageSpace - kMaxPromptLen
 const int kHistorySize = 5;
 const int kMaxStringLength = 32768;
 const int kMaxExtendLength = 0xFFFF;
-const int kMaxInputLength = 2048;   // Max length per *line* of input //
-const int kMaxTrglineLength = kMaxInputLength;
+const std::size_t kMaxInputLength = 2048;   // Max length per *line* of input //
+const std::size_t kMaxTrglineLength = kMaxInputLength;
 const int kMaxRawInputLength = kMaxInputLength;   // Max size of *raw* input //
 const int kMaxNameLength = 20;
 const int kMinNameLength = 5;
@@ -222,6 +222,7 @@ const int kMaxAffect = 128;
 const int kMaxObjAffect = 8;
 const int kMaxHits = 32000; // Максимальное количество хитов и дамага //
 const long kMaxMoneyKept = 1000000000L; // планка на кол-во денег у чара на руках и в банке (раздельно) //
+const int_least32_t MAX_TIME = 0x7fffffff;
 
 const int kMinCharLevel = 0;
 const int kMaxMobLevel = 100;
@@ -283,17 +284,6 @@ struct FollowerType {
 	int dirs = 0;
 };*/
 
-// ===============================================================
-// Structure used for on_dead object loading //
-// Эту механику следует вырезать.
-struct LoadingItem {
-	ObjVnum obj_vnum = 0;
-	int load_prob = 0;
-	int load_type = 0;
-	int spec_param = 0;
-};
-
-using OnDeadLoadList = std::list<struct LoadingItem *>;
 // descriptor-related structures ****************************************
 
 struct TextBlock {
@@ -372,31 +362,6 @@ const __uint8_t GAPPLY_SPELL_EFFECT = 3;
 const __uint8_t GAPPLY_MODIFIER = 4;
 const __uint8_t GAPPLY_AFFECT = 5;
 
-// ===============================================================
-// Структрура для описания проталов для спела townportal //
-// Механику порталов надо обобщить и вынести в отдельный файл в game_mechanics
-// После чего использовать ее для врат, !перехода! и триггерной постановки портала.
-struct Portal {
-	char *wrd = nullptr;			// кодовое слово
-	RoomVnum vnum = 0;				// vnum комнаты для портала
-	int level = 0;					// минимальный уровень для запоминания
-	struct Portal *next = nullptr;
-};
-
-struct CharacterPortal {
-	int vnum = 0;            // vnum комнаты для портала //
-	struct CharacterPortal *next = nullptr;
-};
-// ===============================================================
-// Структуры для act.wizard.cpp //
-// После распиливания акт.визард надо вынести в соответтующие файлы
-
-struct set_struct {
-	const char *cmd = nullptr;
-	const char level = 0;
-	const char pcnpc = 0;
-	const char type = 0;
-};
 // ===============================================================
 
 namespace parser_wrapper {

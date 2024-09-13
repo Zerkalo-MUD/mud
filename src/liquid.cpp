@@ -17,6 +17,8 @@
 #include "color.h"
 #include "structs/global_objects.h"
 
+#include <cmath>
+
 const int kDrunked = 10;
 const int kMortallyDrunked = 18;
 const int kMaxCondition = 48;
@@ -290,7 +292,7 @@ int cast_potion(CharData *ch, ObjData *jar) {
 		if (GET_OBJ_VAL(jar, 1) <= 0
 			&& GET_OBJ_TYPE(jar) != EObjType::kFountain) {
 			name_from_drinkcon(jar);
-			jar->set_skill(0);
+			jar->set_spec_param(0);
 			reset_potion_values(jar);
 		}
 		do_drink_poison(ch, jar, 0);
@@ -301,7 +303,7 @@ int cast_potion(CharData *ch, ObjData *jar) {
 
 int do_drink_check(CharData *ch, ObjData *jar) {
 	//Проверка в бою?
-	if (PRF_FLAGS(ch).get(EPrf::kIronWind)) {
+	if (ch->IsFlagged(EPrf::kIronWind)) {
 		SendMsgToChar("Не стоит отвлекаться в бою!\r\n", ch);
 		return 0;
 	}
@@ -405,14 +407,13 @@ int do_drink_check_conditions(CharData *ch, ObjData *jar, int amount) {
 		return 0;
 	}
 
-
 	// Если жидкость с градусом
 	if (drink_aff[GET_OBJ_VAL(jar, 2)][DRUNK] > 0) {
 		// Если у чара бадун - пусть похмеляется, бухать нельзя
 		if (AFF_FLAGGED(ch, EAffect::kAbstinent)) {
-			if (GET_SKILL(ch, ESkill::kHangovering) > 0) {//если опохмел есть
+			if (ch->GetSkill(ESkill::kHangovering) > 0) {//если опохмел есть
 				SendMsgToChar(
-					"Вас передернуло от одной мысли о том что бы выпить.\r\nПохоже, вам стоит опохмелиться.\r\n",
+					"Вас передернуло от одной мысли о выпивке.\r\nПохоже, вам стоит опохмелиться.\r\n",
 					ch);
 			} else {//если опохмела нет
 				SendMsgToChar("Вы пытались... но не смогли заставить себя выпить...\r\n", ch);
@@ -985,7 +986,7 @@ void do_pour(CharData *ch, char *argument, int/* cmd*/, int subcmd) {
 			from_obj->set_val(1, 0);
 			from_obj->set_val(2, 0);
 			from_obj->set_val(3, 0);
-			from_obj->set_skill(0);
+			from_obj->set_spec_param(0);
 			name_from_drinkcon(from_obj);
 			reset_potion_values(from_obj);
 

@@ -138,7 +138,7 @@ extern struct olc_save_info *olc_save_list;
 #define OLC_STORAGE(d)  ((d)->olc->storage)    // For command storage  //
 
 // * Other macros.
-#define OLC_EXIT(d)    (OLC_ROOM(d)->dir_option[OLC_VAL(d)])
+#define OLC_EXIT(d)    (OLC_ROOM(d)->dir_option_proto[OLC_VAL(d)])
 #define GET_OLC_ZONE(c)    ((c)->player_specials->saved.olc_zone)
 
 // * Cleanup types.
@@ -254,6 +254,7 @@ extern struct olc_save_info *olc_save_list;
 #define ZEDIT_ZONE_TYPE          26
 #define ZEDIT_ZONE_COMMENT       27
 #define ZEDIT_ZONE_GROUP         28
+#define ZEDIT_ZONE_ENTRANCE      29
 
 // * Submodes of MEDIT connectedness.
 #define MEDIT_MAIN_MENU        0
@@ -389,6 +390,8 @@ extern struct olc_save_info *olc_save_list;
 
 void xedit_disp_ing(DescriptorData *d, int *ping);
 int xparse_ing(DescriptorData *d, int **pping, char *arg);
+int zedit_count_cmdlist(pzcmd head);
+void CleanupRoomData(RoomData *room);
 
 #endif
 

@@ -9,6 +9,8 @@
 #include "utils/random.h"
 #include "protect.h"
 
+#include <cmath>
+
 void do_strangle(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 	if (!ch->GetSkill(ESkill::kStrangle)) {
 		SendMsgToChar("Вы не умеете этого.\r\n", ch);
@@ -63,7 +65,7 @@ void go_strangle(CharData *ch, CharData *vict) {
 		return;
 	}
 
-	if (GET_POS(ch) < EPosition::kFight) {
+	if (ch->GetPosition() < EPosition::kFight) {
 		SendMsgToChar("Вам стоит встать на ноги.\r\n", ch);
 		return;
 	}
@@ -78,9 +80,10 @@ void go_strangle(CharData *ch, CharData *vict) {
 	SkillRollResult result = MakeSkillTest(ch, ESkill::kStrangle,vict);
 	bool success = result.success;
 //Формула дамага - (удавить/10)% от хп моба (максимум 10%) + удавить*2. Рандом - +/- 25%. Сделал отдельными переменными для удобочитаемости, иначе фиг разберёшь формулу.
-	int hp_percent_dam = ceil(GET_MAX_HIT(vict) * 0.1);
-	int hp_percent_dam2 = (GET_MAX_HIT(vict) / 100) * (GET_SKILL(ch, ESkill::kStrangle) / 10);
-	int flat_damage = GET_SKILL(ch, ESkill::kStrangle) * 2;
+	int hp_percent_dam = ceil(GET_MAX_HIT(vict) * 0.03);
+	auto skill_strangle = ch->GetSkill(ESkill::kStrangle);
+	int hp_percent_dam2 = (GET_MAX_HIT(vict) / 100) * (skill_strangle / 10);
+	int flat_damage = skill_strangle * 1.5;
 	int dam = number(ceil(std::min(hp_percent_dam, hp_percent_dam2) + flat_damage) * 1.25,
 					ceil(std::min(hp_percent_dam, hp_percent_dam2) + flat_damage) / 1.25);
 	int strangle_duration = 5;
@@ -105,7 +108,7 @@ void go_strangle(CharData *ch, CharData *vict) {
 		if (AFF_FLAGGED(vict, EAffect::kStrangled)) {
 			dam = number(ceil((flat_damage * 1.25)), ceil((flat_damage / 1.25)));
 		}
-		int silence_duration = 2 + std::min(GET_SKILL(ch, ESkill::kStrangle) / 25, 10);
+		int silence_duration = 2 + std::min(skill_strangle/25, 10);
 
 		if (!vict->IsNpc()) {
 			silence_duration *= 30;
@@ -114,7 +117,7 @@ void go_strangle(CharData *ch, CharData *vict) {
 		Affect<EApply> af2;
 		af2.type = ESpell::kSilence;
 		af2.duration = silence_duration;
-		af2.modifier = -GET_SKILL(ch, ESkill::kStrangle) / 3;
+		af2.modifier = -skill_strangle/3;
 		af2.location = EApply::kMagicDamagePercent;
 		af2.battleflag = kAfBattledec;
 		af2.bitvector = to_underlying(EAffect::kSilence);
@@ -124,7 +127,7 @@ void go_strangle(CharData *ch, CharData *vict) {
 		dmg.flags.set(fight::kIgnoreArmor);
 		dmg.flags.set(fight::kIgnoreBlink);
 		dmg.Process(ch, vict);
-		if (GET_POS(vict) > EPosition::kDead) {
+		if (vict->GetPosition() > EPosition::kDead) {
 			SetWait(vict, 2, true);
 			if (vict->IsOnHorse()) {
 				act("Рванув на себя, $N стащил$G Вас на землю.",

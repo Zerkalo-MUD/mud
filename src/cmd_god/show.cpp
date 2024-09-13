@@ -15,6 +15,7 @@
 #include "game_economics/shop_ext.h"
 #include "game_economics/ext_money.h"
 #include "game_magic/magic_utils.h"
+#include "game_mechanics/dungeons.h"
 #include "game_mechanics/glory.h"
 #include "game_mechanics/glory_const.h"
 #include "game_mechanics/glory_misc.h"
@@ -27,7 +28,6 @@
 #include "entities/char_player.h"
 
 #include <third_party_libs/fmt/include/fmt/format.h>
-#include <boost/algorithm/string.hpp>
 
 extern int buf_switches, buf_largecount, buf_overflows;
 extern unsigned long int number_of_bytes_read;
@@ -195,7 +195,7 @@ void print_mob_bosses(CharData *ch, bool lvl_sort) {
 		"--------------------------------------------------------------------------------\r\n");
 
 	for (int mob_rnum : tmp_list) {
-		std::string zone_name_str = zone_table[mob_index[mob_rnum].zone].name ?
+		std::string zone_name_str = !zone_table[mob_index[mob_rnum].zone].name.empty() ?
 									zone_table[mob_index[mob_rnum].zone].name : "EMPTY";
 
 		const auto mob = mob_proto + mob_rnum;
@@ -224,11 +224,11 @@ std::string print_zone_enters(ZoneRnum zone) {
 			for (int dir = 0; dir < EDirection::kMaxDirNum; dir++) {
 				if (world[n]->dir_option[dir]
 					&& world[world[n]->dir_option[dir]->to_room()]->zone_rn == zone
-					&& world[world[n]->dir_option[dir]->to_room()]->room_vn > 0) {
+					&& world[world[n]->dir_option[dir]->to_room()]->vnum > 0) {
 					snprintf(tmp, sizeof(tmp),
 							 "  Номер комнаты:%5d Направление:%6s Вход в комнату:%5d\r\n",
-							 world[n]->room_vn, dirs_rus[dir],
-							 world[world[n]->dir_option[dir]->to_room()]->room_vn);
+							 world[n]->vnum, dirs_rus[dir],
+							 world[world[n]->dir_option[dir]->to_room()]->vnum);
 					out += tmp;
 					found = true;
 				}
@@ -254,11 +254,11 @@ std::string print_zone_exits(ZoneRnum zone) {
 			for (int dir = 0; dir < EDirection::kMaxDirNum; dir++) {
 				if (world[n]->dir_option[dir]
 					&& world[world[n]->dir_option[dir]->to_room()]->zone_rn != zone
-					&& world[world[n]->dir_option[dir]->to_room()]->room_vn > 0) {
+					&& world[world[n]->dir_option[dir]->to_room()]->vnum > 0) {
 					snprintf(tmp, sizeof(tmp),
 							 "  Номер комнаты:%5d Направление:%6s Выход в комнату:%5d\r\n",
-							 world[n]->room_vn, dirs_rus[dir],
-							 world[world[n]->dir_option[dir]->to_room()]->room_vn);
+							 world[n]->vnum, dirs_rus[dir],
+							 world[world[n]->dir_option[dir]->to_room()]->vnum);
 					out += tmp;
 					found = true;
 				}
@@ -283,26 +283,32 @@ void print_zone_to_buf(char **bufptr, ZoneRnum zone) {
 			 "%3d %s\r\n"
 			 "Средний уровень мобов: %2d; Type: %-20.20s; Age: %3d; Reset: %3d (%1d)(%1d)\r\n"
 			 "First: %5d, Top: %5d %s %s; ResetIdle: %s; Занято: %s; Активность: %.2f; Группа: %2d; \r\n"
-			 "Автор: %s, количество репопов зоны (с перезагрузки): %d, всего посещений: %d\r\n",
+			 "Автор: %s, количество репопов зоны (с перезагрузки): %d, всего посещений: %d, вход в зону: %d\r\n",
 			 zone_table[zone].vnum,
-			 zone_table[zone].name,
+			 zone_table[zone].name.c_str(),
 			 zone_table[zone].mob_level,
 			 zone_types[zone_table[zone].type].name,
 			 zone_table[zone].age, zone_table[zone].lifespan,
 			 zone_table[zone].reset_mode,
-			 (zone_table[zone].reset_mode == 3) ? (can_be_reset(zone) ? 1 : 0) : (is_empty(zone) ? 1 : 0),
-			 world[rfirst]->room_vn,
-			 world[rlast]->room_vn,
+			 (zone_table[zone].reset_mode == 3) ? (CanBeReset(zone) ? 1 : 0) : (IsZoneEmpty(zone) ? 1 : 0),
+			 world[rfirst]->vnum,
+			 world[rlast]->vnum,
 			 zone_table[zone].under_construction ? "&GТестовая!&n" : " ",
 			 zone_table[zone].locked ? "&RРедактирование запрещено!&n" : " ",
 			 zone_table[zone].reset_idle ? "Y" : "N",
 			 zone_table[zone].used ? "Y" : "N",
 			 (double) zone_table[zone].activity / 1000,
 			 zone_table[zone].group,
-			 zone_table[zone].author ? zone_table[zone].author : "неизвестен",
+			 !zone_table[zone].author.empty() ? zone_table[zone].author.c_str() : "неизвестен",
 			 zone_table[zone].count_reset,
-			 zone_table[zone].traffic);
+			 zone_table[zone].traffic,
+			 zone_table[zone].entrance);
 	*bufptr = str_add(*bufptr, tmpstr);
+	if (zone_table[zone].copy_from_zone > 0) {
+		snprintf(tmpstr, BUFFER_SIZE,"Зона прародитель: (%d) %s\r\n",
+				 zone_table[zone].copy_from_zone, zone_table[GetZoneRnum(zone_table[zone].copy_from_zone)].name.c_str());
+		*bufptr = str_add(*bufptr, tmpstr);
+	}
 }
 
 struct show_struct {
@@ -333,7 +339,7 @@ struct show_struct show_fields[] = {
 	{"affectedrooms", kLvlImmortal},
 	{"money", kLvlImplementator}, // 20
 	{"expgain", kLvlImplementator},
-	{"runes", kLvlImplementator},
+	{"runestat", kLvlGod},
 	{"mobstat", kLvlImplementator},
 	{"bosses", kLvlImplementator},
 	{"remort", kLvlImplementator}, // 25
@@ -348,6 +354,8 @@ struct show_struct show_fields[] = {
 	{"abilityinfo", kLvlImmortal},
 	{"account", kLvlGod}, //35
 	{"shops", kLvlGod},
+	{"runeslist", kLvlGod},
+	{"dungeons", kLvlGod},
 	{"\n", 0}
 };
 
@@ -379,6 +387,17 @@ std::pair<int, int> TotalMemUse(){
 #else
 	return std::make_pair(-1, -1);
 #endif
+}
+
+void ListSpellCreate(CharData *ch) {
+	int i = 0;
+	for (auto it : spell_create) {
+		SendMsgToChar(ch, "%3d) Rune spell [%3d] &W%-30s&n runes: %3d %3d %3d %3d level %d\r\n", 
+				++i, to_underlying(it.first), MUD::Spell(it.first).GetCName(),
+				it.second.runes.items[0], it.second.runes.items[1],
+				it.second.runes.items[2], it.second.runes.rnumber,
+				it.second.runes.min_caster_level);
+	}
 }
 
 void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
@@ -508,11 +527,11 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			if (!NAME_GOD(vict)) {
 				sprintf(buf + strlen(buf), "Имя никем не одобрено!\r\n");
 			} else if (NAME_GOD(vict) < 1000) {
-				sprintf(buf1, "%s", get_name_by_id(NAME_ID_GOD(vict)));
+				sprintf(buf1, "%s", GetNameById(NAME_ID_GOD(vict)));
 				*buf1 = UPPER(*buf1);
 				snprintf(buf + strlen(buf), kMaxStringLength, "Имя запрещено богом %s\r\n", buf1);
 			} else {
-				sprintf(buf1, "%s", get_name_by_id(NAME_ID_GOD(vict)));
+				sprintf(buf1, "%s", GetNameById(NAME_ID_GOD(vict)));
 				*buf1 = UPPER(*buf1);
 				snprintf(buf + strlen(buf), kMaxStringLength, "Имя одобрено богом %s\r\n", buf1);
 			}
@@ -570,7 +589,7 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			sprintf(buf + strlen(buf), "  Мобов - %5d,  прообразов мобов - %5d\r\n", j, top_of_mobt + 1);
 			sprintf(buf + strlen(buf), "  Предметов - %5zd, прообразов предметов - %5zd\r\n",
 					world_objects.size(), obj_proto.size());
-			sprintf(buf + strlen(buf), "  Комнат - %5d, зон - %5zd\r\n", top_of_world + 1, zone_table.size());
+			sprintf(buf + strlen(buf), "  Комнат - %5d, зон - %5zd, триггеров %d\r\n", top_of_world + 1, zone_table.size(), top_of_trigt);
 			sprintf(buf + strlen(buf), "  Больших буферов - %5d\r\n", buf_largecount);
 			sprintf(buf + strlen(buf),
 					"  Переключенных буферов - %5d, переполненных - %5d\r\n",
@@ -629,9 +648,9 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				if (d->snooping
 					&& d->character
 					&& STATE(d) == CON_PLAYING
-					&& IN_ROOM(d->character) != kNowhere
+					&& d->character->in_room != kNowhere
 					&& ((CAN_SEE(ch, d->character) && GetRealLevel(ch) >= GetRealLevel(d->character))
-						|| PRF_FLAGGED(ch, EPrf::kCoderinfo))) {
+						|| ch->IsFlagged(EPrf::kCoderinfo))) {
 					sprintf(buf + strlen(buf),
 							"%-10s - подслушивается %s (map %s).\r\n",
 							GET_NAME(d->snooping->character),
@@ -648,12 +667,12 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			i = 0;
 			for (const auto &character : character_list) {
 				if (IS_GOD(character) || character->IsNpc() ||
-					character->desc != nullptr || IN_ROOM(character) == kNowhere) {
+					character->desc != nullptr || character->in_room == kNowhere) {
 					continue;
 				}
 				++i;
 				sprintf(buf, "%-50s[%6d][%6d]   %d\r\n",
-						character->noclan_title().c_str(), GET_ROOM_VNUM(IN_ROOM(character)),
+						character->noclan_title().c_str(), GET_ROOM_VNUM(character->in_room),
 						GET_ROOM_VNUM(character->get_was_in_room()), character->char_specials.timer);
 				SendMsgToChar(buf, ch);
 			}
@@ -666,36 +685,36 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				if (d->snooping != nullptr && d->character != nullptr)
 					continue;
 				if (STATE(d) != CON_PLAYING
-					|| (GetRealLevel(ch) < GetRealLevel(d->character) && !PRF_FLAGGED(ch, EPrf::kCoderinfo)))
+					|| (GetRealLevel(ch) < GetRealLevel(d->character) && !ch->IsFlagged(EPrf::kCoderinfo)))
 					continue;
-				if (!CAN_SEE(ch, d->character) || IN_ROOM(d->character) == kNowhere)
+				if (!CAN_SEE(ch, d->character) || d->character->in_room == kNowhere)
 					continue;
 				buf[0] = 0;
-				if (PLR_FLAGGED(d->character, EPlrFlag::kFrozen)
+				if (d->character->IsFlagged(EPlrFlag::kFrozen)
 					&& FREEZE_DURATION(d->character))
 					sprintf(buf + strlen(buf), "Заморожен : %ld час [%s].\r\n",
 							static_cast<long>((FREEZE_DURATION(d->character) - time(nullptr)) / 3600),
 							FREEZE_REASON(d->character) ? FREEZE_REASON(d->character) : "-");
 
-				if (PLR_FLAGGED(d->character, EPlrFlag::kMuted)
+				if (d->character->IsFlagged(EPlrFlag::kMuted)
 					&& MUTE_DURATION(d->character))
 					sprintf(buf + strlen(buf), "Будет молчать : %ld час [%s].\r\n",
 							static_cast<long>((MUTE_DURATION(d->character) - time(nullptr)) / 3600),
 							MUTE_REASON(d->character) ? MUTE_REASON(d->character) : "-");
 
-				if (PLR_FLAGGED(d->character, EPlrFlag::kDumbed)
+				if (d->character->IsFlagged(EPlrFlag::kDumbed)
 					&& DUMB_DURATION(d->character))
 					sprintf(buf + strlen(buf), "Будет нем : %ld час [%s].\r\n",
 							static_cast<long>((DUMB_DURATION(d->character) - time(nullptr)) / 3600),
 							DUMB_REASON(d->character) ? DUMB_REASON(d->character) : "-");
 
-				if (PLR_FLAGGED(d->character, EPlrFlag::kHelled)
+				if (d->character->IsFlagged(EPlrFlag::kHelled)
 					&& HELL_DURATION(d->character))
 					sprintf(buf + strlen(buf), "Будет в аду : %ld час [%s].\r\n",
 							static_cast<long>((HELL_DURATION(d->character) - time(nullptr)) / 3600),
 							HELL_REASON(d->character) ? HELL_REASON(d->character) : "-");
 
-				if (!PLR_FLAGGED(d->character, EPlrFlag::kRegistred)
+				if (!d->character->IsFlagged(EPlrFlag::kRegistred)
 					&& UNREG_DURATION(d->character)) {
 					sprintf(buf + strlen(buf), "Не сможет заходить с одного IP : %ld час [%s].\r\n",
 							static_cast<long>((UNREG_DURATION(d->character) - time(nullptr)) / 3600),
@@ -790,7 +809,7 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		case 21: // expgain
 			ZoneExpStat::print_gain(ch);
 			break;
-		case 22: // runes
+		case 22: // runes stat
 			print_rune_stats(ch);
 			break;
 		case 23: { // mobstat
@@ -865,7 +884,7 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 			}
 			Player t_chdata;
 			Player *chdata = &t_chdata;
-			if (load_char(value, chdata) < 0) {
+			if (LoadPlayerCharacter(value, chdata, ELoadCharFlags::kFindId) < 0) {
 				SendMsgToChar("Нет такого игрока.\r\n", ch);
 				return;
 			}
@@ -875,6 +894,12 @@ void do_show(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 		}
 		case 36: // shops
 			do_shops_list(ch);
+			break;
+		case 37: // runes list
+			ListSpellCreate(ch);
+			break;
+		case 38: // dungeons
+			dungeons::ListDungeons(ch);
 			break;
 		default: SendMsgToChar("Извините, неверная команда.\r\n", ch);
 			break;

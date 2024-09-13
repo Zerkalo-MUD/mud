@@ -21,7 +21,7 @@ void do_stun(CharData *ch, char *argument, int, int) {
 		SendMsgToChar("Вы привстали на стременах и поняли: 'лошадь украли!!!'\r\n", ch);
 		return;
 	}
-	if ((GET_SKILL(ch, ESkill::kRiding) < 151) && (!ch->IsNpc())) {
+	if ((ch->GetSkill(ESkill::kRiding) < 151) && (!ch->IsNpc())) {
 		SendMsgToChar("Вы слишком неуверенно управляете лошадью, чтоб на ней пытаться ошеломить противника.\r\n", ch);
 		return;
 	}
@@ -56,7 +56,7 @@ void go_stun(CharData *ch, CharData *vict) {
 	TimedSkill timed;
 
 	timed.skill = ESkill::kStun;
-	timed.time = std::clamp(7 - (GET_SKILL(ch, ESkill::kStun) - (MUD::Skill(ESkill::kStun).cap / 4 * 3)) / 10, 2, 7);
+	timed.time = std::clamp(7 - (ch->GetSkill(ESkill::kStun) - (MUD::Skill(ESkill::kStun).cap / 4 * 3)) / 10, 2, 7);
 	ImposeTimedSkill(ch, &timed);
 
 	int percent = number(1, MUD::Skill(ESkill::kStun).difficulty);
@@ -74,7 +74,7 @@ void go_stun(CharData *ch, CharData *vict) {
 		set_hit(ch, vict);
 	} else {
 		if (GET_EQ(ch, EEquipPos::kBoths)
-		&& static_cast<ESkill>((ch->equipment[EEquipPos::kBoths])->get_skill()) == ESkill::kBows) {
+		&& static_cast<ESkill>((ch->equipment[EEquipPos::kBoths])->get_spec_param()) == ESkill::kBows) {
 			act("Точным выстрелом вы ошеломили $N3!",
 				false, ch, nullptr, vict, kToChar);
 			act("Точный выстрел $N1 повалил вас с ног и лишил сознания.",
@@ -89,8 +89,8 @@ void go_stun(CharData *ch, CharData *vict) {
 			act("$n мощным ударом ошеломил$g $N3!", true, ch,
 				nullptr, vict, kToNotVict | kToArenaListen);
 		}
-		GET_POS(vict) = EPosition::kIncap;
-		SetWaitState(vict, (2 + GetRealRemort(ch) / 5) * kBattleRound * GET_SKILL(ch, ESkill::kStun) / MUD::Skill(ESkill::kStun).cap);
+		vict->SetPosition(EPosition::kIncap);
+		SetWaitState(vict, (2 + GetRealRemort(ch) / 5) * kBattleRound * ch->GetSkill(ESkill::kStun) / MUD::Skill(ESkill::kStun).cap);
 		ch->setSkillCooldown(ESkill::kStun, 3 * kBattleRound);
 		hit(ch, vict, ESkill::kUndefined, AFF_FLAGGED(vict, EAffect::kStopRight) ? fight::kOffHand : fight::kMainHand);
 	}

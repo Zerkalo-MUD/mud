@@ -27,18 +27,13 @@ void AddRoomToAffected(RoomData *room);
 void affect_room_join_fspell(RoomData *room, const Affect<ERoomApply> &af);
 void affect_room_join(RoomData *room, Affect<ERoomApply> &af, bool add_dur, bool avg_dur, bool add_mod, bool avg_mod);
 void AffectRoomJoinReplace(RoomData *room, const Affect<ERoomApply> &af);
-void RefreshRoomAffects(RoomData *room);
 void affect_to_room(RoomData *room, const Affect<ERoomApply> &af);
-void affect_room_modify(RoomData *room, byte loc, sbyte mod, Bitvector bitv, bool add);
 void RoomRemoveAffect(RoomData *room, const RoomAffectIt &affect) {
-
 	if (room->affected.empty()) {
 		log("ERROR: Attempt to remove affect from no affected room!");
 		return;
 	}
-	affect_room_modify(room, (*affect)->location, (*affect)->modifier, (*affect)->bitvector, false);
 	room->affected.erase(affect);
-	RefreshRoomAffects(room);
 }
 
 RoomAffectIt FindAffect(RoomData *room, ESpell type) {
@@ -79,8 +74,8 @@ void ShowAffectedRooms(CharData *ch) {
 	int count = 1;
 	for (const auto r : affected_rooms) {
 		for (const auto &af : r->affected) {
-			table << count << r->room_vn << MUD::Spell(af->type).GetName()
-				<< get_name_by_id(af->caster_id) << af->duration * 2 << table_wrapper::kEndRow;
+			table << count << r->vnum << MUD::Spell(af->type).GetName()
+				  << GetNameById(af->caster_id) << af->duration * 2 << table_wrapper::kEndRow;
 			++count;
 		}
 	}
@@ -100,7 +95,7 @@ CharData *find_char_in_room(long char_id, RoomData *room) {
 	return nullptr;
 }
 
-RoomData *FindAffectedRoom(long caster_id, ESpell spell_id) {
+RoomData *FindAffectedRoomByCasterID(long caster_id, ESpell spell_id) {
 	for (const auto room : affected_rooms) {
 		for (const auto &af : room->affected) {
 			if (af->type == spell_id && af->caster_id == caster_id) {
@@ -116,7 +111,7 @@ ESpell RemoveAffectFromRooms(ESpell spell_id, const F &filter) {
 	for (const auto room : affected_rooms) {
 		const auto &affect = std::find_if(room->affected.begin(), room->affected.end(), filter);
 		if (affect != room->affected.end()) {
-			SendRemoveAffectMsgToRoom((*affect)->type, real_room(room->room_vn));
+			SendRemoveAffectMsgToRoom((*affect)->type, GetRoomRnum(room->vnum));
 			spell_id = (*affect)->type;
 			RoomRemoveAffect(room, affect);
 			return spell_id;
@@ -342,17 +337,8 @@ void UpdateRoomsAffects() {
 					if (next_affect_i == affects.end()
 						|| (*next_affect_i)->type != affect->type
 						|| (*next_affect_i)->duration > 0) {
-						SendRemoveAffectMsgToRoom(affect->type, real_room((*room)->room_vn));
+						SendRemoveAffectMsgToRoom(affect->type, GetRoomRnum((*room)->vnum));
 					}
-				}
-				if (affect->type == ESpell::kPortalTimer) {
-					(*room)->pkPenterUnique = 0;
-					(*room)->portal_time = 0;
-					OneWayPortal::remove(*room);
-//					act("Пентаграмма медленно растаяла. (врата)",
-//							false, (*room)->first_character(), nullptr, nullptr, kToRoom);
-//					act("Пентаграмма медленно растаяла.(врата)",
-//							false, (*room)->first_character(), nullptr, nullptr, kToChar);
 				}
 				RoomRemoveAffect(*room, affect_i);
 				continue;  // Чтоб не вызвался обработчик
@@ -520,7 +506,7 @@ int CallMagicToRoom(int/* level*/, CharData *ch, RoomData *room, ESpell spell_id
 			break;
 
 		case ESpell::kBlackTentacles:
-			if (ROOM_FLAGGED(IN_ROOM(ch), ERoomFlag::kForMono) || ROOM_FLAGGED(IN_ROOM(ch), ERoomFlag::kForPoly)) {
+			if (ROOM_FLAGGED(ch->in_room, ERoomFlag::kForMono) || ROOM_FLAGGED(ch->in_room, ERoomFlag::kForPoly)) {
 				success = false;
 				break;
 			}
@@ -616,7 +602,6 @@ void affect_room_join_fspell(RoomData *room, const Affect<ERoomApply> &af) {
 			if (hjp->duration < af.duration) {
 				hjp->duration = af.duration;
 			}
-			RefreshRoomAffects(room);
 			found = true;
 			break;
 		}
@@ -626,13 +611,14 @@ void affect_room_join_fspell(RoomData *room, const Affect<ERoomApply> &af) {
 		affect_to_room(room, af);
 	}
 }
+
 void AffectRoomJoinReplace(RoomData *room, const Affect<ERoomApply> &af) {
 	bool found = false;
 
 	for (auto &affect_i : room->affected) {
 		if (affect_i->type == af.type && affect_i->location == af.location) {
 			affect_i->duration = af.duration;
-			RefreshRoomAffects(room);
+			affect_i->modifier = af.modifier;
 			found = true;
 		}
 	}
@@ -640,7 +626,6 @@ void AffectRoomJoinReplace(RoomData *room, const Affect<ERoomApply> &af) {
 		affect_to_room(room, af);
 	}
 }
-
 
 void affect_room_join(RoomData *room, Affect<ERoomApply> &af,
 					  bool add_dur, bool avg_dur, bool add_mod, bool avg_mod) {
@@ -676,52 +661,10 @@ void affect_room_join(RoomData *room, Affect<ERoomApply> &af,
 	}
 }
 
-// Тут осуществляется апдейт аффектов влияющих на комнату
-void RefreshRoomAffects(RoomData *room) {
-	// А че тут надо делать пересуммирование аффектов от заклов.
-	/* Вобщем все комнаты имеют (вроде как базовую и
-	   добавочную характеристику) если скажем ввести
-	   возможность устанавливать степень зараженности комнтаы
-	   в OLC , то дополнительное загаживание только будет вносить
-	   + но не обнулять это значение. */
-
-	// обнуляем все добавочные характеристики
-	memset(&room->add_property, 0, sizeof(RoomState));
-
-	// перенакладываем аффекты
-	for (const auto &af : room->affected) {
-		affect_room_modify(room, af->location, af->modifier, af->bitvector, true);
-	}
-}
-
 void affect_to_room(RoomData *room, const Affect<ERoomApply> &af) {
 	Affect<ERoomApply>::shared_ptr new_affect(new Affect<ERoomApply>(af));
 
 	room->affected.push_front(new_affect);
-
-	affect_room_modify(room, af.location, af.modifier, af.bitvector, true);
-	RefreshRoomAffects(room);
-}
-
-void affect_room_modify(RoomData *room, byte loc, sbyte mod, Bitvector bitv, bool add) {
-	if (add) {
-		ROOM_AFF_FLAGS(room).set(bitv);
-	} else {
-		ROOM_AFF_FLAGS(room).unset(bitv);
-		mod = -mod;
-	}
-
-	switch (loc) {
-		case kNone: break;
-		case kPoison:
-			// Увеличиваем загаженность от аффекта вызываемого SPELL_POISONED_FOG
-			// Хотя это сделанно скорее для примера пока не обрабатывается вообще
-			GET_ROOM_ADD_POISON(room) += mod;
-			break;
-		default: log("SYSERR: Unknown room apply adjust %d attempt (%s, affect_modify).", loc, __FILE__);
-			break;
-
-	}            // switch
 }
 
 } // namespace room_spells

@@ -20,8 +20,6 @@
 #include <vector>
 #include <sstream>
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "game_classes/classes_constants.h"
 #include "game_classes/classes.h"
 #include "conf.h"
@@ -86,17 +84,6 @@ struct DescriptorData;
 inline const char *not_empty(const std::string &s) {
 	return s.empty() ? "undefined" : s.c_str();
 }
-// поиск рнума зоны по внум, если не  найдено будет 0
-inline int ZoneRnumFromVnum(int zvn) {
-	ZoneRnum zrn;
-	for (zrn = 0; zrn < static_cast<ZoneRnum>(zone_table.size()); zrn++) {
-		if (zone_table[zrn].vnum == zvn)
-			break;
-	}
-	if (zrn == static_cast<ZoneRnum>(zone_table.size()))
-		zrn = 0;
-	return zrn;
-}
 
 inline const char *not_empty(const std::string &s, const char *subst) {
 	return s.empty() ? (subst ? subst : "undefined") : s.c_str();
@@ -132,11 +119,7 @@ int get_line(FILE *fl, char *buf);
 int get_filename(const char *orig_name, char *filename, int mode);
 TimeInfoData *age(const CharData *ch);
 int num_pc_in_room(RoomData *room);
-int replace_str(const utils::AbstractStringWriter::shared_ptr &writer,
-				const char *pattern,
-				const char *replacement,
-				int rep_all,
-				int max_size);
+int replace_str(const utils::AbstractStringWriter::shared_ptr &writer, const char *pattern, const char *replacement, int rep_all, int max_size);
 void format_text(const utils::AbstractStringWriter::shared_ptr &writer, int mode, DescriptorData *d, size_t maxlen);
 int check_moves(CharData *ch, int how_moves);
 void koi_to_alt(char *str, int len);
@@ -154,11 +137,11 @@ char *str_str(const char *cs, const char *ct);
 void kill_ems(char *str);
 void cut_one_word(std::string &str, std::string &word);
 size_t strl_cpy(char *dst, const char *src, size_t siz);
-int RealZoneNum(ZoneVnum zvn);
-
-extern bool GetAffectNumByName(const std::string &affName, EAffect &result);
+void MemLeakInfo();
 void tell_to_char(CharData *keeper, CharData *ch, const char *arg);
 bool is_head(std::string name);
+
+extern bool GetAffectNumByName(const std::string &affName, EAffect &result);
 /*
 std::string to_string(int x) { return std::to_string(x); }
 std::string to_string(unsigned int x) { return std::to_string(x); }
@@ -291,10 +274,6 @@ extern int mercenary(CharData *, void *, int, char *);
 
 // string utils *********************************************************
 
-
-#define YESNO(a) ((a) ? "YES" : "NO")
-#define ONOFF(a) ((a) ? "ON" : "OFF")
-
 #define LOWER(c)   (a_lcc(c))
 #define UPPER(c)   (a_ucc(c))
 #define ISNEWL(ch) ((ch) == '\n' || (ch) == '\r')
@@ -422,28 +401,18 @@ inline void TOGGLE_BIT(T &var, const Bitvector bit) {
 	var = var ^ (bit & 0x3FFFFFFF);
 }
 
-#define MOB_FLAGS(ch)  ((ch)->char_specials.saved.act)
-#define PLR_FLAGS(ch)  ((ch)->char_specials.saved.act)
-#define PRF_FLAGS(ch)  ((ch)->player_specials->saved.pref)
+
 #define NPC_FLAGS(ch)  ((ch)->mob_specials.npc_flags)
-#define ROOM_AFF_FLAGS(room)  ((room)->affected_by)
 #define EXTRA_FLAGS(ch) ((ch)->Temporary)
 
 #define IS_MOB(ch)          ((ch)->IsNpc() && (ch)->get_rnum() >= 0)
 
-#define MOB_FLAGGED(ch, flag)   ((ch)->IsNpc() && MOB_FLAGS(ch).get(flag))
-#define PLR_FLAGGED(ch, flag)   (!(ch)->IsNpc() && PLR_FLAGS(ch).get(flag))
-#define PRF_FLAGGED(ch, flag)   (PRF_FLAGS(ch).get(flag))
 #define NPC_FLAGGED(ch, flag)   (NPC_FLAGS(ch).get(flag))
 #define EXTRA_FLAGGED(ch, flag) (EXTRA_FLAGS(ch).get(flag))
 #define ROOM_FLAGGED(loc, flag) (world[(loc)]->get_flag(flag))
-#define ROOM_AFFECTED(loc, flag) (ROOM_AFF_FLAGS((world[(loc)])).get(flag))
 #define EXIT_FLAGGED(exit, flag)     (IS_SET((exit)->exit_info, (flag)))
 #define OBJVAL_FLAGGED(obj, flag)    (IS_SET(GET_OBJ_VAL((obj), 1), (flag)))
 #define OBJWEAR_FLAGGED(obj, mask)   ((obj)->get_wear_mask(mask))
-
-#define PLR_TOG_CHK(ch, flag) (PLR_FLAGS(ch).toggle(flag))
-#define PRF_TOG_CHK(ch, flag) (PRF_FLAGS(ch).toggle(flag))
 
 // room utils ***********************************************************
 #define SECT(room)   (world[(room)]->sector_type)
@@ -455,12 +424,11 @@ inline void TOGGLE_BIT(T &var, const Bitvector bit) {
                                  weather_info.sunlight == kSunDark )) )
 
 #define VALID_RNUM(rnum)   ((rnum) > 0 && (rnum) <= top_of_world)
-#define GET_ROOM_VNUM(rnum) ((RoomVnum)(VALID_RNUM(rnum) ? world[(rnum)]->room_vn : kNowhere))
+#define GET_ROOM_VNUM(rnum) ((RoomVnum)(VALID_RNUM(rnum) ? world[(rnum)]->vnum : kNowhere))
 #define GET_ROOM_SPEC(room) (VALID_RNUM(room) ? world[(room)]->func : nullptr)
 
 // char utils ***********************************************************
 #define IS_MANA_CASTER(ch) ((ch)->GetClass() == ECharClass::kMagus)
-#define IN_ROOM(ch)  ((ch)->in_room)
 #define GET_AGE(ch)     (age(ch)->year)
 #define GET_REAL_AGE(ch) (age(ch)->year + GET_AGE_ADD(ch))
 #define GET_PC_NAME(ch) ((ch)->GetCharAliases().c_str())
@@ -468,16 +436,12 @@ inline void TOGGLE_BIT(T &var, const Bitvector bit) {
 #define GET_TITLE(ch)   ((ch)->player_data.title)
 #define GET_MAX_MANA(ch)      (mana[MIN(50, GetRealWis(ch))])
 #define GET_MEM_CURRENT(ch)   ((ch)->mem_queue.Empty() ? 0 : CalcSpellManacost(ch, (ch)->mem_queue.queue->spell_id))
-#define IS_CODER(ch)    (GetRealLevel(ch) < kLvlImmortal && PRF_FLAGGED(ch, EPrf::kCoderinfo))
 #define IS_COLORED(ch)    (pk_count (ch))
-#define MAX_PORTALS(ch)  ((GetRealLevel(ch)/3)+GetRealRemort(ch))
 
 #define GET_AF_BATTLE(ch, flag) ((ch)->battle_affects.get(flag))
 #define SET_AF_BATTLE(ch, flag) ((ch)->battle_affects.set(flag))
 #define CLR_AF_BATTLE(ch, flag) ((ch)->battle_affects.unset(flag))
 #define NUL_AF_BATTLE(ch)      ((ch)->battle_affects.clear())
-#define GET_REMORT(ch)         ((ch)->get_remort())
-#define GET_SKILL(ch, skill)   ((ch)->GetSkill(skill))
 #define GET_EMAIL(ch)          ((ch)->player_specials->saved.EMail)
 #define GET_LASTIP(ch)         ((ch)->player_specials->saved.LastIP)
 #define GET_GOD_FLAG(ch, flag)  (IS_SET((ch)->player_specials->saved.GodsLike, flag))
@@ -513,7 +477,6 @@ inline void TOGGLE_BIT(T &var, const Bitvector bit) {
 
 #define STRING_LENGTH(ch)  ((ch)->player_specials->saved.stringLength)
 #define STRING_WIDTH(ch)  ((ch)->player_specials->saved.stringWidth)
-//Polud
 #define NOTIFY_EXCH_PRICE(ch)  ((ch)->player_specials->saved.ntfyExchangePrice)
 
 #define POSI(val)      (((val) < 50) ? (((val) > 0) ? (val) : 1) : 50)
@@ -582,15 +545,10 @@ inline T VPOSI(const T val, const T min, const T max) {
 #define GET_MR(ch)        ((ch)->add_abils.mresist)
 #define GET_PR(ch)        ((ch)->add_abils.presist) // added by WorM (Видолюб) поглощение физ.урона в %
 #define GET_LIKES(ch)     ((ch)->mob_specials.like_work)
-#define GET_POS(ch)        ((ch)->char_specials.position)
 #define GET_IDNUM(ch)     ((ch)->get_idnum())
 #define GET_ID(x)         ((x)->id)
 #define IS_CARRYING_W(ch) ((ch)->char_specials.carry_weight)
 #define IS_CARRYING_N(ch) ((ch)->char_specials.carry_items)
-
-// Макросы доступа к полям параметров комнат
-#define GET_ROOM_BASE_POISON(room) ((room)->base_property.poison)
-#define GET_ROOM_ADD_POISON(room) ((room)->add_property.poison)
 
 // Получение кубиков урона - работает только для мобов!
 #define GET_NDD(ch) ((ch)->mob_specials.damnodice)
@@ -619,7 +577,6 @@ const int kNameLevel = 5;
 
 #define GET_ALIASES(ch)        ((ch)->player_specials->aliases)
 #define GET_RSKILL(ch)        ((ch)->player_specials->rskill)
-#define GET_PORTALS(ch)        ((ch)->player_specials->portals)
 #define GET_LOGS(ch)        ((ch)->player_specials->logs)
 
 // Punishments structs
@@ -687,7 +644,7 @@ const int kNameLevel = 5;
 #define GET_LASTROOM(ch)    ((ch)->mob_specials.LastRoom)
 
 #define CAN_SEE_IN_DARK(ch) \
-   (AFF_FLAGGED(ch, EAffect::kInfravision) || (!(ch)->IsNpc() && PRF_FLAGGED(ch, EPrf::kHolylight)))
+   (AFF_FLAGGED(ch, EAffect::kInfravision) || (!(ch)->IsNpc() && (ch)->IsFlagged(EPrf::kHolylight)))
 
 #define IS_GOOD(ch)          (GET_ALIGNMENT(ch) >= kAligGoodMore)
 #define IS_EVIL(ch)          (GET_ALIGNMENT(ch) <= kAligEvilLess)
@@ -764,9 +721,6 @@ const int kNameLevel = 5;
 #define IS_OBJ_NOSEXY(obj)    (GET_OBJ_SEX(obj) == EGender::kNeutral)
 #define IS_OBJ_MALE(obj)   (GET_OBJ_SEX(obj) == EGender::kMale)
 #define IS_OBJ_FEMALE(obj)    (GET_OBJ_SEX(obj) == EGender::kFemale)
-
-#define GET_OBJ_MIW(obj) ((obj)->get_max_in_world())
-
 #define GET_OBJ_SUF_1(obj) (IS_OBJ_NOSEXY(obj) ? "о" :\
                             IS_OBJ_MALE(obj) ? ""  :\
                             IS_OBJ_FEMALE(obj) ? "а" : "и")
@@ -846,7 +800,7 @@ const int kNameLevel = 5;
 
 
 // object utils *********************************************************
-#define GET_OBJ_UID(obj)    ((obj)->get_uid())
+#define GET_OBJ_UNIQUE_ID(obj)    ((obj)->get_unique_id())
 
 #define GET_OBJ_ALIAS(obj)      ((obj)->get_aliases())
 #define GET_OBJ_PNAME(obj, pad)  ((obj)->get_PName(pad))
@@ -865,12 +819,10 @@ const int kNameLevel = 5;
 #define GET_OBJ_WEAR(obj)  ((obj)->get_wear_flags())
 #define GET_OBJ_OWNER(obj)      ((obj)->get_owner())
 #define GET_OBJ_MAKER(obj)      ((obj)->get_crafter_uid())
-#define GET_OBJ_PARENT(obj)      ((obj)->get_parent())
 #define GET_OBJ_RENAME(obj)      ((obj)->get_is_rename())
 #define GET_OBJ_CRAFTIMER(obj)      ((obj)->get_craft_timer())
 #define GET_OBJ_WEIGHT(obj)   ((obj)->get_weight())
 #define GET_OBJ_DESTROY(obj) ((obj)->get_destroyer())
-#define GET_OBJ_SKILL(obj) ((obj)->get_skill())
 #define GET_OBJ_CUR(obj)    ((obj)->get_current_durability())
 #define GET_OBJ_MAX(obj)    ((obj)->get_maximum_durability())
 #define GET_OBJ_MATER(obj)  ((obj)->get_material())
@@ -878,8 +830,8 @@ const int kNameLevel = 5;
 #define GET_OBJ_RNUM(obj)  ((obj)->get_rnum())
 
 #define OBJ_GET_LASTROOM(obj) ((obj)->get_room_was_in())
-#define OBJ_WHERE(obj) ((obj)->get_worn_by() ? IN_ROOM((obj)->get_worn_by()) : \
-                        (obj)->get_carried_by() ? IN_ROOM((obj)->get_carried_by()) : (obj)->get_in_room())
+#define OBJ_WHERE(obj) ((obj)->get_worn_by() ? (obj)->get_worn_by()->in_room : \
+                        (obj)->get_carried_by() ? (obj)->get_carried_by()->in_room : (obj)->get_in_room())
 #define IS_OBJ_ANTI(obj, stat) ((obj)->has_anti_flag(stat))
 #define IS_OBJ_NO(obj, stat) ((obj)->has_no_flag(stat))
 #define IS_OBJ_AFF(obj, stat) ((obj)->GetEWeaponAffect(stat))
@@ -904,9 +856,9 @@ const int kNameLevel = 5;
                 )
 
 #define IMM_CAN_SEE_CHAR(sub, obj) \
-        (MORT_CAN_SEE_CHAR(sub, obj) || (!(sub)->IsNpc() && PRF_FLAGGED(sub, EPrf::kHolylight)))
+        (MORT_CAN_SEE_CHAR(sub, obj) || (!(sub)->IsNpc() && (sub)->IsFlagged(EPrf::kHolylight)))
 
-#define CAN_SEE_CHAR(sub, obj) (IS_CODER(sub) || SELF(sub, obj) || \
+#define CAN_SEE_CHAR(sub, obj) (SELF(sub, obj) || \
         ((GetRealLevel(sub) >= ((obj)->IsNpc() ? 0 : GET_INVIS_LEV(obj))) && \
          IMM_CAN_SEE_CHAR(sub, obj)))
 // End of CAN_SEE
@@ -959,11 +911,6 @@ const int kNameLevel = 5;
 #define IS_CHARMER(ch)		(!(ch)->IsNpc() && ((ch)->GetClass() == ECharClass::kCharmer))
 #define IS_WIZARD(ch)		(!(ch)->IsNpc() && ((ch)->GetClass() == ECharClass::kWizard))
 #define IS_NECROMANCER(ch)	(!(ch)->IsNpc() && ((ch)->GetClass() == ECharClass::kNecromancer))
-
-#define IS_UNDEAD(ch) ((ch)->IsNpc() && \
-    (MOB_FLAGGED(ch, EMobFlag::kResurrected) || \
-	(GET_RACE(ch) == ENpcRace::kZombie) ||  \
-	(GET_RACE(ch) == ENpcRace::kGhost)))
 
 // \todo Ввести для комнат флаг а-ля "место отдыха", а это убрать.
 #define LIKE_ROOM(ch) ((IS_SORCERER(ch) && ROOM_FLAGGED((ch)->in_room, ERoomFlag::kForSorcerers)) || \
@@ -1077,7 +1024,7 @@ size_t strlen_no_colors(const char *str);
 
 #define SENDOK(ch)   (((ch)->desc || CheckScript((ch), MTRIG_ACT)) && \
                (to_sleeping || AWAKE(ch)) && \
-                     !PLR_FLAGGED((ch), EPlrFlag::kWriting))
+                     !(ch)->IsFlagged(EPlrFlag::kWriting))
 
 extern const bool a_isspace_table[];
 inline bool a_isspace(const unsigned char c) {
@@ -1327,7 +1274,7 @@ private:
 #endif
 
 // global buffering system
-#ifdef DB_C__
+#ifdef DB_CPP_
 char buf[kMaxStringLength];
 char buf1[kMaxStringLength];
 char buf2[kMaxStringLength];
@@ -1337,7 +1284,7 @@ char smallBuf[kMaxRawInputLength];
 extern char buf[kMaxStringLength];
 extern char buf1[kMaxStringLength];
 extern char buf2[kMaxStringLength];
-extern char arg[kMaxStringLength];
+extern char arg[kMaxInputLength];
 extern char smallBuf[kMaxRawInputLength];
 #endif
 
@@ -1353,7 +1300,7 @@ extern char smallBuf[kMaxRawInputLength];
 * if someone uses the buffer as a non-terminated character array but that
 * is not likely. -gg
 */
-void sanity_check(void);
+void sanity_check();
 
 inline void graceful_exit(int retcode) {
 	_exit(retcode);
@@ -1483,6 +1430,8 @@ reversion_wrapper<T> reverse (T&& iterable) { return { iterable }; }
  *  @param separator - разделитель разрядов.
  */
 std::string PrintNumberByDigits(long long num, const char separator = ' ');
+
+void PruneCrlf(char *txt);
 
 #endif // UTILS_H_
 

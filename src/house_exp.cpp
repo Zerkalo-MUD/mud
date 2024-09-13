@@ -8,8 +8,6 @@
 #include "house.h"
 #include "modify.h"
 
-#include <boost/algorithm/string.hpp>
-
 namespace {
 
 // количество нодов в списке экспы (зависит от CLAN_EXP_UPDATE_PERIOD)
@@ -176,7 +174,7 @@ void ClanPkLog::load(const std::string &abbrev) {
 void ClanPkLog::check(CharData *ch, CharData *victim) {
 	if (!ch || !victim || ch->purged() || victim->purged()
 		|| victim->IsNpc() || !CLAN(victim) || ch == victim
-		|| (ROOM_FLAGGED(IN_ROOM(victim), ERoomFlag::kArena) && !NORENTABLE(victim))) {
+		|| (ROOM_FLAGGED(victim->in_room, ERoomFlag::kArena) && !NORENTABLE(victim))) {
 		return;
 	}
 	CharData *killer = ch;

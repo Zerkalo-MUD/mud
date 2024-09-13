@@ -40,7 +40,6 @@ extern DescriptorData *descriptor_list;
 // * External functions.
 void zedit_setup(DescriptorData *d, int room_num);
 void zedit_save_to_disk(int zone);
-int zedit_new_zone(CharData *ch, int new_zone);
 void medit_setup(DescriptorData *d, int rmob_num);
 void medit_save_to_disk(int zone);
 void redit_setup(DescriptorData *d, int rroom_num);
@@ -49,11 +48,10 @@ void oedit_setup(DescriptorData *d, int robj_num);
 void oedit_save_to_disk(int zone);
 void sedit_setup_new(DescriptorData *d);
 void sedit_setup_existing(DescriptorData *d, int robj_num);
-void room_free(RoomData *room);
 void medit_mobile_free(CharData *mob);
 void trigedit_setup_new(DescriptorData *d);
 void trigedit_setup_existing(DescriptorData *d, int rtrg_num);
-int real_trigger(int vnum);
+int GetTriggerRnum(int vnum);
 void dg_olc_script_free(DescriptorData *d);
 
 // Internal function prototypes.
@@ -133,7 +131,7 @@ void do_olc(CharData *ch, char *argument, int cmd, int subcmd) {
 	{
 		switch (subcmd) {
 			case SCMD_OLC_ZEDIT:
-			case SCMD_OLC_REDIT: number = world[ch->in_room]->room_vn;
+			case SCMD_OLC_REDIT: number = world[ch->in_room]->vnum;
 				break;
 			case SCMD_OLC_TRIGEDIT:
 			case SCMD_OLC_OEDIT:
@@ -157,16 +155,9 @@ void do_olc(CharData *ch, char *argument, int cmd, int subcmd) {
 				save = 1;
 				number = atoi(buf2) * 100;
 			}
-		} else if (subcmd == SCMD_OLC_ZEDIT && (GetRealLevel(ch) >= kLvlBuilder || PRF_FLAGGED(ch, EPrf::kCoderinfo))) {
+		} else if (subcmd == SCMD_OLC_ZEDIT && (GetRealLevel(ch) >= kLvlBuilder || ch->IsFlagged(EPrf::kCoderinfo))) {
 			SendMsgToChar("Создание новых зон отключено.\r\n", ch);
 			return;
-			/*
-			          if ((strn_cmp("new", buf1, 3) == 0) && *buf2)
-			 	         zedit_new_zone(ch, atoi(buf2));
-			          else
-			 	         SendMsgToChar("Укажите номер новой зоны.\r\n", ch);
-			          return;
-			*/
 		} else {
 			SendMsgToChar("Уточните, что вы хотите делать!\r\n", ch);
 			return;
@@ -200,7 +191,7 @@ void do_olc(CharData *ch, char *argument, int cmd, int subcmd) {
 	d->olc = new olc_data;
 
 	// * Find the zone.
-	if ((OLC_ZNUM(d) = get_zone_rnum_by_room_vnum(number)) == -1) {
+	if ((OLC_ZNUM(d) = get_zone_rnum_by_vnumum(number)) == -1) {
 		SendMsgToChar("Звыняйтэ, такойи зоны нэмае.\r\n", ch);
 		delete d->olc;
 		return;
@@ -285,21 +276,21 @@ void do_olc(CharData *ch, char *argument, int cmd, int subcmd) {
 	// * Steal player's descriptor start up subcommands.
 	switch (subcmd) {
 		case SCMD_OLC_TRIGEDIT:
-			if ((real_num = real_trigger(number)) >= 0)
+			if ((real_num = GetTriggerRnum(number)) >= 0)
 				trigedit_setup_existing(d, real_num);
 			else
 				trigedit_setup_new(d);
 			STATE(d) = CON_TRIGEDIT;
 			break;
 		case SCMD_OLC_REDIT:
-			if ((real_num = real_room(number)) != kNowhere)
+			if ((real_num = GetRoomRnum(number)) != kNowhere)
 				redit_setup(d, real_num);
 			else
 				redit_setup(d, kNowhere);
 			STATE(d) = CON_REDIT;
 			break;
 		case SCMD_OLC_ZEDIT:
-			if ((real_num = real_room(number)) == kNowhere) {
+			if ((real_num = GetRoomRnum(number)) == kNowhere) {
 				SendMsgToChar("Желательно создать комнату прежде, чем начинаете ее редактировать.\r\n", ch);
 				delete d->olc;
 				return;
@@ -308,13 +299,13 @@ void do_olc(CharData *ch, char *argument, int cmd, int subcmd) {
 			STATE(d) = CON_ZEDIT;
 			break;
 		case SCMD_OLC_MEDIT:
-			if ((real_num = real_mobile(number)) >= 0)
+			if ((real_num = GetMobRnum(number)) >= 0)
 				medit_setup(d, real_num);
 			else
 				medit_setup(d, -1);
 			STATE(d) = CON_MEDIT;
 			break;
-		case SCMD_OLC_OEDIT: real_num = real_object(number);
+		case SCMD_OLC_OEDIT: real_num = GetObjRnum(number);
 			if (real_num >= 0) {
 				oedit_setup(d, real_num);
 			} else {
@@ -325,7 +316,7 @@ void do_olc(CharData *ch, char *argument, int cmd, int subcmd) {
 	}
 	act("$n по локоть запустил$g руки в глубины Мира и начал$g что-то со скрежетом там поворачивать.",
 		true, d->character.get(), 0, 0, kToRoom);
-	PLR_FLAGS(ch).set(EPlrFlag::kWriting);
+	ch->SetFlag(EPlrFlag::kWriting);
 }
 
 // ------------------------------------------------------------
@@ -459,7 +450,7 @@ void cleanup_olc(DescriptorData *d, byte cleanup_type) {
 		// Освободить комнату
 		if (OLC_ROOM(d)) {
 			switch (cleanup_type) {
-				case CLEANUP_ALL: room_free(OLC_ROOM(d));    // удаляет все содержимое
+				case CLEANUP_ALL: CleanupRoomData(OLC_ROOM(d));    // удаляет все содержимое
 					// break; - не нужен
 
 					// fall through
@@ -493,14 +484,14 @@ void cleanup_olc(DescriptorData *d, byte cleanup_type) {
 
 		// Освободить зону
 		if (OLC_ZONE(d)) {
-			free(OLC_ZONE(d)->name);
+			OLC_ZONE(d)->name.clear();
 			zedit_delete_cmdlist((pzcmd) OLC_ZONE(d)->cmd);
 			free(OLC_ZONE(d));
 		}
 
 		// Restore descriptor playing status.
 		if (d->character) {
-			PLR_FLAGS(d->character).unset(EPlrFlag::kWriting);
+			d->character->UnsetFlag(EPlrFlag::kWriting);
 			STATE(d) = CON_PLAYING;
 			act("$n закончил$g работу и удовлетворенно посмотрел$g в развороченные недра Мироздания.",
 				true, d->character.get(), 0, 0, kToRoom);

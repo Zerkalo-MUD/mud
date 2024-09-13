@@ -923,9 +923,9 @@ class ObjWrapper : private std::shared_ptr<ObjectData>, public Wrapper<ObjectDat
 		Ensurer obj(*this);
 		obj->set_level(v);
 	}
-	int get_skill() const {
+	int get_spec_param() const {
 		Ensurer obj(*this);
-		return obj->get_skill();
+		return obj->get_spec_param();
 	}
 
 	void set_skill(const int v) {
@@ -1124,7 +1124,7 @@ void flag_toggle(FLAG_DATA &flag, const unsigned f) {
 str flag_str(const FLAG_DATA &flag) {
 	char buf[MAX_STRING_LENGTH];
 	*buf = '\0';
-	flag.tascii(4, buf);
+	flag.tascii(FlagData::kPlanesNumber, buf);
 	return str(buf);
 }
 
@@ -1179,7 +1179,7 @@ bool check_ingame(std::string name) {
 void char_to_room_wrap(CharacterWrapper &c, int vnum) {
 	CharacterWrapper::Ensurer ch(c);
 	room_rnum location;
-	if (((location = real_room(vnum)) == kNowhere)) {
+	if (((location = GetRoomRnum(vnum)) == kNowhere)) {
 		log("[PythonError] Error in char_to_room_wrap. %d vnum invalid.", vnum);
 		return;
 	}
@@ -2591,8 +2591,8 @@ bool check_command_on_list(const python_command_list_t &lst,
 			SendMsgToChar("Вы еще не БОГ, чтобы делать это.\r\n", ch);
 			return true;
 		}
-		if (GET_POS(ch) < i->minimum_position) {
-			switch (GET_POS(ch)) {
+		if (ch->GetPosition() < i->minimum_position) {
+			switch (ch->GetPosition()) {
 				case POS_DEAD: SendMsgToChar("Очень жаль - ВЫ МЕРТВЫ !!! :-(\r\n", ch);
 					break;
 				case POS_INCAP:

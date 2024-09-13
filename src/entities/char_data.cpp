@@ -7,7 +7,7 @@
 #include "handler.h"
 #include "administration/privilege.h"
 #include "char_player.h"
-#include "player_races.h"
+#include "game_mechanics/player_races.h"
 //#include "game_mechanics/celebrates.h"
 #include "cache.h"
 #include "game_fight/fight.h"
@@ -190,7 +190,6 @@ void CharData::reset() {
 	m_master = nullptr;
 	in_room = kNowhere;
 	carrying = nullptr;
-	next_fighting = nullptr;
 	if (this->get_protecting()) {
 		remove_protecting();
 	}
@@ -336,14 +335,13 @@ void CharData::zero_init() {
 	in_room = 0;
 	set_wait(0u);
 	punctual_wait = 0;
-	last_comm = nullptr;
+	last_comm.clear();
 	player_specials = nullptr;
 	timed = nullptr;
 	timed_feat = nullptr;
 	carrying = nullptr;
 	desc = nullptr;
 	id = 0;
-	next_fighting = nullptr;
 	followers = nullptr;
 	m_master = nullptr;
 	caster_level = 0;
@@ -400,9 +398,9 @@ void CharData::zero_init() {
 void CharData::purge() {
 	caching::character_cache.Remove(this);
 
-	if (!get_name().empty()) {
-		log("[FREE CHAR] (%s)", GET_NAME(this));
-	}
+//	if (!get_name().empty()) {
+//		log("[FREE CHAR] (%s)", GET_NAME(this));
+//	}
 	if (this->get_protecting()) {
 		this->remove_protecting();
 	}
@@ -415,11 +413,11 @@ void CharData::purge() {
 	struct alias_data *a;
 
 	if (!this->IsNpc() && !get_name().empty()) {
-		id = get_ptable_by_name(GET_NAME(this));
+		id = GetPlayerTablePosByName(GET_NAME(this));
 		if (id >= 0) {
 			player_table[id].level = GetRealLevel(this);
 			player_table[id].remorts = GetRealRemort(this);
-			player_table[id].activity = number(0, OBJECT_SAVE_ACTIVITY - 1);
+			player_table[id].activity = number(0, kObjectSaveActivity - 1);
 		}
 	}
 
@@ -439,13 +437,13 @@ void CharData::purge() {
 		ExpireTimedSkill(this, this->timed);
 	}
 
-	Celebrates::remove_from_mob_lists(this->id);
+	celebrates::RemoveFromMobLists(this->id);
 
 	const bool keep_player_specials = player_specials == player_special_data::s_for_mobiles ? true : false;
 	if (this->player_specials && !keep_player_specials) {
 		while ((a = GET_ALIASES(this)) != nullptr) {
 			GET_ALIASES(this) = (GET_ALIASES(this))->next;
-			free_alias(a);
+			FreeAlias(a);
 		}
 		if (this->player_specials->poofin)
 			free(this->player_specials->poofin);
@@ -459,12 +457,7 @@ void CharData::purge() {
 			GET_RSKILL(this) = r;
 		}
 		// порталы
-		while (GET_PORTALS(this) != nullptr) {
-			struct CharacterPortal *prt_next;
-			prt_next = GET_PORTALS(this)->next;
-			free(GET_PORTALS(this));
-			GET_PORTALS(this) = prt_next;
-		}
+		this->ClearRunestones();
 // Cleanup punish reasons
 		if (MUTE_REASON(this))
 			free(MUTE_REASON(this));
@@ -613,7 +606,7 @@ void CharData::set_skill(const ESkill skill_id, int percent) {
 	}
 }
 
-void CharData::SetSkillAfterRemort(short remort) {
+void CharData::SetSkillAfterRemort(int remort) {
 	for (auto & it : skills) {
 		int maxSkillLevel = CalcSkillHardCap(this, it.first);
 
@@ -811,7 +804,7 @@ bool IS_HORSE(const CharData *ch) {
 bool IS_MORTIFIER(const CharData *ch) {
 	return ch->IsNpc()
 		&& ch->has_master()
-		&& MOB_FLAGGED(ch, EMobFlag::kCorpse);
+		&& ch->IsFlagged(EMobFlag::kCorpse);
 }
 
 bool MAY_ATTACK(const CharData *sub) {
@@ -821,14 +814,14 @@ bool MAY_ATTACK(const CharData *sub) {
 		&& !AFF_FLAGGED((sub), EAffect::kMagicStopFight)
 		&& !AFF_FLAGGED((sub), EAffect::kHold)
 		&& !AFF_FLAGGED((sub), EAffect::kSleep)
-		&& !MOB_FLAGGED((sub), EMobFlag::kNoFight)
+		&& !(sub)->IsFlagged(EMobFlag::kNoFight)
 		&& sub->get_wait() <= 0
 		&& !sub->GetEnemy()
-		&& GET_POS(sub) >= EPosition::kRest);
+		&& sub->GetPosition() >= EPosition::kRest);
 }
 
 bool AWAKE(const CharData *ch) {
-	return GET_POS(ch) > EPosition::kSleep
+	return ch->GetPosition() > EPosition::kSleep
 		&& !AFF_FLAGGED(ch, EAffect::kSleep);
 }
 
@@ -870,7 +863,7 @@ bool IS_POLY(const CharData *ch) {
 bool IMM_CAN_SEE(const CharData *sub, const CharData *obj) {
 	return MORT_CAN_SEE(sub, obj)
 		|| (!sub->IsNpc()
-			&& PRF_FLAGGED(sub, EPrf::kHolylight));
+			&& sub->IsFlagged(EPrf::kHolylight));
 }
 
 bool CAN_SEE(const CharData *sub, const CharData *obj) {
@@ -904,7 +897,7 @@ void change_fighting(CharData *ch, int need_stop) {
 		}
 //		log("change_fighting set cast %f", time.delta().count());
 
-		if (k->GetEnemy() == ch && IN_ROOM(k) != kNowhere) {
+		if (k->GetEnemy() == ch && k->in_room != kNowhere) {
 //			log("change_fighting Change victim %f", time.delta().count());
 			bool found = false;
 			for (const auto j : world[ch->in_room]->people) {
@@ -1260,8 +1253,8 @@ void CharData::set_gold(long num, bool need_log) {
 		} else {
 			log("Gold: %s remove %ld", get_name().c_str(), -change);
 		}
-		if (IN_ROOM(this) > 0) {
-			MoneyDropStat::add(zone_table[world[IN_ROOM(this)]->zone_rn].vnum, change);
+		if (this->in_room > 0) {
+			MoneyDropStat::add(zone_table[world[this->in_room]->zone_rn].vnum, change);
 		}
 	}
 
@@ -1564,7 +1557,7 @@ int CharData::get_zone_group() const {
 }
 
 //===================================
-//Polud формы и все что с ними связано
+// формы и все что с ними связано
 //===================================
 
 bool CharData::know_morph(const std::string &morph_id) const {
@@ -1643,7 +1636,7 @@ std::string CharData::only_title_noclan() {
 std::string CharData::clan_for_title() {
 	std::string result = std::string();
 
-	bool imm = IS_IMMORTAL(this) || PRF_FLAGGED(this, EPrf::kCoderinfo);
+	bool imm = IS_IMMORTAL(this) || this->IsFlagged(EPrf::kCoderinfo);
 
 	if (CLAN(this) && !imm)
 		result = result + "(" + GET_CLAN_STATUS(this) + ")";
@@ -1726,8 +1719,6 @@ const IMorph::affects_list_t &CharData::GetMorphAffects() {
 }
 
 //===================================
-//-Polud
-//===================================
 
 bool CharData::get_role(unsigned num) const {
 	bool result = false;
@@ -1755,12 +1746,12 @@ void CharData::msdp_report(const std::string &name) {
 
 void CharData::removeGroupFlags() {
 	AFF_FLAGS(this).unset(EAffect::kGroup);
-	PRF_FLAGS(this).unset(EPrf::kSkirmisher);
+	this->UnsetFlag(EPrf::kSkirmisher);
 }
 
 void CharData::add_follower(CharData *ch) {
 
-	if (ch->IsNpc() && MOB_FLAGGED(ch, EMobFlag::kNoGroup))
+	if (ch->IsNpc() && ch->IsFlagged(EMobFlag::kNoGroup))
 		return;
 	add_follower_silently(ch);
 
@@ -1954,7 +1945,7 @@ void CharData::restore_npc() {
 	// this->mob_specials.damsizedice = 1;
 	// this->mob_specials.ExtraAttack = 0;
 	//флаги
-	MOB_FLAGS(this) = MOB_FLAGS(proto);
+	this->char_specials.saved.act = proto->char_specials.saved.act;
 	this->set_touching(nullptr);
 	if (this->get_protecting()) {
 		this->remove_protecting();
@@ -1974,7 +1965,7 @@ void CharData::restore_npc() {
 
 	for (const auto &skill : MUD::Skills()) {
 		if (skill.IsValid()) {
-			this->set_skill(skill.GetId(), GET_SKILL(proto, skill.GetId()));
+			this->set_skill(skill.GetId(), proto->GetSkill(skill.GetId()));
 		}
 	}
 
@@ -2080,10 +2071,10 @@ void CharData::send_to_TC(bool to_impl, bool to_tester, bool to_coder, const cha
 		(IS_IMPL(this) || (IS_CHARMICE(this) && IS_IMPL(this->get_master()))))
 		needSend = true;
 	if (!needSend && to_coder &&
-		(PRF_FLAGGED(this, EPrf::kCoderinfo) || (IS_CHARMICE(this) && (PRF_FLAGGED(this->get_master(), EPrf::kCoderinfo)))))
+		(this->IsFlagged(EPrf::kCoderinfo) || (IS_CHARMICE(this) && (this->get_master()->IsFlagged(EPrf::kCoderinfo)))))
 		needSend = true;
 	if (!needSend && to_tester &&
-		(PRF_FLAGGED(this, EPrf::kTester) || (IS_CHARMICE(this) && (PRF_FLAGGED(this->get_master(), EPrf::kTester)))))
+		(this->IsFlagged(EPrf::kTester) || (IS_CHARMICE(this) && (this->get_master()->IsFlagged(EPrf::kTester)))))
 		needSend = true;
 	if (!needSend)
 		return;
@@ -2119,7 +2110,7 @@ bool CharData::has_horse(bool same_room) const {
 
 	for (f = this->followers; f; f = f->next) {
 		if (f->follower->IsNpc() && AFF_FLAGGED(f->follower, EAffect::kHorse)
-			&& (!same_room || this->in_room == IN_ROOM(f->follower))) {
+			&& (!same_room || this->in_room == f->follower->in_room)) {
 			return true;
 		}
 	}
@@ -2154,8 +2145,8 @@ bool CharData::DropFromHorse() {
 	act(buf, false, plr, 0, 0, kToRoom | kToArenaListen);
 	AFF_FLAGS(plr).unset(EAffect::kHorse);
 	SetWaitState(plr, 3 * kBattleRound);
-	if (GET_POS(plr) > EPosition::kSit) {
-		GET_POS(plr) = EPosition::kSit;
+	if (plr->GetPosition() > EPosition::kSit) {
+		plr->SetPosition(EPosition::kSit);
 	}
 	return true;
 }
@@ -2207,8 +2198,7 @@ player_special_data::player_special_data() :
 	may_rent(0),
 	agressor(0),
 	agro_time(0),
-	rskill(0),
-	portals(0),
+	rskill(nullptr),
 	logs(nullptr),
 	Exchange_filter(nullptr),
 	Karma(nullptr),
@@ -2283,5 +2273,32 @@ int GetRealBaseStat(const CharData *ch, EBaseStat stat_id) {
 		return 1;
 	}
 }
+
+void CharData::AddRunestone(const Runestone &stone) {
+	if (player_specials->runestones.IsFull(this)) {
+		SendMsgToChar
+			("В вашей памяти не осталось места для новых рунных меток. Сперва забудьте какую-нибудь.\r\n", this);
+		return;
+	}
+
+	if (player_specials->runestones.AddRunestone(stone)) {
+		auto msg = fmt::format(
+			"Вы осмотрели надпись и крепко запомнили начертанное огненными рунами слово '&R{}&n'.\r\n",
+			stone.GetName());
+		SendMsgToChar(msg, this);
+	} else {
+		SendMsgToChar("Руны всё время странно искажаются и вам не удаётся их запомнить.\r\n", this);
+	}
+	player_specials->runestones.DeleteIrrelevant(this);
+};
+
+void CharData::RemoveRunestone(const Runestone &stone) {
+	if (player_specials->runestones.RemoveRunestone(stone)) {
+		auto msg = fmt::format("Вы полностью забыли, как выглядит рунная метка '&R{}&n'.\r\n", stone.GetName());
+		SendMsgToChar(msg, this);
+	} else {
+		SendMsgToChar("Чтобы забыть что-нибудь ненужное, следует сперва изучить что-нибудь ненужное...", this);
+	}
+};
 
 // vim: ts=4 sw=4 tw=0 noet syntax=cpp :

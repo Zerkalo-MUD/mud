@@ -77,10 +77,10 @@ int pk_player_count(CharData *ch) {
 	struct PK_Memory_type *pk, *pkg;
 	unsigned count = 0;
 	for (pk = ch->pk_list; pk; pk = pk->next) {
-		long i = get_ptable_by_unique(pk->unique);
+		long i = GetPtableByUnique(pk->unique);
 		bool flag = true;
 		for (pkg = pk->next; pkg && flag; pkg = pkg->next) {
-			long j = get_ptable_by_unique(pkg->unique);
+			long j = GetPtableByUnique(pkg->unique);
 			flag = strcmp(player_table[i].mail, player_table[j].mail) != 0;
 		}
 		if (flag) ++count;
@@ -93,10 +93,10 @@ int pk_calc_spamm(CharData *ch) {
 	int count = 0;
 	for (pk = ch->pk_list; pk; pk = pk->next) {
 		if (time(nullptr) - pk->kill_at <= SPAM_PK_TIME * 60) {
-			long i = get_ptable_by_unique(pk->unique);
+			long i = GetPtableByUnique(pk->unique);
 			bool spamPK = true;
 			for (pkg = pk->next; pkg && spamPK; pkg = pkg->next) {
-				long j = get_ptable_by_unique(pkg->unique);
+				long j = GetPtableByUnique(pkg->unique);
 				// Cчитаем убийства со временем больше TIME_PK_GROUP (5 секунд) и чаров с разных мыл
 				spamPK = !(MAX(pk->kill_at, pkg->kill_at) - MIN(pk->kill_at, pkg->kill_at) <= TIME_PK_GROUP
 					|| strcmp(player_table[i].mail, player_table[j].mail) == 0);
@@ -116,7 +116,7 @@ void pk_check_spamm(CharData *ch) {
 		act("Боги прокляли тот день, когда ты появился на свет!", false, ch, 0, 0, kToChar);
 	}
 	if (pk_player_count(ch) >= KillerPK) {
-		PLR_FLAGS(ch).set(EPlrFlag::kKiller);
+		ch->SetFlag(EPlrFlag::kKiller);
 	}
 }
 
@@ -126,7 +126,7 @@ void pk_translate_pair(CharData **pkiller, CharData **pvictim) {
 		if (pkiller[0]->IsNpc()
 			&& pkiller[0]->has_master()
 			&& AFF_FLAGGED(pkiller[0], EAffect::kCharmed)
-			&& IN_ROOM(pkiller[0]) == IN_ROOM(pkiller[0]->get_master())) {
+			&& pkiller[0]->in_room == pkiller[0]->get_master()->in_room) {
 			pkiller[0] = pkiller[0]->get_master();
 		}
 	}
@@ -135,7 +135,7 @@ void pk_translate_pair(CharData **pkiller, CharData **pvictim) {
 			&& pvictim[0]->has_master()
 			&& (AFF_FLAGGED(pvictim[0], EAffect::kCharmed)
 				|| IS_HORSE(pvictim[0]))) {
-			if (IN_ROOM(pvictim[0]) == IN_ROOM(pvictim[0]->get_master())) {
+			if (pvictim[0]->in_room == pvictim[0]->get_master()->in_room) {
 				if (HERE(pvictim[0]->get_master()))
 					pvictim[0] = pvictim[0]->get_master();
 			}
@@ -243,17 +243,14 @@ void pk_increment_kill(CharData *agressor, CharData *victim, int rent, bool flag
 		pk->kill_num++;
 		pk->kill_at = time(nullptr);
 		// saving first agression room
-		AGRESSOR(agressor) = GET_ROOM_VNUM(IN_ROOM(agressor));
+		AGRESSOR(agressor) = GET_ROOM_VNUM(agressor->in_room);
 		pk_check_spamm(agressor);
 	}
 
-// shapirus: прописываем время получения флага агрессора
 	AGRO(agressor) = MAX(AGRO(agressor), time(nullptr) + KILLER_UNRENTABLE * 60);
-	//  вешаем агробд на агрессора
 	agressor->agrobd = true;
 	pk_update_revenge(agressor, victim, BATTLE_DURATION, rent ? KILLER_UNRENTABLE : 0);
 	pk_update_revenge(victim, agressor, BATTLE_DURATION, rent ? REVENGE_UNRENTABLE : 0);
-	//Костыль cнимаем цацки недоступные и кладем в чара.
 	for (int i = 0; i < EEquipPos::kNumEquipPos; i++) {
 		ObjData *p_item;
 		if (GET_EQ(agressor, i)) {
@@ -350,13 +347,13 @@ void pk_increment_gkill(CharData *agressor, CharData *victim) {
 	leader = victim->has_master() ? victim->get_master() : victim;
 
 	if (AFF_FLAGGED(leader, EAffect::kGroup)
-		&& IN_ROOM(leader) == IN_ROOM(victim)
+		&& leader->in_room == victim->in_room
 		&& pk_action_type(agressor, leader) > PK_ACTION_FIGHT) {
 		pk_increment_kill(agressor, leader, leader == victim, has_clanmember);
 	}
 	for (f = leader->followers; f; f = f->next) {
 		if (AFF_FLAGGED(f->follower, EAffect::kGroup)
-			&& IN_ROOM(f->follower) == IN_ROOM(victim)
+			&& f->follower->in_room == victim->in_room
 			&& pk_action_type(agressor, f->follower) > PK_ACTION_FIGHT) {
 			pk_increment_kill(agressor, f->follower, f->follower == victim, has_clanmember);
 		}
@@ -382,8 +379,8 @@ bool pk_agro_action(CharData *agressor, CharData *victim) {
 		else
 			SendMsgToChar("Охолонись малец, на своих бросаться не дело!\r\n", agressor);
 		SendMsgToChar("Защитная магия взяла вас за шиворот и выкинула вон из замка!\r\n", agressor);
-		PlaceCharToRoom(agressor, real_room(CLAN(agressor)->out_rent));
-		look_at_room(agressor, real_room(CLAN(agressor)->out_rent));
+		PlaceCharToRoom(agressor, GetRoomRnum(CLAN(agressor)->out_rent));
+		look_at_room(agressor, GetRoomRnum(CLAN(agressor)->out_rent));
 		act("$n свалил$u с небес, выкрикивая какие-то ругательства!", true, agressor, 0, 0, kToRoom);
 		SetWait(agressor, 1, true);
 		return false;
@@ -427,8 +424,8 @@ int pk_action_type_summon(CharData *agressor, CharData *victim) {
 	}
 
 	if (!agressor || !victim || agressor == victim
-		|| ROOM_FLAGGED(IN_ROOM(agressor), ERoomFlag::kArena)
-		|| ROOM_FLAGGED(IN_ROOM(victim), ERoomFlag::kArena)
+		|| ROOM_FLAGGED(agressor->in_room, ERoomFlag::kArena)
+		|| ROOM_FLAGGED(victim->in_room, ERoomFlag::kArena)
 		|| agressor->IsNpc() || victim->IsNpc()) {
 		return PK_ACTION_NO;
 	}
@@ -530,14 +527,14 @@ int pk_action_type(CharData *agressor, CharData *victim) {
 	pk_translate_pair(&agressor, &victim);
 
 	if (!agressor || !victim || agressor == victim
-		|| ROOM_FLAGGED(IN_ROOM(agressor), ERoomFlag::kArena)
-		|| ROOM_FLAGGED(IN_ROOM(victim), ERoomFlag::kArena)
+		|| ROOM_FLAGGED(agressor->in_room, ERoomFlag::kArena)
+		|| ROOM_FLAGGED(victim->in_room, ERoomFlag::kArena)
 		|| agressor->IsNpc() || victim->IsNpc()
 		|| (agressor != victim
 			&& (ROOM_FLAGGED(agressor->in_room, ERoomFlag::kNoBattle) || ROOM_FLAGGED(victim->in_room, ERoomFlag::kNoBattle))))
 		return PK_ACTION_NO;
 
-	if (PLR_FLAGGED(victim, EPlrFlag::kKiller) || (AGRO(victim) && NORENTABLE(victim)))
+	if (victim->IsFlagged(EPlrFlag::kKiller) || (AGRO(victim) && NORENTABLE(victim)))
 		return PK_ACTION_FIGHT;
 
 	for (pk = agressor->pk_list; pk; pk = pk->next) {
@@ -614,7 +611,7 @@ void pk_list_sprintf(CharData *ch, char *buff) {
 	strcat(buff, "ПК список:\r\n");
 	strcat(buff, "              Имя    Kill Rvng Clan Batl Thif\r\n");
 	for (pk = ch->pk_list; pk; pk = pk->next) {
-		const char *temp = get_name_by_unique(pk->unique);
+		const char *temp = GetPlayerNameByUnique(pk->unique);
 		sprintf(buff + strlen(buff), "%20s %4ld %4ld", temp ? temp : "<УДАЛЕН>", pk->kill_num, pk->revenge_num);
 
 		if (pk->clan_exp > time(nullptr)) {
@@ -669,7 +666,7 @@ void do_revenge(CharData *ch, char *argument, int/* cmd*/, int/* subcmd*/) {
 				continue;
 			}
 
-			const char *temp = get_name_by_unique(pk->unique);
+			const char *temp = GetPlayerNameByUnique(pk->unique);
 			if (!temp) {
 				continue;
 			}
@@ -842,8 +839,8 @@ void save_pkills(CharData *ch, FILE *saved) {
 	struct PK_Memory_type *pk, *tpk;
 
 	fprintf(saved, "Pkil:\n");
-	for (pk = ch->pk_list; pk && !PLR_FLAGGED(ch, EPlrFlag::kDeleted);) {
-		if (pk->kill_num > 0 && correct_unique(pk->unique)) {
+	for (pk = ch->pk_list; pk && !ch->IsFlagged(EPlrFlag::kDeleted);) {
+		if (pk->kill_num > 0 && IsCorrectUnique(pk->unique)) {
 			if (pk->revenge_num >= MAX_REVENGE && pk->battle_exp <= time(nullptr)) {
 				CharData *result = nullptr;
 				for (const auto &tch : character_list) {
@@ -878,10 +875,10 @@ int may_kill_here(CharData *ch, CharData *victim, char *argument) {
 	if (!victim)
 		return true;
 
-	if (MOB_FLAGGED(ch, EMobFlag::kNoFight))
+	if (ch->IsFlagged(EMobFlag::kNoFight))
 		return (false);
 
-	if (MOB_FLAGGED(victim, EMobFlag::kNoFight)) {
+	if (victim->IsFlagged(EMobFlag::kNoFight)) {
 		act("Боги предотвратили ваше нападение на $N3.", false, ch, 0, victim, kToChar);
 		return (false);
 	}
@@ -906,12 +903,12 @@ int may_kill_here(CharData *ch, CharData *victim, char *argument) {
 		&& (ROOM_FLAGGED(ch->in_room, ERoomFlag::kPeaceful)
 			|| ROOM_FLAGGED(victim->in_room, ERoomFlag::kPeaceful))) {
 		// но это специальные мобы
-		if (MOB_FLAGGED(victim, EMobFlag::kHorde))
+		if (victim->IsFlagged(EMobFlag::kHorde))
 			return true;
-		if (MOB_FLAGGED(ch, EMobFlag::kIgnoresPeaceRoom) && !IS_CHARMICE(ch))
+		if (ch->IsFlagged(EMobFlag::kIgnoresPeaceRoom) && !IS_CHARMICE(ch))
 			return true;
 		// моб по триггеру имеет право
-		if (ch->IsNpc() && ch->get_rnum() == real_mobile(kDgCasterProxy))
+		if (ch->IsNpc() && ch->get_rnum() == GetMobRnum(kDgCasterProxy))
 			return true;
 		// богам, мстящим и продолжающим агро-бд можно
 		if (IS_GOD(ch) || pk_action_type(ch, victim) & (PK_ACTION_REVENGE | PK_ACTION_FIGHT))
@@ -1023,7 +1020,7 @@ bool has_clan_members_in_group(CharData *ch) {
 		return true;
 	} else {
 		for (f = leader->followers; f; f = f->next) {
-			if (AFF_FLAGGED(f->follower, EAffect::kGroup) && IN_ROOM(f->follower) == ch->in_room
+			if (AFF_FLAGGED(f->follower, EAffect::kGroup) && f->follower->in_room == ch->in_room
 				&& CLAN(f->follower)) {
 				return true;
 			}
@@ -1032,7 +1029,6 @@ bool has_clan_members_in_group(CharData *ch) {
 	return false;
 }
 
-//Polud
 void pkPortal(CharData *ch) {
 	AGRO(ch) = MAX(AGRO(ch), time(nullptr) + PENTAGRAM_TIME * 60);
 	ch->player_specials->may_rent = MAX(NORENTABLE(ch), time(nullptr) + PENTAGRAM_TIME * 60);
@@ -1105,7 +1101,7 @@ bool bloody::handle_transfer(CharData *ch, CharData *victim, ObjData *obj, ObjDa
 				|| (CLAN(victim)
 					&& (CLAN(victim)->is_clan_member(it->second.owner_unique)
 						|| CLAN(victim)->is_alli_member(it->second.owner_unique)))
-				|| strcmp(player_table[get_ptable_by_unique(it->second.owner_unique)].mail, GET_EMAIL(victim)) == 0)) {
+				|| strcmp(player_table[GetPtableByUnique(it->second.owner_unique)].mail, GET_EMAIL(victim)) == 0)) {
 			remove_obj(obj); //снимаем флаг
 			result = true;
 		} else if (!ch && victim && (!IS_GOD(victim))) //лут не владельцем
@@ -1151,7 +1147,7 @@ void bloody::handle_corpse(ObjData *corpse, CharData *ch, CharData *killer) {
 		&& ch != killer
 		&& !ch->IsNpc()
 		&& !killer->IsNpc()
-		&& !PLR_FLAGGED(ch, EPlrFlag::kKiller)
+		&& !ch->IsFlagged(EPlrFlag::kKiller)
 		&& !AGRO(ch)
 		&& !IS_GOD(killer)) {
 		//Проверим, может у killer есть месть на ch
