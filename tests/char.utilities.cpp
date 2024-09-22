@@ -2,8 +2,7 @@
 
 #include <utils/utils.h>
 #include <chars/char.h>
-#include <handler.h>
-#include <act_other.h>
+#include "engine/core/handler.h"
 
 namespace test_utils
 {
